@@ -1244,6 +1244,26 @@ function setCounter(n) {
   try { localStorage.setItem('sc_palm-city_counter', n); } catch(e) {}
 }
 
+// Shows a PREVIEW of the next invoice number in the form. This does not
+// reserve the number — the server only actually assigns/consumes a number
+// atomically at save time, so this preview can't cause duplicates even if
+// two devices are looking at "SC-PC-1042" at the same moment.
+async function refreshInvoiceNoDisplay() {
+  if (cloudOnline) {
+    try {
+      const data = await cloudFetch('/api/invoices/next-number');
+      if (data && data.invoiceNo) {
+        document.getElementById('invoiceNo').value = data.invoiceNo;
+        return;
+      }
+    } catch (e) {
+      console.error('Could not fetch next invoice number:', e);
+    }
+  }
+  invoiceCounter = getCounter();
+  document.getElementById('invoiceNo').value = 'SC-PC-' + invoiceCounter;
+}
+
 /* ══════════ PAKISTAN TIME (PKT = UTC+5, no DST) ══════════ */
 function getPakistanParts(dateObj) {
   const d = dateObj ? new Date(dateObj) : new Date();
@@ -1307,7 +1327,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch(e) {}
   }
   await checkCloud();
-  document.getElementById('invoiceNo').value = 'SC-PC-' + invoiceCounter;
+  await refreshInvoiceNoDisplay();
   setInvoiceDateTimeNow();
   startPktLiveClock();
   setupSearch();
@@ -1403,18 +1423,25 @@ async function saveInvoice() {
   stopPktLiveClock();
   const inv = collectInvoice();
   try {
-    await putInvoice(inv);
-    currentId = inv.id;
+    const saved = await putInvoice(inv);
+    currentId = saved.id;
+    // The server (when online) is the source of truth for the invoice number —
+    // it may differ from what was previewed if another device saved in between.
+    if (saved.invoiceNo) {
+      document.getElementById('invoiceNo').value = saved.invoiceNo;
+    }
     isDirty = false;
-    // advance counter only for brand-new invoices
-    const num = parseInt(inv.invoiceNo.replace(/\D/g, '')) || invoiceCounter;
-    if (num >= invoiceCounter) {
-      invoiceCounter = num + 1;
-      setCounter(invoiceCounter);
+    if (!cloudOnline) {
+      // Offline fallback only: advance the local counter for brand-new invoices.
+      const num = parseInt((saved.invoiceNo || inv.invoiceNo).replace(/\D/g, '')) || invoiceCounter;
+      if (num >= invoiceCounter) {
+        invoiceCounter = num + 1;
+        setCounter(invoiceCounter);
+      }
     }
     updateStatus();
     await refreshHistory();
-    toast('Invoice ' + inv.invoiceNo + ' saved!', 'success');
+    toast('Invoice ' + (saved.invoiceNo || inv.invoiceNo) + ' saved!', 'success');
     if (window.innerWidth <= 768) toggleSidebar();
   } catch (e) {
     toast('Could not save. Try again.', 'error');
@@ -1479,8 +1506,7 @@ function newInvoice(skipConfirm) {
   currentId = null;
   isDirty = false;
   editingIndex = -1;
-  invoiceCounter = getCounter();
-  document.getElementById('invoiceNo').value = 'SC-PC-' + invoiceCounter;
+  refreshInvoiceNoDisplay();
   setInvoiceDateTimeNow();
   startPktLiveClock();
   ['customerName','shopName','billMaker','customerPhone'].forEach(id => document.getElementById(id).value = '');

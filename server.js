@@ -142,6 +142,23 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
+/* ---------- Invoice numbering ---------- */
+// Preview-only: shows what the NEXT number would be, without consuming it.
+// The number is only actually assigned (atomically) when an invoice is saved.
+app.get('/api/invoices/next-number', auth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `select last_number + 1 as next from public.invoice_counters where prefix = $1`,
+      ['SC-PC']
+    );
+    const next = result.rowCount ? result.rows[0].next : 1001;
+    res.json({ invoiceNo: `SC-PC-${next}` });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Could not get next invoice number' });
+  }
+});
+
 /* ---------- Invoice API ---------- */
 app.get('/api/invoices', auth, async (req, res) => {
   try {
@@ -187,8 +204,35 @@ app.post('/api/invoices', auth, async (req, res) => {
     return res.status(400).json({ error: e.message });
   }
 
+  const client = await pool.connect();
   try {
-    const result = await pool.query(`
+    await client.query('begin');
+
+    // Is this a brand-new invoice, or are we editing one that's already saved?
+    const existing = await client.query(
+      'select invoice_no from public.invoices where id = $1',
+      [inv.id]
+    );
+
+    if (existing.rowCount) {
+      // Editing: keep the number it already has. Never let the client rename it.
+      inv.invoiceNo = existing.rows[0].invoice_no;
+    } else {
+      // Brand-new invoice: atomically claim the next number from the counter row.
+      // This UPDATE takes a row lock, so if two devices save at the same instant,
+      // the second one waits and gets the number after, never the same one.
+      const counterResult = await client.query(
+        `update public.invoice_counters
+         set last_number = last_number + 1
+         where prefix = $1
+         returning last_number`,
+        ['SC-PC']
+      );
+      const next = counterResult.rows[0].last_number;
+      inv.invoiceNo = `SC-PC-${next}`;
+    }
+
+    const result = await client.query(`
       insert into public.invoices
       (id, invoice_no, invoice_date, invoice_time, customer_name, shop_name,
        bill_maker, customer_phone, items, discount, subtotal, grand_total,
@@ -221,13 +265,17 @@ app.post('/api/invoices', auth, async (req, res) => {
       inv.balance, inv.savedAt
     ]);
 
+    await client.query('commit');
     res.status(201).json(dbRowToInvoice(result.rows[0]));
   } catch (e) {
+    await client.query('rollback');
     console.error(e);
     if (e.code === '23505') {
       return res.status(409).json({ error: 'Duplicate invoice number or ID' });
     }
     res.status(500).json({ error: 'Could not save invoice' });
+  } finally {
+    client.release();
   }
 });
 
@@ -286,6 +334,22 @@ app.post('/api/invoices/bulk', auth, async (req, res) => {
         inv.balance, inv.savedAt
       ]);
       uploaded++;
+    }
+
+    // Make sure future numbers pick up after the highest migrated one,
+    // so old (locally-numbered) invoices never get collided with by new ones.
+    let maxNum = 0;
+    for (const raw of invoices) {
+      const n = parseInt(String(raw.invoiceNo || '').replace(/\D/g, ''), 10);
+      if (Number.isFinite(n) && n > maxNum) maxNum = n;
+    }
+    if (maxNum > 0) {
+      await client.query(
+        `update public.invoice_counters
+         set last_number = greatest(last_number, $1)
+         where prefix = $2`,
+        [maxNum, 'SC-PC']
+      );
     }
 
     await client.query('commit');
