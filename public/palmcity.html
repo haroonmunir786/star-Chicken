@@ -7,8 +7,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="description" content="Star Chicken Invoice Management App">
-<title>Star Chicken • Hatchary</title>
-   <link rel="icon" href="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQjQKnUiB9boBpcU2htR-RlDHzDvo7yOW-CPsun9VwRJQ&s=10" type="image/jpeg">
+<title>Star Chicken • POS</title>
+   <link rel="icon" href="https://scontent.flhe3-1.fna.fbcdn.net/v/t39.30808-6/759835425_122102886003415980_5257241594298963736_n.jpg?stp=dst-jpg_tt6&cstp=mx1024x1024&ctp=s1024x1024&_nc_cat=108&ccb=1-7&_nc_sid=f727a1&_nc_ohc=dkosYUnvCbkQ7kNvwFgF4qg&_nc_oc=AdqInLGP3PIdizzBJvqxyBf-1-ImMZWSjrWxz8xXuSkd1SPZ-VnJyn37lBXuPcZwvIA&_nc_zt=23&_nc_ht=scontent.flhe3-1.fna&_nc_gid=IiNBmkP8HaR7oKeJe4wiLA&_nc_ss=7b2a8&oh=00_AQKhRdkPBWOXBg04Qf8LZJGnByMqeOAbITjWKUOhMMjZYQ&oe=6A9DBA3F" type="image/jpeg">
   
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -663,6 +663,145 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
 }
 .action-sheet-cancel:hover { background: var(--primary-soft); }
 
+/* ─── Dashboard ─── */
+.dash-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+  z-index: 2100; align-items: stretch; justify-content: center;
+  padding: 0; -webkit-overflow-scrolling: touch;
+}
+.dash-overlay.show { display: flex; }
+.dash-modal {
+  background: var(--bg); width: 100%; max-width: 1100px; height: 100%;
+  max-height: 100vh; overflow-y: auto; box-shadow: var(--shadow-lg);
+  display: flex; flex-direction: column;
+}
+.dash-header {
+  padding: 14px 18px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: linear-gradient(180deg, #fff 0%, #FAFAFA 100%);
+  position: sticky; top: 0; z-index: 5;
+}
+.dash-header h3 {
+  font-size: 1.05rem; font-weight: 800; color: var(--ink);
+  display: flex; align-items: center; gap: 8px;
+}
+.dash-body { padding: 16px 18px 28px; flex: 1; }
+.dash-kpis {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px;
+}
+.dash-kpi {
+  background: var(--surface); border-radius: 14px; padding: 14px 16px;
+  border: 1px solid var(--border); box-shadow: var(--shadow);
+  position: relative; overflow: hidden;
+}
+.dash-kpi::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+  background: var(--primary);
+}
+.dash-kpi.k-today::before { background: var(--success); }
+.dash-kpi.k-month::before { background: var(--gold); }
+.dash-kpi.k-total::before { background: #1565C0; }
+.dash-kpi.k-inv::before { background: #7B1FA2; }
+.dash-kpi .dk-label {
+  font-size: 0.68rem; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;
+}
+.dash-kpi .dk-val {
+  font-size: 1.25rem; font-weight: 800; color: var(--ink); line-height: 1.2;
+}
+.dash-kpi .dk-sub {
+  font-size: 0.72rem; color: var(--muted); margin-top: 4px;
+}
+.dash-grid-2 {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;
+}
+.dash-card {
+  background: var(--surface); border-radius: 14px; border: 1px solid var(--border);
+  box-shadow: var(--shadow); overflow: hidden;
+}
+.dash-card-h {
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+  font-size: 0.82rem; font-weight: 700; color: var(--ink);
+  display: flex; align-items: center; gap: 8px;
+  background: linear-gradient(180deg, #FAFAFA 0%, #fff 100%);
+}
+.dash-card-b { padding: 14px 16px; }
+.dash-bar-row {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+}
+.dash-bar-row:last-child { margin-bottom: 0; }
+.dash-bar-label {
+  width: 90px; flex-shrink: 0; font-size: 0.78rem; font-weight: 600;
+  color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.dash-bar-track {
+  flex: 1; height: 22px; background: #F0F0F5; border-radius: 6px; overflow: hidden;
+  position: relative;
+}
+.dash-bar-fill {
+  height: 100%; border-radius: 6px;
+  background: linear-gradient(90deg, var(--primary) 0%, #E57373 100%);
+  min-width: 2px; transition: width 0.5s ease;
+}
+.dash-bar-fill.gold { background: linear-gradient(90deg, #F9A825 0%, #FFD54F 100%); }
+.dash-bar-fill.blue { background: linear-gradient(90deg, #1565C0 0%, #42A5F5 100%); }
+.dash-bar-fill.green { background: linear-gradient(90deg, #2E7D32 0%, #66BB6A 100%); }
+.dash-bar-amt {
+  font-size: 0.72rem; font-weight: 700; color: var(--ink); white-space: nowrap;
+  min-width: 72px; text-align: right;
+}
+.dash-list-item {
+  display: flex; align-items: center; gap: 10px; padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+.dash-list-item:last-child { border-bottom: none; }
+.dash-rank {
+  width: 26px; height: 26px; border-radius: 50%; background: var(--primary-soft);
+  color: var(--primary); font-size: 0.75rem; font-weight: 800;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.dash-rank.r1 { background: #FFF8E1; color: #F57F17; }
+.dash-rank.r2 { background: #ECEFF1; color: #546E7A; }
+.dash-rank.r3 { background: #FFF3E0; color: #E65100; }
+.dash-li-name { flex: 1; min-width: 0; font-size: 0.84rem; font-weight: 600; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dash-li-meta { font-size: 0.7rem; color: var(--muted); }
+.dash-li-amt { font-size: 0.84rem; font-weight: 800; color: var(--primary); white-space: nowrap; }
+.dash-empty { text-align: center; padding: 28px 12px; color: var(--muted); font-size: 0.85rem; }
+.dash-month-chart {
+  display: flex; align-items: flex-end; gap: 6px; height: 160px; padding-top: 8px;
+}
+.dash-m-col {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0;
+}
+.dash-m-bar-wrap {
+  flex: 1; width: 100%; display: flex; align-items: flex-end; justify-content: center;
+}
+.dash-m-bar {
+  width: 70%; max-width: 36px; border-radius: 6px 6px 2px 2px;
+  background: linear-gradient(180deg, var(--primary) 0%, #E57373 100%);
+  min-height: 3px; transition: height 0.5s ease;
+}
+.dash-m-lbl {
+  font-size: 0.62rem; font-weight: 600; color: var(--muted);
+  text-align: center; white-space: nowrap;
+}
+.dash-m-val {
+  font-size: 0.6rem; font-weight: 700; color: var(--ink-soft);
+  text-align: center;
+}
+@media (max-width: 900px) {
+  .dash-kpis { grid-template-columns: 1fr 1fr; }
+  .dash-grid-2 { grid-template-columns: 1fr; }
+}
+@media (max-width: 480px) {
+  .dash-kpis { grid-template-columns: 1fr; }
+  .dash-kpi .dk-val { font-size: 1.15rem; }
+  .dash-bar-label { width: 70px; font-size: 0.72rem; }
+  .dash-body { padding: 12px; }
+}
+
+
 </style>
 </head>
 <body>
@@ -685,6 +824,13 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
     <div class="action-sheet-overlay no-print" id="reportsMenuOverlay" onclick="if(event.target===this)closeReportsMenu()">
       <div class="action-sheet">
         <div class="action-sheet-title">Reports · Branches</div>
+        <button class="action-sheet-btn" onclick="closeReportsMenu(); openDashboard()">
+          <span class="as-icon">📈</span>
+          <span class="as-text">
+            <strong>Dashboard</strong>
+            <small>Sales, top products, branches &amp; graphs</small>
+          </span>
+        </button>
         <button class="action-sheet-btn" onclick="closeReportsMenu(); openProductSaleModal()">
           <span class="as-icon">📦</span>
           <span class="as-text">
@@ -706,11 +852,11 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
             <small>All shops · Excel &amp; PDF report</small>
           </span>
         </button>
-        <a href="dashboard1.html" class="action-sheet-btn" style="text-decoration:none;" onclick="closeReportsMenu()">
-          <span class="as-icon">🏪</span>
+        <a href="" class="action-sheet-btn" style="text-decoration:none;" onclick="closeReportsMenu()">
+          <span class="as-icon">🔒</span>
           <span class="as-text">
-            <strong>Branches</strong>
-            <small>Switch to another branch</small>
+            <strong>Coming Soon...</strong>
+            <small>Under Maintenance⚠️</small>
           </span>
         </a>
         <button class="action-sheet-cancel" onclick="closeReportsMenu()">Cancel</button>
@@ -965,6 +1111,68 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
 
 
 <!-- PRODUCT SALE MODAL -->
+
+<!-- DASHBOARD -->
+<div class="dash-overlay no-print" id="dashboardOverlay" onclick="if(event.target===this)closeDashboard()">
+  <div class="dash-modal" role="dialog" aria-label="Dashboard">
+    <div class="dash-header">
+      <h3>📈 Business Dashboard</h3>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="btn btn-ghost btn-sm" onclick="renderDashboard()" title="Refresh">↻ Refresh</button>
+        <button class="btn btn-ghost btn-sm" onclick="closeDashboard()" style="height:32px;padding:0 10px;">✕</button>
+      </div>
+    </div>
+    <div class="dash-body">
+      <div class="dash-kpis">
+        <div class="dash-kpi k-today">
+          <div class="dk-label">Today Sale</div>
+          <div class="dk-val" id="dashToday">Rs. 0</div>
+          <div class="dk-sub" id="dashTodayCnt">0 invoices</div>
+        </div>
+        <div class="dash-kpi k-month">
+          <div class="dk-label">This Month</div>
+          <div class="dk-val" id="dashMonth">Rs. 0</div>
+          <div class="dk-sub" id="dashMonthCnt">0 invoices</div>
+        </div>
+        <div class="dash-kpi k-total">
+          <div class="dk-label">Total Sale</div>
+          <div class="dk-val" id="dashTotal">Rs. 0</div>
+          <div class="dk-sub" id="dashTotalCnt">0 invoices</div>
+        </div>
+        <div class="dash-kpi k-inv">
+          <div class="dk-label">Avg / Invoice</div>
+          <div class="dk-val" id="dashAvg">Rs. 0</div>
+          <div class="dk-sub" id="dashShopsCnt">0 branches active</div>
+        </div>
+      </div>
+
+      <div class="dash-grid-2">
+        <div class="dash-card">
+          <div class="dash-card-h">🏪 Branch-wise Sales</div>
+          <div class="dash-card-b" id="dashBranchBars"><div class="dash-empty">No data yet</div></div>
+        </div>
+        <div class="dash-card">
+          <div class="dash-card-h">📅 Monthly Sales (Last 12 Months)</div>
+          <div class="dash-card-b">
+            <div class="dash-month-chart" id="dashMonthChart"><div class="dash-empty">No data yet</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="dash-grid-2">
+        <div class="dash-card">
+          <div class="dash-card-h">🏆 Top Products</div>
+          <div class="dash-card-b" id="dashTopProducts"><div class="dash-empty">No products sold yet</div></div>
+        </div>
+        <div class="dash-card">
+          <div class="dash-card-h">👤 Top Customers</div>
+          <div class="dash-card-b" id="dashTopCustomers"><div class="dash-empty">No customers yet</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="sales-overlay no-print" id="productSaleOverlay" onclick="if(event.target===this)closeProductSaleModal()">
   <div class="sales-modal" role="dialog" aria-labelledby="psTitle" style="max-width:560px">
     <div class="sales-modal-header">
@@ -1613,6 +1821,9 @@ async function saveInvoice() {
 }
 
 async function loadInvoice(id) {
+  const invPreview = allHistory.find(x => x.id === id);
+  const invLabel = invPreview ? (invPreview.invoiceNo || 'invoice') : 'invoice';
+  if (!askAppPin('Open ' + invLabel + '?')) return;
   if (isDirty && !confirm('Discard unsaved changes and load this invoice?')) return;
   const inv = allHistory.find(x => x.id === id);
   if (!inv) return;
@@ -1653,10 +1864,24 @@ async function loadInvoice(id) {
   toast('Loaded ' + inv.invoiceNo, 'success');
 }
 
+/* Security PIN (4-digit) — required for Open & Delete */
+const APP_PIN = '2626';
+function askAppPin(actionLabel) {
+  const msg = (actionLabel || 'Confirm') + '\n\nEnter 4-digit PIN:';
+  const pin = prompt(msg);
+  if (pin === null) return false; // cancelled
+  if (String(pin).trim() !== APP_PIN) {
+    toast('Wrong PIN. Action cancelled.', 'error');
+    return false;
+  }
+  return true;
+}
+function askDeletePin(label) { return askAppPin(label || 'Delete'); }
+
 async function deleteCurrentInvoice() {
   if (!currentId) { toast('No saved invoice selected.', 'error'); return; }
   const no = document.getElementById('invoiceNo').value || 'this invoice';
-  if (!confirm('Delete ' + no + ' permanently? This cannot be undone.')) return;
+  if (!askDeletePin('Delete ' + no + ' permanently?')) return;
   await deleteInvoiceDB(currentId);
   toast('Invoice deleted.', 'success');
   newInvoice(true);
@@ -1665,7 +1890,7 @@ async function deleteCurrentInvoice() {
 
 async function deleteInvoiceById(id, invNo) {
   if (!id) return;
-  if (!confirm('Delete invoice ' + (invNo || '') + ' permanently? This cannot be undone.')) return;
+  if (!askDeletePin('Delete invoice ' + (invNo || '') + ' permanently?')) return;
   await deleteInvoiceDB(id);
   if (currentId === id) {
     newInvoice(true);
@@ -2111,6 +2336,157 @@ async function captureInvoice() {
 }
 
 
+
+
+
+/* ══════════ DASHBOARD ══════════ */
+function openDashboard() {
+  document.getElementById('dashboardOverlay').classList.add('show');
+  renderDashboard();
+}
+function closeDashboard() {
+  document.getElementById('dashboardOverlay')?.classList.remove('show');
+}
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeDashboard();
+});
+
+function renderDashboard() {
+  const list = (typeof allHistory !== 'undefined' && allHistory) ? allHistory : [];
+  const now = new Date();
+  const todayStart = (typeof startOfDay === 'function') ? startOfDay(now) : new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  let todayTotal = 0, todayCnt = 0;
+  let monthTotal = 0, monthCnt = 0;
+  let grandTotal = 0;
+  const shopMap = {};
+  const productMap = {};
+  const customerMap = {};
+  const monthMap = {};
+
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    monthMap[key] = 0;
+  }
+
+  list.forEach(inv => {
+    const amt = Number(inv.grandTotal) || 0;
+    grandTotal += amt;
+    const d = (typeof parseInvDate === 'function') ? parseInvDate(inv) : null;
+    if (d) {
+      const t = d.getTime();
+      if (t >= todayStart.getTime()) { todayTotal += amt; todayCnt++; }
+      if (t >= monthStart.getTime()) { monthTotal += amt; monthCnt++; }
+      const mKey = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+      if (monthMap.hasOwnProperty(mKey)) monthMap[mKey] += amt;
+    }
+    const sn = (inv.shopName || 'Unknown').trim() || 'Unknown';
+    if (!shopMap[sn]) shopMap[sn] = { total: 0, count: 0 };
+    shopMap[sn].total += amt;
+    shopMap[sn].count++;
+
+    const cn = (inv.customerName || '').trim();
+    if (cn) {
+      if (!customerMap[cn]) customerMap[cn] = { total: 0, count: 0 };
+      customerMap[cn].total += amt;
+      customerMap[cn].count++;
+    }
+
+    (inv.items || []).forEach(it => {
+      const name = (it.name || 'Unknown').trim() || 'Unknown';
+      if (!productMap[name]) productMap[name] = { amount: 0, qty: 0, weight: 0 };
+      productMap[name].amount += Number(it.amount) || 0;
+      productMap[name].qty += Number(it.qty) || 0;
+      productMap[name].weight += Number(it.weight) || 0;
+    });
+  });
+
+  const fmtD = (n) => 'Rs. ' + Math.round(Number(n) || 0).toLocaleString('en-PK');
+  document.getElementById('dashToday').textContent = fmtD(todayTotal);
+  document.getElementById('dashTodayCnt').textContent = todayCnt + (todayCnt === 1 ? ' invoice' : ' invoices');
+  document.getElementById('dashMonth').textContent = fmtD(monthTotal);
+  document.getElementById('dashMonthCnt').textContent = monthCnt + (monthCnt === 1 ? ' invoice' : ' invoices');
+  document.getElementById('dashTotal').textContent = fmtD(grandTotal);
+  document.getElementById('dashTotalCnt').textContent = list.length + (list.length === 1 ? ' invoice' : ' invoices');
+  const avg = list.length ? grandTotal / list.length : 0;
+  document.getElementById('dashAvg').textContent = fmtD(avg);
+  const activeShops = Object.keys(shopMap).length;
+  document.getElementById('dashShopsCnt').textContent = activeShops + (activeShops === 1 ? ' branch active' : ' branches active');
+
+  const shopNames = Object.keys(shopMap).sort((a, b) => shopMap[b].total - shopMap[a].total);
+  const maxShop = shopNames.length ? shopMap[shopNames[0]].total : 0;
+  const branchEl = document.getElementById('dashBranchBars');
+  const barColors = ['', 'gold', 'blue', 'green', '', 'gold', 'blue', 'green'];
+  if (!shopNames.length) {
+    branchEl.innerHTML = '<div class="dash-empty">No branch sales yet</div>';
+  } else {
+    branchEl.innerHTML = shopNames.map((sn, i) => {
+      const s = shopMap[sn];
+      const pct = maxShop > 0 ? Math.max(2, Math.round((s.total / maxShop) * 100)) : 0;
+      const cls = barColors[i % barColors.length];
+      return '<div class="dash-bar-row">' +
+        '<div class="dash-bar-label" title="' + esc(sn) + '">' + esc(sn) + '</div>' +
+        '<div class="dash-bar-track"><div class="dash-bar-fill ' + cls + '" style="width:' + pct + '%"></div></div>' +
+        '<div class="dash-bar-amt">' + fmtD(s.total) + '</div></div>';
+    }).join('');
+  }
+
+  const monthKeys = Object.keys(monthMap);
+  const maxMonth = Math.max(0, ...monthKeys.map(k => monthMap[k]));
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const chartEl = document.getElementById('dashMonthChart');
+  if (!list.length || maxMonth === 0) {
+    chartEl.innerHTML = '<div class="dash-empty" style="width:100%">No monthly data yet</div>';
+  } else {
+    chartEl.innerHTML = monthKeys.map(k => {
+      const val = monthMap[k];
+      const h = maxMonth > 0 ? Math.max(3, Math.round((val / maxMonth) * 130)) : 3;
+      const parts = k.split('-');
+      const lbl = monthNames[parseInt(parts[1], 10) - 1] || parts[1];
+      const shortVal = val >= 1000 ? (Math.round(val / 1000) + 'k') : String(Math.round(val));
+      return '<div class="dash-m-col">' +
+        '<div class="dash-m-val">' + (val > 0 ? shortVal : '') + '</div>' +
+        '<div class="dash-m-bar-wrap"><div class="dash-m-bar" style="height:' + h + 'px"></div></div>' +
+        '<div class="dash-m-lbl">' + lbl + '</div></div>';
+    }).join('');
+  }
+
+  const prodNames = Object.keys(productMap).sort((a, b) => productMap[b].amount - productMap[a].amount).slice(0, 8);
+  const prodEl = document.getElementById('dashTopProducts');
+  if (!prodNames.length) {
+    prodEl.innerHTML = '<div class="dash-empty">No products sold yet</div>';
+  } else {
+    prodEl.innerHTML = prodNames.map((name, i) => {
+      const p = productMap[name];
+      const rankCls = i === 0 ? 'r1' : (i === 1 ? 'r2' : (i === 2 ? 'r3' : ''));
+      const meta = (p.weight ? (Math.round(p.weight * 100) / 100) + ' kg' : '') +
+        (p.qty ? (p.weight ? ' · ' : '') + (Math.round(p.qty * 100) / 100) + ' qty' : '');
+      return '<div class="dash-list-item">' +
+        '<div class="dash-rank ' + rankCls + '">' + (i + 1) + '</div>' +
+        '<div style="flex:1;min-width:0"><div class="dash-li-name">' + esc(name) + '</div>' +
+        '<div class="dash-li-meta">' + esc(meta) + '</div></div>' +
+        '<div class="dash-li-amt">' + fmtD(p.amount) + '</div></div>';
+    }).join('');
+  }
+
+  const custNames = Object.keys(customerMap).sort((a, b) => customerMap[b].total - customerMap[a].total).slice(0, 8);
+  const custEl = document.getElementById('dashTopCustomers');
+  if (!custNames.length) {
+    custEl.innerHTML = '<div class="dash-empty">No named customers yet</div>';
+  } else {
+    custEl.innerHTML = custNames.map((name, i) => {
+      const c = customerMap[name];
+      const rankCls = i === 0 ? 'r1' : (i === 1 ? 'r2' : (i === 2 ? 'r3' : ''));
+      return '<div class="dash-list-item">' +
+        '<div class="dash-rank ' + rankCls + '">' + (i + 1) + '</div>' +
+        '<div style="flex:1;min-width:0"><div class="dash-li-name">' + esc(name) + '</div>' +
+        '<div class="dash-li-meta">' + c.count + (c.count === 1 ? ' invoice' : ' invoices') + '</div></div>' +
+        '<div class="dash-li-amt">' + fmtD(c.total) + '</div></div>';
+    }).join('');
+  }
+}
 
 
 function openReportsMenu() {
