@@ -388,20 +388,39 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
 }
 .sidebar-overlay.show { display: block; }
 
-/* Print */
+/* Print — sized for an 80mm thermal receipt printer (72mm printable width) */
+@page {
+  size: 72mm auto;   /* auto height = continuous roll, not a fixed A4-length page */
+  margin: 2mm;
+}
 @media print {
-  body { background: #fff; }
+  html, body { width: 72mm; background: #fff; }
   .no-print, .topbar, .sidebar, .sidebar-overlay, .toast { display: none !important; }
   .app-shell { display: block; }
   .main { padding: 0; max-width: 100%; }
   .card { box-shadow: none; border: none; }
   .card-header { display: none; }
   .card-body { padding: 0; }
-  thead th { background: #1C1C1E !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .footer-bar { background: #fff; border-top: 2px solid #1C1C1E; }
+  thead th { background: #fff !important; color: #000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .footer-bar { background: #fff; border-top: 1px dashed #000; }
   .print-show { display: block !important; }
-  table { min-width: 0; }
+
+  /* Shrink everything down to receipt scale */
+  body, table, .totals-box, .print-thanks { font-size: 9px !important; }
+  table { min-width: 0; width: 100%; border-collapse: collapse; }
+  th, td { padding: 2px 3px !important; }
+  .col-num, .col-weight { display: none; }  /* drop non-essential columns to fit 72mm */
+  .print-header img { width: 34px; height: 34px; }
+  .print-header h1 { font-size: 0.95rem; }
+  .print-header p { font-size: 0.65rem; }
+  .print-meta { grid-template-columns: 1fr; gap: 2px; font-size: 0.7rem; }
+  .totals-box { width: 100%; }
+
+  /* Thermal printers can't reproduce light gray — force all print text to solid black */
+  .print-doc, .print-doc * , .print-thanks, .print-thanks *, .totals-box, .totals-box * { color: #000 !important; }
+  .print-meta .label { font-weight: 700 !important; }
 }
+
 .print-show { display: none; }
 .print-doc { padding: 6px 0 12px; }
 .print-header {
@@ -1011,7 +1030,7 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
               <th class="col-num">#</th>
               <th>Product </th>
               <th>Qty</th>
-              <th>Weight (kg)</th>
+              <th class="col-weight">Weight (kg)</th>
               <th>Rate (Rs)</th>
               <th>Amount (Rs)</th>
               <th class="no-print" style="width:90px"></th>
@@ -2115,7 +2134,7 @@ function render() {
       <td class="col-num">${i+1}</td>
       <td>${esc(it.name)}</td>
       <td>${it.qty || '—'}</td>
-      <td>${it.weight ? it.weight.toFixed(2) : '—'}</td>
+      <td class="col-weight">${it.weight ? it.weight.toFixed(2) : '—'}</td>
       <td>${fmt(it.rate)}</td>
       <td class="col-amt">${fmt(it.amount)}</td>
       <td class="no-print"><div class="row-actions">
