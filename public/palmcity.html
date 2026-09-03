@@ -813,6 +813,42 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
   .dash-kpis { grid-template-columns: 1fr 1fr; }
   .dash-grid-2 { grid-template-columns: 1fr; }
 }
+
+/* Dashboard date filters */
+.dash-filter-row {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px dashed var(--border);
+}
+.dash-filter-row label {
+  font-size: 0.68rem; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.3px;
+}
+.dash-filter-row input[type="date"] {
+  height: 34px; padding: 0 8px; border: 1.5px solid var(--border);
+  border-radius: 8px; font-family: inherit; font-size: 0.82rem; background: #fff;
+}
+.dash-filter-row input[type="date"]:focus {
+  outline: none; border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(211,47,47,0.1);
+}
+.dash-filter-row .btn { height: 34px; padding: 0 12px; font-size: 0.75rem; }
+.dash-branch-total {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: 12px; padding-top: 10px; border-top: 2px solid var(--primary);
+  font-size: 0.88rem; font-weight: 800;
+}
+.dash-branch-total span:last-child { color: var(--primary); }
+.dash-branch-date-note {
+  font-size: 0.72rem; color: var(--muted); margin-bottom: 10px; font-weight: 500;
+}
+.dash-kpis { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 900px) {
+  .dash-kpis { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 480px) {
+  .dash-kpis { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 480px) {
   .dash-kpis { grid-template-columns: 1fr; }
   .dash-kpi .dk-val { font-size: 1.15rem; }
@@ -1158,17 +1194,26 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
           <div class="dk-val" id="dashTotal">Rs. 0</div>
           <div class="dk-sub" id="dashTotalCnt">0 invoices</div>
         </div>
-        <div class="dash-kpi k-inv">
-          <div class="dk-label">Avg / Invoice</div>
-          <div class="dk-val" id="dashAvg">Rs. 0</div>
-          <div class="dk-sub" id="dashShopsCnt">0 branches active</div>
-        </div>
       </div>
 
       <div class="dash-grid-2">
         <div class="dash-card">
           <div class="dash-card-h">🏪 Branch-wise Sales</div>
-          <div class="dash-card-b" id="dashBranchBars"><div class="dash-empty">No data yet</div></div>
+          <div class="dash-card-b">
+            <div class="dash-filter-row">
+              <label>From</label>
+              <input type="date" id="dashBranchFrom" onchange="renderDashboardBranch()">
+              <label>To</label>
+              <input type="date" id="dashBranchTo" onchange="renderDashboardBranch()">
+              <button class="btn btn-ghost btn-sm" type="button" onclick="clearDashBranchDates()">All</button>
+            </div>
+            <div class="dash-branch-date-note" id="dashBranchDateNote">Showing all dates</div>
+            <div id="dashBranchBars"><div class="dash-empty">No data yet</div></div>
+            <div class="dash-branch-total" id="dashBranchTotal" style="display:none">
+              <span>Total Sale</span>
+              <span id="dashBranchTotalAmt">Rs. 0</span>
+            </div>
+          </div>
         </div>
         <div class="dash-card">
           <div class="dash-card-h">📅 Monthly Sales (Last 12 Months)</div>
@@ -1181,11 +1226,31 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
       <div class="dash-grid-2">
         <div class="dash-card">
           <div class="dash-card-h">🏆 Top Products</div>
-          <div class="dash-card-b" id="dashTopProducts"><div class="dash-empty">No products sold yet</div></div>
+          <div class="dash-card-b">
+            <div class="dash-filter-row">
+              <label>From</label>
+              <input type="date" id="dashProdFrom" onchange="renderDashboardTopLists()">
+              <label>To</label>
+              <input type="date" id="dashProdTo" onchange="renderDashboardTopLists()">
+              <button class="btn btn-ghost btn-sm" type="button" onclick="clearDashProdDates()">All</button>
+            </div>
+            <div class="dash-branch-date-note" id="dashProdDateNote">All dates</div>
+            <div id="dashTopProducts"><div class="dash-empty">No products sold yet</div></div>
+          </div>
         </div>
         <div class="dash-card">
           <div class="dash-card-h">👤 Top Customers</div>
-          <div class="dash-card-b" id="dashTopCustomers"><div class="dash-empty">No customers yet</div></div>
+          <div class="dash-card-b">
+            <div class="dash-filter-row">
+              <label>From</label>
+              <input type="date" id="dashCustFrom" onchange="renderDashboardTopLists()">
+              <label>To</label>
+              <input type="date" id="dashCustTo" onchange="renderDashboardTopLists()">
+              <button class="btn btn-ghost btn-sm" type="button" onclick="clearDashCustDates()">All</button>
+            </div>
+            <div class="dash-branch-date-note" id="dashCustDateNote">All dates</div>
+            <div id="dashTopCustomers"><div class="dash-empty">No customers yet</div></div>
+          </div>
         </div>
       </div>
     </div>
@@ -2379,9 +2444,6 @@ function renderDashboard() {
   let todayTotal = 0, todayCnt = 0;
   let monthTotal = 0, monthCnt = 0;
   let grandTotal = 0;
-  const shopMap = {};
-  const productMap = {};
-  const customerMap = {};
   const monthMap = {};
 
   for (let i = 11; i >= 0; i--) {
@@ -2401,25 +2463,6 @@ function renderDashboard() {
       const mKey = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
       if (monthMap.hasOwnProperty(mKey)) monthMap[mKey] += amt;
     }
-    const sn = (inv.shopName || 'Unknown').trim() || 'Unknown';
-    if (!shopMap[sn]) shopMap[sn] = { total: 0, count: 0 };
-    shopMap[sn].total += amt;
-    shopMap[sn].count++;
-
-    const cn = (inv.customerName || '').trim();
-    if (cn) {
-      if (!customerMap[cn]) customerMap[cn] = { total: 0, count: 0 };
-      customerMap[cn].total += amt;
-      customerMap[cn].count++;
-    }
-
-    (inv.items || []).forEach(it => {
-      const name = (it.name || 'Unknown').trim() || 'Unknown';
-      if (!productMap[name]) productMap[name] = { amount: 0, qty: 0, weight: 0 };
-      productMap[name].amount += Number(it.amount) || 0;
-      productMap[name].qty += Number(it.qty) || 0;
-      productMap[name].weight += Number(it.weight) || 0;
-    });
   });
 
   const fmtD = (n) => 'Rs. ' + Math.round(Number(n) || 0).toLocaleString('en-PK');
@@ -2429,28 +2472,6 @@ function renderDashboard() {
   document.getElementById('dashMonthCnt').textContent = monthCnt + (monthCnt === 1 ? ' invoice' : ' invoices');
   document.getElementById('dashTotal').textContent = fmtD(grandTotal);
   document.getElementById('dashTotalCnt').textContent = list.length + (list.length === 1 ? ' invoice' : ' invoices');
-  const avg = list.length ? grandTotal / list.length : 0;
-  document.getElementById('dashAvg').textContent = fmtD(avg);
-  const activeShops = Object.keys(shopMap).length;
-  document.getElementById('dashShopsCnt').textContent = activeShops + (activeShops === 1 ? ' branch active' : ' branches active');
-
-  const shopNames = Object.keys(shopMap).sort((a, b) => shopMap[b].total - shopMap[a].total);
-  const maxShop = shopNames.length ? shopMap[shopNames[0]].total : 0;
-  const branchEl = document.getElementById('dashBranchBars');
-  const barColors = ['', 'gold', 'blue', 'green', '', 'gold', 'blue', 'green'];
-  if (!shopNames.length) {
-    branchEl.innerHTML = '<div class="dash-empty">No branch sales yet</div>';
-  } else {
-    branchEl.innerHTML = shopNames.map((sn, i) => {
-      const s = shopMap[sn];
-      const pct = maxShop > 0 ? Math.max(2, Math.round((s.total / maxShop) * 100)) : 0;
-      const cls = barColors[i % barColors.length];
-      return '<div class="dash-bar-row">' +
-        '<div class="dash-bar-label" title="' + esc(sn) + '">' + esc(sn) + '</div>' +
-        '<div class="dash-bar-track"><div class="dash-bar-fill ' + cls + '" style="width:' + pct + '%"></div></div>' +
-        '<div class="dash-bar-amt">' + fmtD(s.total) + '</div></div>';
-    }).join('');
-  }
 
   const monthKeys = Object.keys(monthMap);
   const maxMonth = Math.max(0, ...monthKeys.map(k => monthMap[k]));
@@ -2472,6 +2493,110 @@ function renderDashboard() {
     }).join('');
   }
 
+  renderDashboardBranch();
+  renderDashboardTopLists();
+}
+
+function dashFmtDateNote(fromStr, toStr, allLabel) {
+  if (!fromStr && !toStr) return allLabel || 'All dates';
+  if (fromStr && toStr) return fromStr + ' → ' + toStr;
+  if (fromStr) return 'From ' + fromStr;
+  return 'Until ' + toStr;
+}
+
+function filterListByDateInputs(fromId, toId) {
+  const list = (typeof allHistory !== 'undefined' && allHistory) ? allHistory : [];
+  const fromStr = (document.getElementById(fromId) && document.getElementById(fromId).value) || '';
+  const toStr = (document.getElementById(toId) && document.getElementById(toId).value) || '';
+  if (!fromStr && !toStr) return { list: list.slice(), fromStr, toStr };
+  const fromT = fromStr ? startOfDay(new Date(fromStr + 'T12:00:00')).getTime() : 0;
+  const toT = toStr ? startOfDay(new Date(toStr + 'T12:00:00')).getTime() + 86400000 - 1 : Number.MAX_SAFE_INTEGER;
+  const filtered = list.filter(inv => {
+    const d = parseInvDate(inv);
+    if (!d) return false;
+    const t = d.getTime();
+    return t >= fromT && t <= toT;
+  });
+  return { list: filtered, fromStr, toStr };
+}
+
+function renderDashboardBranch() {
+  const { list, fromStr, toStr } = filterListByDateInputs('dashBranchFrom', 'dashBranchTo');
+  const note = document.getElementById('dashBranchDateNote');
+  if (note) note.textContent = dashFmtDateNote(fromStr, toStr, 'Showing all dates');
+
+  const shopMap = {};
+  list.forEach(inv => {
+    const amt = Number(inv.grandTotal) || 0;
+    const sn = (inv.shopName || 'Unknown').trim() || 'Unknown';
+    if (!shopMap[sn]) shopMap[sn] = { total: 0, count: 0 };
+    shopMap[sn].total += amt;
+    shopMap[sn].count++;
+  });
+
+  const fmtD = (n) => 'Rs. ' + Math.round(Number(n) || 0).toLocaleString('en-PK');
+  const shopNames = Object.keys(shopMap).sort((a, b) => shopMap[b].total - shopMap[a].total);
+  const maxShop = shopNames.length ? shopMap[shopNames[0]].total : 0;
+  const branchEl = document.getElementById('dashBranchBars');
+  const barColors = ['', 'gold', 'blue', 'green', '', 'gold', 'blue', 'green'];
+  let branchTotal = 0;
+  shopNames.forEach(sn => { branchTotal += shopMap[sn].total; });
+
+  if (!shopNames.length) {
+    branchEl.innerHTML = '<div class="dash-empty">No branch sales yet</div>';
+  } else {
+    branchEl.innerHTML = shopNames.map((sn, i) => {
+      const s = shopMap[sn];
+      const pct = maxShop > 0 ? Math.max(2, Math.round((s.total / maxShop) * 100)) : 0;
+      const cls = barColors[i % barColors.length];
+      return '<div class="dash-bar-row">' +
+        '<div class="dash-bar-label" title="' + esc(sn) + '">' + esc(sn) + '</div>' +
+        '<div class="dash-bar-track"><div class="dash-bar-fill ' + cls + '" style="width:' + pct + '%"></div></div>' +
+        '<div class="dash-bar-amt">' + fmtD(s.total) + '</div></div>';
+    }).join('');
+  }
+
+  const totalBox = document.getElementById('dashBranchTotal');
+  const totalAmt = document.getElementById('dashBranchTotalAmt');
+  if (totalBox && totalAmt) {
+    if (shopNames.length) {
+      totalBox.style.display = 'flex';
+      totalAmt.textContent = fmtD(branchTotal);
+    } else {
+      totalBox.style.display = 'none';
+    }
+  }
+}
+
+function clearDashBranchDates() {
+  const a = document.getElementById('dashBranchFrom');
+  const b = document.getElementById('dashBranchTo');
+  if (a) a.value = '';
+  if (b) b.value = '';
+  renderDashboardBranch();
+}
+
+function renderDashboardTopLists() {
+  const prod = filterListByDateInputs('dashProdFrom', 'dashProdTo');
+  const cust = filterListByDateInputs('dashCustFrom', 'dashCustTo');
+  const noteP = document.getElementById('dashProdDateNote');
+  const noteC = document.getElementById('dashCustDateNote');
+  if (noteP) noteP.textContent = dashFmtDateNote(prod.fromStr, prod.toStr, 'All dates');
+  if (noteC) noteC.textContent = dashFmtDateNote(cust.fromStr, cust.toStr, 'All dates');
+
+  const fmtD = (n) => 'Rs. ' + Math.round(Number(n) || 0).toLocaleString('en-PK');
+
+  const productMap = {};
+  prod.list.forEach(inv => {
+    (inv.items || []).forEach(it => {
+      const name = (it.name || 'Unknown').trim() || 'Unknown';
+      if (!productMap[name]) productMap[name] = { amount: 0, qty: 0, weight: 0 };
+      productMap[name].amount += Number(it.amount) || 0;
+      productMap[name].qty += Number(it.qty) || 0;
+      productMap[name].weight += Number(it.weight) || 0;
+    });
+  });
+
   const prodNames = Object.keys(productMap).sort((a, b) => productMap[b].amount - productMap[a].amount).slice(0, 8);
   const prodEl = document.getElementById('dashTopProducts');
   if (!prodNames.length) {
@@ -2490,6 +2615,15 @@ function renderDashboard() {
     }).join('');
   }
 
+  const customerMap = {};
+  cust.list.forEach(inv => {
+    const cn = (inv.customerName || '').trim();
+    if (!cn) return;
+    if (!customerMap[cn]) customerMap[cn] = { total: 0, count: 0 };
+    customerMap[cn].total += Number(inv.grandTotal) || 0;
+    customerMap[cn].count++;
+  });
+
   const custNames = Object.keys(customerMap).sort((a, b) => customerMap[b].total - customerMap[a].total).slice(0, 8);
   const custEl = document.getElementById('dashTopCustomers');
   if (!custNames.length) {
@@ -2505,6 +2639,21 @@ function renderDashboard() {
         '<div class="dash-li-amt">' + fmtD(c.total) + '</div></div>';
     }).join('');
   }
+}
+
+function clearDashProdDates() {
+  const a = document.getElementById('dashProdFrom');
+  const b = document.getElementById('dashProdTo');
+  if (a) a.value = '';
+  if (b) b.value = '';
+  renderDashboardTopLists();
+}
+function clearDashCustDates() {
+  const a = document.getElementById('dashCustFrom');
+  const b = document.getElementById('dashCustTo');
+  if (a) a.value = '';
+  if (b) b.value = '';
+  renderDashboardTopLists();
 }
 
 
@@ -3051,12 +3200,27 @@ function renderAllInvoicesReport() {
   }
 }
 
+function sortInvoicesByShopThenDate(list) {
+  // Group: one shop's invoices together, then next shop.
+  // Within a shop: newest date first, then invoice number.
+  return list.slice().sort((a, b) => {
+    const sa = (a.shopName || 'Unknown').trim().toLowerCase() || 'unknown';
+    const sb = (b.shopName || 'Unknown').trim().toLowerCase() || 'unknown';
+    if (sa < sb) return -1;
+    if (sa > sb) return 1;
+    const da = parseInvDate(a)?.getTime() || 0;
+    const db = parseInvDate(b)?.getTime() || 0;
+    if (db !== da) return db - da;
+    return String(a.invoiceNo || '').localeCompare(String(b.invoiceNo || ''));
+  });
+}
+
 function exportAllInvoicesExcel() {
   if (typeof XLSX === 'undefined') {
     toast('Excel library not loaded. Check internet & retry.', 'error');
     return;
   }
-  const list = getAllInvoicesFiltered();
+  const list = sortInvoicesByShopThenDate(getAllInvoicesFiltered());
   if (!list.length) {
     toast('No invoices to export.', 'error');
     return;
@@ -3459,7 +3623,7 @@ function exportAllInvoicesExcel() {
 }
 
 function exportAllInvoicesPDF() {
-  const list = getAllInvoicesFiltered();
+  const list = sortInvoicesByShopThenDate(getAllInvoicesFiltered());
   if (!list.length) {
     toast('No invoices to export.', 'error');
     return;
