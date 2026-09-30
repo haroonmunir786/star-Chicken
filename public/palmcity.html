@@ -253,6 +253,39 @@ body {
   #productDropdown .items-grid { grid-template-columns: 1fr; }
   #productDropdown .item { border-right: none; }
 }
+
+/* Customer name autocomplete */
+.customer-wrap { position: relative; width: 100%; }
+#customerDropdown {
+  display: none; position: absolute; top: calc(100% + 4px);
+  left: 0; right: 0; max-height: 220px; overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; z-index: 60; box-shadow: var(--shadow-lg);
+  -webkit-overflow-scrolling: touch;
+}
+#customerDropdown .cust-item {
+  padding: 10px 12px; cursor: pointer; font-size: 0.88rem;
+  border-bottom: 1px solid #F5F5F5; font-weight: 500; color: var(--ink);
+}
+#customerDropdown .cust-item:last-child { border-bottom: none; }
+#customerDropdown .cust-item:hover,
+#customerDropdown .cust-item.active { background: var(--gold-soft); color: var(--ink); }
+#customerDropdown .cust-hint {
+  padding: 8px 12px; font-size: 0.72rem; color: var(--muted);
+  background: var(--primary-soft); font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.3px;
+}
+.dash-view-all-btn {
+  border-style: dashed !important;
+  color: var(--primary) !important;
+  font-weight: 700 !important;
+  width: 100%;
+  margin-top: 10px;
+}
+.dash-view-all-btn:hover {
+  background: var(--primary-soft) !important;
+  border-color: var(--primary) !important;
+}
 .custom-link { margin-top: 10px; font-size: 0.8rem; color: var(--muted); }
 .custom-link a { color: var(--primary); font-weight: 600; cursor: pointer; text-decoration: none; }
 .custom-box {
@@ -503,6 +536,8 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
   -webkit-overflow-scrolling: touch;
 }
 .sales-overlay.show { display: flex; }
+/* Full list must appear above the dashboard (z-index 2100) */
+#dashFullListOverlay { z-index: 2200; }
 .sales-modal {
   background: var(--surface); border-radius: 16px; width: 100%; max-width: 480px;
   max-height: 90vh; overflow-y: auto; box-shadow: var(--shadow-lg);
@@ -969,9 +1004,10 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
               <label>Time (PKT)</label>
               <input type="text" id="invoiceTime" readonly placeholder="--:--:-- --">
             </div>
-            <div class="form-group">
+            <div class="form-group customer-wrap">
               <label>Customer Name</label>
-              <input type="text" id="customerName" placeholder="nova blank">
+              <input type="text" id="customerName" placeholder="Type name…" autocomplete="off">
+              <div id="customerDropdown"></div>
             </div>
             <div class="form-group">
               <label>Shop Name</label>
@@ -1202,10 +1238,10 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
           <div class="dash-card-b">
             <div class="dash-filter-row">
               <label>From</label>
-              <input type="date" id="dashBranchFrom" onchange="renderDashboardBranch()">
+              <input type="date" id="dashBranchFrom" onchange="syncDashDates('dashBranchFrom')">
               <label>To</label>
-              <input type="date" id="dashBranchTo" onchange="renderDashboardBranch()">
-              <button class="btn btn-ghost btn-sm" type="button" onclick="clearDashBranchDates()">All</button>
+              <input type="date" id="dashBranchTo" onchange="syncDashDates('dashBranchTo')">
+              <button class="btn btn-ghost btn-sm" type="button" onclick="clearAllDashDates()">All</button>
             </div>
             <div class="dash-branch-date-note" id="dashBranchDateNote">Showing all dates</div>
             <div id="dashBranchBars"><div class="dash-empty">No data yet</div></div>
@@ -1225,33 +1261,51 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
 
       <div class="dash-grid-2">
         <div class="dash-card">
-          <div class="dash-card-h">🏆 Top Products</div>
+          <div class="dash-card-h">🏆 Top 10 Products</div>
           <div class="dash-card-b">
             <div class="dash-filter-row">
               <label>From</label>
-              <input type="date" id="dashProdFrom" onchange="renderDashboardTopLists()">
+              <input type="date" id="dashProdFrom" onchange="syncDashDates('dashProdFrom')">
               <label>To</label>
-              <input type="date" id="dashProdTo" onchange="renderDashboardTopLists()">
-              <button class="btn btn-ghost btn-sm" type="button" onclick="clearDashProdDates()">All</button>
+              <input type="date" id="dashProdTo" onchange="syncDashDates('dashProdTo')">
+              <button class="btn btn-ghost btn-sm" type="button" onclick="clearAllDashDates()">All</button>
             </div>
             <div class="dash-branch-date-note" id="dashProdDateNote">All dates</div>
             <div id="dashTopProducts"><div class="dash-empty">No products sold yet</div></div>
+            <button type="button" class="btn btn-ghost btn-sm dash-view-all-btn" id="dashProdViewAll" style="display:none" onclick="openDashFullList('products')">View all products →</button>
           </div>
         </div>
         <div class="dash-card">
-          <div class="dash-card-h">👤 Top Customers</div>
+          <div class="dash-card-h">👤 Top 10 Customers</div>
           <div class="dash-card-b">
             <div class="dash-filter-row">
               <label>From</label>
-              <input type="date" id="dashCustFrom" onchange="renderDashboardTopLists()">
+              <input type="date" id="dashCustFrom" onchange="syncDashDates('dashCustFrom')">
               <label>To</label>
-              <input type="date" id="dashCustTo" onchange="renderDashboardTopLists()">
-              <button class="btn btn-ghost btn-sm" type="button" onclick="clearDashCustDates()">All</button>
+              <input type="date" id="dashCustTo" onchange="syncDashDates('dashCustTo')">
+              <button class="btn btn-ghost btn-sm" type="button" onclick="clearAllDashDates()">All</button>
             </div>
             <div class="dash-branch-date-note" id="dashCustDateNote">All dates</div>
             <div id="dashTopCustomers"><div class="dash-empty">No customers yet</div></div>
+            <button type="button" class="btn btn-ghost btn-sm dash-view-all-btn" id="dashCustViewAll" style="display:none" onclick="openDashFullList('customers')">View all customers →</button>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Full Products / Customers list modal -->
+<div class="sales-overlay no-print" id="dashFullListOverlay" onclick="if(event.target===this)closeDashFullList()">
+  <div class="sales-modal" role="dialog" aria-labelledby="dashFullListTitle" style="max-width:520px">
+    <div class="sales-modal-header">
+      <h3 id="dashFullListTitle">Full list</h3>
+      <button class="btn btn-ghost btn-sm" onclick="closeDashFullList()" style="height:32px;padding:0 10px;">✕</button>
+    </div>
+    <div class="sales-modal-body">
+      <div class="dash-branch-date-note" id="dashFullListNote" style="margin-bottom:10px"></div>
+      <div class="ps-table-wrap" style="max-height:60vh">
+        <div id="dashFullListBody"></div>
       </div>
     </div>
   </div>
@@ -1767,6 +1821,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   setInvoiceDateTimeNow();
   startPktLiveClock();
   setupSearch();
+  setupCustomerAutocomplete();
   await refreshHistory();
   updatePrintMeta();
   updateStatus();
@@ -2097,6 +2152,112 @@ function setupSearch() {
     else if (e.key === 'Escape') dd.style.display = 'none';
   });
   document.addEventListener('click', e => { if (!e.target.closest('.product-wrap')) dd.style.display = 'none'; });
+}
+
+/* ══════════ CUSTOMER NAME AUTOCOMPLETE ══════════ */
+let custActiveIdx = -1;
+
+function getKnownCustomerNames() {
+  const seen = new Map();
+  const list = (typeof allHistory !== 'undefined' && allHistory) ? allHistory : [];
+  for (let i = list.length - 1; i >= 0; i--) {
+    const n = (list[i].customerName || '').trim();
+    if (!n) continue;
+    const key = n.toLowerCase();
+    if (!seen.has(key)) seen.set(key, n);
+  }
+  return Array.from(seen.values()).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+}
+
+function matchCustomerName(name, q) {
+  const n = (name || '').toLowerCase().trim();
+  if (!q) return false;
+  if (n.startsWith(q) || n.includes(q)) return true;
+  const tokens = q.split(/\s+/).filter(Boolean);
+  const words = n.split(/\s+/).filter(Boolean);
+  if (tokens.length > 1) {
+    let wi = 0;
+    for (const t of tokens) {
+      let hit = false;
+      while (wi < words.length) {
+        if (words[wi].startsWith(t) || words[wi].includes(t)) { hit = true; wi++; break; }
+        wi++;
+      }
+      if (!hit) return false;
+    }
+    return true;
+  }
+  return false;
+}
+
+function setupCustomerAutocomplete() {
+  const input = document.getElementById('customerName');
+  const dd = document.getElementById('customerDropdown');
+  if (!input || !dd) return;
+
+  function showMatches() {
+    const q = input.value.trim().toLowerCase();
+    dd.innerHTML = '';
+    custActiveIdx = -1;
+    if (!q) { dd.style.display = 'none'; return; }
+    const names = getKnownCustomerNames().filter(n => matchCustomerName(n, q));
+    if (!names.length) { dd.style.display = 'none'; return; }
+    const hint = document.createElement('div');
+    hint.className = 'cust-hint';
+    hint.textContent = 'Previous customers';
+    dd.appendChild(hint);
+    names.slice(0, 12).forEach(name => {
+      const d = document.createElement('div');
+      d.className = 'cust-item';
+      d.textContent = name;
+      d.onmousedown = (e) => { e.preventDefault(); selectCustomerName(name); };
+      dd.appendChild(d);
+    });
+    dd.style.display = 'block';
+  }
+
+  input.addEventListener('input', () => {
+    markDirty();
+    updatePrintMeta();
+    showMatches();
+  });
+  input.addEventListener('focus', () => {
+    if (input.value.trim()) showMatches();
+  });
+  input.addEventListener('keydown', e => {
+    const list = dd.querySelectorAll('.cust-item');
+    if (!list.length) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      custActiveIdx = Math.min(custActiveIdx + 1, list.length - 1);
+      list.forEach((el, i) => el.classList.toggle('active', i === custActiveIdx));
+      list[custActiveIdx].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      custActiveIdx = Math.max(custActiveIdx - 1, 0);
+      list.forEach((el, i) => el.classList.toggle('active', i === custActiveIdx));
+      list[custActiveIdx].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter' && custActiveIdx >= 0) {
+      e.preventDefault();
+      list[custActiveIdx].dispatchEvent(new Event('mousedown'));
+    } else if (e.key === 'Escape') {
+      dd.style.display = 'none';
+      custActiveIdx = -1;
+    }
+  });
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.customer-wrap')) dd.style.display = 'none';
+  });
+}
+
+function selectCustomerName(name) {
+  const input = document.getElementById('customerName');
+  const dd = document.getElementById('customerDropdown');
+  if (input) input.value = name;
+  if (dd) dd.style.display = 'none';
+  custActiveIdx = -1;
+  markDirty();
+  updatePrintMeta();
 }
 
 function selectProduct(name) {
@@ -2568,21 +2729,52 @@ function renderDashboardBranch() {
   }
 }
 
-function clearDashBranchDates() {
-  const a = document.getElementById('dashBranchFrom');
-  const b = document.getElementById('dashBranchTo');
-  if (a) a.value = '';
-  if (b) b.value = '';
+/* Linked date filters: Branch / Products / Customers share the same range */
+const DASH_FROM_IDS = ['dashBranchFrom', 'dashProdFrom', 'dashCustFrom'];
+const DASH_TO_IDS = ['dashBranchTo', 'dashProdTo', 'dashCustTo'];
+
+function syncDashDates(sourceId) {
+  const el = document.getElementById(sourceId);
+  if (!el) return;
+  const val = el.value || '';
+  const isFrom = DASH_FROM_IDS.indexOf(sourceId) >= 0;
+  const targets = isFrom ? DASH_FROM_IDS : DASH_TO_IDS;
+  targets.forEach(id => {
+    const t = document.getElementById(id);
+    if (t && t !== el) t.value = val;
+  });
   renderDashboardBranch();
+  renderDashboardTopLists();
 }
+
+function clearAllDashDates() {
+  DASH_FROM_IDS.concat(DASH_TO_IDS).forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  renderDashboardBranch();
+  renderDashboardTopLists();
+}
+
+function clearDashBranchDates() { clearAllDashDates(); }
+function clearDashProdDates() { clearAllDashDates(); }
+function clearDashCustDates() { clearAllDashDates(); }
+
+/* Cached full ranked lists for "View all" modal */
+let _dashFullProducts = [];
+let _dashFullCustomers = [];
+let _dashFullProdNote = 'All dates';
+let _dashFullCustNote = 'All dates';
 
 function renderDashboardTopLists() {
   const prod = filterListByDateInputs('dashProdFrom', 'dashProdTo');
   const cust = filterListByDateInputs('dashCustFrom', 'dashCustTo');
   const noteP = document.getElementById('dashProdDateNote');
   const noteC = document.getElementById('dashCustDateNote');
-  if (noteP) noteP.textContent = dashFmtDateNote(prod.fromStr, prod.toStr, 'All dates');
-  if (noteC) noteC.textContent = dashFmtDateNote(cust.fromStr, cust.toStr, 'All dates');
+  _dashFullProdNote = dashFmtDateNote(prod.fromStr, prod.toStr, 'All dates');
+  _dashFullCustNote = dashFmtDateNote(cust.fromStr, cust.toStr, 'All dates');
+  if (noteP) noteP.textContent = _dashFullProdNote;
+  if (noteC) noteC.textContent = _dashFullCustNote;
 
   const fmtD = (n) => 'Rs. ' + Math.round(Number(n) || 0).toLocaleString('en-PK');
 
@@ -2597,10 +2789,20 @@ function renderDashboardTopLists() {
     });
   });
 
-  const prodNames = Object.keys(productMap).sort((a, b) => productMap[b].amount - productMap[a].amount).slice(0, 8);
+  const allProdNames = Object.keys(productMap).sort((a, b) => productMap[b].amount - productMap[a].amount);
+  _dashFullProducts = allProdNames.map(name => {
+    const p = productMap[name];
+    const meta = (p.weight ? (Math.round(p.weight * 100) / 100) + ' kg' : '') +
+      (p.qty ? (p.weight ? ' · ' : '') + (Math.round(p.qty * 100) / 100) + ' qty' : '');
+    return { name, amount: p.amount, meta };
+  });
+
+  const prodNames = allProdNames.slice(0, 10);
   const prodEl = document.getElementById('dashTopProducts');
+  const prodBtn = document.getElementById('dashProdViewAll');
   if (!prodNames.length) {
     prodEl.innerHTML = '<div class="dash-empty">No products sold yet</div>';
+    if (prodBtn) prodBtn.style.display = 'none';
   } else {
     prodEl.innerHTML = prodNames.map((name, i) => {
       const p = productMap[name];
@@ -2613,6 +2815,14 @@ function renderDashboardTopLists() {
         '<div class="dash-li-meta">' + esc(meta) + '</div></div>' +
         '<div class="dash-li-amt">' + fmtD(p.amount) + '</div></div>';
     }).join('');
+    if (prodBtn) {
+      if (allProdNames.length > 10) {
+        prodBtn.style.display = 'block';
+        prodBtn.textContent = 'View all products (' + allProdNames.length + ') →';
+      } else {
+        prodBtn.style.display = 'none';
+      }
+    }
   }
 
   const customerMap = {};
@@ -2624,10 +2834,22 @@ function renderDashboardTopLists() {
     customerMap[cn].count++;
   });
 
-  const custNames = Object.keys(customerMap).sort((a, b) => customerMap[b].total - customerMap[a].total).slice(0, 8);
+  const allCustNames = Object.keys(customerMap).sort((a, b) => customerMap[b].total - customerMap[a].total);
+  _dashFullCustomers = allCustNames.map(name => {
+    const c = customerMap[name];
+    return {
+      name,
+      total: c.total,
+      meta: c.count + (c.count === 1 ? ' invoice' : ' invoices')
+    };
+  });
+
+  const custNames = allCustNames.slice(0, 10);
   const custEl = document.getElementById('dashTopCustomers');
+  const custBtn = document.getElementById('dashCustViewAll');
   if (!custNames.length) {
     custEl.innerHTML = '<div class="dash-empty">No named customers yet</div>';
+    if (custBtn) custBtn.style.display = 'none';
   } else {
     custEl.innerHTML = custNames.map((name, i) => {
       const c = customerMap[name];
@@ -2638,23 +2860,53 @@ function renderDashboardTopLists() {
         '<div class="dash-li-meta">' + c.count + (c.count === 1 ? ' invoice' : ' invoices') + '</div></div>' +
         '<div class="dash-li-amt">' + fmtD(c.total) + '</div></div>';
     }).join('');
+    if (custBtn) {
+      if (allCustNames.length > 10) {
+        custBtn.style.display = 'block';
+        custBtn.textContent = 'View all customers (' + allCustNames.length + ') →';
+      } else {
+        custBtn.style.display = 'none';
+      }
+    }
   }
 }
 
-function clearDashProdDates() {
-  const a = document.getElementById('dashProdFrom');
-  const b = document.getElementById('dashProdTo');
-  if (a) a.value = '';
-  if (b) b.value = '';
-  renderDashboardTopLists();
+function openDashFullList(type) {
+  const overlay = document.getElementById('dashFullListOverlay');
+  const titleEl = document.getElementById('dashFullListTitle');
+  const noteEl = document.getElementById('dashFullListNote');
+  const bodyEl = document.getElementById('dashFullListBody');
+  if (!overlay || !bodyEl) return;
+
+  const fmtD = (n) => 'Rs. ' + Math.round(Number(n) || 0).toLocaleString('en-PK');
+  const isProd = type === 'products';
+  const rows = isProd ? _dashFullProducts : _dashFullCustomers;
+
+  if (titleEl) titleEl.textContent = isProd ? '📦 All Products (' + rows.length + ')' : '👤 All Customers (' + rows.length + ')';
+  if (noteEl) noteEl.textContent = isProd ? _dashFullProdNote : _dashFullCustNote;
+
+  if (!rows.length) {
+    bodyEl.innerHTML = '<div class="dash-empty">' + (isProd ? 'No products sold yet' : 'No named customers yet') + '</div>';
+  } else {
+    bodyEl.innerHTML = rows.map((row, i) => {
+      const rankCls = i === 0 ? 'r1' : (i === 1 ? 'r2' : (i === 2 ? 'r3' : ''));
+      const amt = isProd ? row.amount : row.total;
+      return '<div class="dash-list-item">' +
+        '<div class="dash-rank ' + rankCls + '">' + (i + 1) + '</div>' +
+        '<div style="flex:1;min-width:0"><div class="dash-li-name">' + esc(row.name) + '</div>' +
+        '<div class="dash-li-meta">' + esc(row.meta || '') + '</div></div>' +
+        '<div class="dash-li-amt">' + fmtD(amt) + '</div></div>';
+    }).join('');
+  }
+  overlay.classList.add('show');
 }
-function clearDashCustDates() {
-  const a = document.getElementById('dashCustFrom');
-  const b = document.getElementById('dashCustTo');
-  if (a) a.value = '';
-  if (b) b.value = '';
-  renderDashboardTopLists();
+
+function closeDashFullList() {
+  document.getElementById('dashFullListOverlay')?.classList.remove('show');
 }
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeDashFullList();
+});
 
 
 function openReportsMenu() {
