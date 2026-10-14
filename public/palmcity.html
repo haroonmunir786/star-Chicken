@@ -963,8 +963,13 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
       <span class="badge" id="historyCount">0</span>
     </div>
     <div class="sidebar-search">
-      <input type="text" id="historySearch" placeholder="Search invoices…" oninput="renderHistory()">
-      <select id="historyShopFilter" onchange="renderHistory()" style="width:100%;height:36px;margin-top:8px;padding:0 10px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;font-family:inherit;background:#FAFAFA;color:var(--ink);">
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
+        <input type="hidden" id="historyDateFilter" value="">
+        <button type="button" class="btn btn-ghost btn-xs" id="histBtnToday" onclick="setHistoryDateToday()" title="Today only" style="flex:1;height:36px;padding:0 10px">Today</button>
+        <button type="button" class="btn btn-ghost btn-xs" id="histBtnAll" onclick="clearHistoryDate()" title="Show all dates" style="flex:1;height:36px;padding:0 10px">All</button>
+      </div>
+      <input type="text" id="historySearch" placeholder="Search invoices…" oninput="renderHistory()" style="margin-bottom:8px">
+      <select id="historyShopFilter" onchange="renderHistory()" style="width:100%;height:36px;padding:0 10px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;font-family:inherit;background:#FAFAFA;color:var(--ink);">
         <option value="">All Shops</option>
         <option value="Kasur">Kasur</option>
         <option value="Hatchery">Hatchery</option>
@@ -1259,33 +1264,50 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
         </div>
       </div>
 
+      <!-- Linked Branch filter for Products + Customers -->
+      <div class="dash-card" style="margin-bottom:14px">
+        <div class="dash-card-b" style="padding:12px 16px">
+          <div class="dash-filter-row" style="margin-bottom:0;border-bottom:none;padding-bottom:0">
+            <label>Search</label>
+            <input type="search" id="dashProdSearch" placeholder="Search product or category…" oninput="renderDashboardTopLists()" style="height:34px;padding:0 12px;border:1.5px solid var(--border);border-radius:8px;font-family:inherit;font-size:0.82rem;background:#fff;flex:1;min-width:160px;max-width:280px">
+            <label>From</label>
+            <input type="date" id="dashProdFrom" onchange="syncDashDates('dashProdFrom')">
+            <label>To</label>
+            <input type="date" id="dashProdTo" onchange="syncDashDates('dashProdTo')">
+            <button class="btn btn-ghost btn-sm" type="button" onclick="clearAllDashDates()">All Dates</button>
+            <label>Branch</label>
+            <select id="dashPCBranch" onchange="syncDashBranch(this.value)" style="height:34px;padding:0 10px;border:1.5px solid var(--border);border-radius:8px;font-family:inherit;font-size:0.82rem;background:#fff;min-width:140px">
+              <option value="">All Branches</option>
+              <option value="Kasur">Kasur</option>
+              <option value="Hatchery">Hatchery</option>
+              <option value="Mustafabad">Mustafabad</option>
+              <option value="Gajjumatta">Gajjumatta</option>
+              <option value="Gulshan Ravi">Gulshan Ravi</option>
+              <option value="Murghzar">Murghzar</option>
+              <option value="Link Road">Link Road</option>
+            </select>
+            <button class="btn btn-ghost btn-sm" type="button" onclick="exportDashProductsExcel()" title="Download Excel">📥 Excel</button>
+            <button class="btn btn-ghost btn-sm" type="button" onclick="exportDashProductsPDF()" title="Download PDF">📄 PDF</button>
+          </div>
+          <!-- hidden linked customer date inputs (kept in sync) -->
+          <input type="date" id="dashCustFrom" style="display:none" onchange="syncDashDates('dashCustFrom')">
+          <input type="date" id="dashCustTo" style="display:none" onchange="syncDashDates('dashCustTo')">
+        </div>
+      </div>
+
       <div class="dash-grid-2">
         <div class="dash-card">
-          <div class="dash-card-h">🏆 Top 10 Products</div>
+          <div class="dash-card-h">🏆 Top Products <span id="dashProdFilterBadge" style="font-weight:500;color:var(--muted);font-size:0.72rem;margin-left:6px"></span></div>
           <div class="dash-card-b">
-            <div class="dash-filter-row">
-              <label>From</label>
-              <input type="date" id="dashProdFrom" onchange="syncDashDates('dashProdFrom')">
-              <label>To</label>
-              <input type="date" id="dashProdTo" onchange="syncDashDates('dashProdTo')">
-              <button class="btn btn-ghost btn-sm" type="button" onclick="clearAllDashDates()">All</button>
-            </div>
-            <div class="dash-branch-date-note" id="dashProdDateNote">All dates</div>
+            <div class="dash-branch-date-note" id="dashProdDateNote">All dates · All Branches</div>
             <div id="dashTopProducts"><div class="dash-empty">No products sold yet</div></div>
             <button type="button" class="btn btn-ghost btn-sm dash-view-all-btn" id="dashProdViewAll" style="display:none" onclick="openDashFullList('products')">View all products →</button>
           </div>
         </div>
         <div class="dash-card">
-          <div class="dash-card-h">👤 Top 10 Customers</div>
+          <div class="dash-card-h">👤 Top Customers <span id="dashCustFilterBadge" style="font-weight:500;color:var(--muted);font-size:0.72rem;margin-left:6px"></span></div>
           <div class="dash-card-b">
-            <div class="dash-filter-row">
-              <label>From</label>
-              <input type="date" id="dashCustFrom" onchange="syncDashDates('dashCustFrom')">
-              <label>To</label>
-              <input type="date" id="dashCustTo" onchange="syncDashDates('dashCustTo')">
-              <button class="btn btn-ghost btn-sm" type="button" onclick="clearAllDashDates()">All</button>
-            </div>
-            <div class="dash-branch-date-note" id="dashCustDateNote">All dates</div>
+            <div class="dash-branch-date-note" id="dashCustDateNote">All dates · All Branches</div>
             <div id="dashTopCustomers"><div class="dash-empty">No customers yet</div></div>
             <button type="button" class="btn btn-ghost btn-sm dash-view-all-btn" id="dashCustViewAll" style="display:none" onclick="openDashFullList('customers')">View all customers →</button>
           </div>
@@ -1523,14 +1545,42 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
 
 <script>
 /* ══════════ PRODUCTS ══════════ */
-const chickenProducts = ["SBB Trimming","SBB Slice","Skinless Breast","Boneless Handi","Boneless Breast","Breast RS","Breast Yum","Inner Fillet","Premium Mince","Zinger CP S/O","Zinger CP S/L","Zinger S/L JC/RS","Thigh Trimming","Trimming Bone","Drumstick S/O","Drumstick S/L","Whole Leg","Drummet A","Drummet B","Niblet A","Niblet B","Wing Tip","3 Joint Wings","2 Joint Wings S/O","2 Joint Wings S/L","Karahi Cut","Whole Bird S/O","Whole Bird S/L","D Trimming","Neck","Carcass","Skin","Tail","Heart","Liver","Gizzard","Shanks","MDM Mince","Marinated ButterFly JC","Marinated ButterFly LC","Marinated Niblet 1kg","Marinated Niblet","Marinated Drummet 1kg","Marinated Drummet","Marinated 5 cut","Injected Chicken Pieces","Marinated Zinger CP","Marinated Zinger SBL","Marinated Zinger S/O","Marinated Zinger S/L","Marinated Drumstick","Marinated Strips","Marinated Strips 2kg","Marinated Crispy","Kebab","Nuggets","Chicken Fries","Burger Patty 12 Pcs","Burger Patty 8 Pcs","Chicken Samosa 12 pcs","Chicken Samosa 24 pcs","Fried Samosa","Fried Spring Roll","Chicken Roll 12 pcs","Chicken Roll 24 pcs","Breading Flour","Chapli Kabab","Chicken Kofta"];
+const byPartsProducts = ["SBB Trimming","SBB Slice","Skinless Breast","Boneless Handi","Boneless Breast","Breast RS","Breast Yum","Inner Fillet","Premium Mince","Zinger CP S/O","Zinger CP S/L","Zinger S/L JC/RS","Thigh Trimming","Trimming Bone","Drumstick S/O","Drumstick S/L","Whole Leg","Drummet A","Drummet B","Niblet A","Niblet B","Wing Tip","3 Joint Wings","2 Joint Wings S/O","2 Joint Wings S/L","Karahi Cut","Whole Bird S/O","Whole Bird S/L","D Trimming","Neck","Carcass","Skin","Tail","Heart","Liver","Gizzard","Shanks","MDM Mince"];
+const furtherProducts = ["Marinated ButterFly JC","Marinated ButterFly LC","Marinated Niblet 1kg","Marinated Niblet","Marinated Drummet 1kg","Marinated Drummet","Marinated 5 cut","Injected Chicken Pieces","Marinated Zinger CP","Marinated Zinger SBL","Marinated Zinger S/O","Marinated Zinger S/L","Marinated Drumstick","Marinated Strips","Marinated Strips 2kg","Marinated Crispy"];
+const readyToCookProducts = ["Kebab","Nuggets","Chicken Fries","Burger Patty 12 Pcs","Burger Patty 8 Pcs","Chicken Samosa 12 pcs","Chicken Samosa 24 pcs","Fried Samosa","Fried Spring Roll","Chicken Roll 12 pcs","Chicken Roll 24 pcs","Breading Flour","Chapli Kabab","Chicken Kofta"];
+const chickenProducts = byPartsProducts.concat(furtherProducts, readyToCookProducts);
 const masalaProducts = ["ACHAR GOSHT 22G","BIRYANI 39G","BLACK PEPPER 25G","BOMBAY BIRYANI 35G","BOMBAY BIRYANI 70G","BROAST 97G","CHAAT MASALA 45G","CHATPATA CHAAT MASALA 15G","CHICKEN JALFREZI 50G","CHICKEN TANDOORI 20G","CHICKEN TANDOORI 40G","CHICKEN TIKKA 20G","CHICKEN TIKKA 40G","CHILLI POWDER 50G","DAIGHI DANEDAR HALEEM 293G","GARAM MASALA POWDER 25G","KARAHI 24G","KARAHI 47G","KOFTA 43G","MURGHI 21G","MURGHI MASALA 43G","NIHARI 28G","NIHARI 56G","PAYA MASALA 39G","PULAO 35G","PULAO BIRYANI 25G","PULAO BIRYANI 50G","Quick Cook HALEEM (POFF) 300G","QUICK COOK HALEEM 300G","QUORMA 100G","QUORMA 21G","SHAMI KABAB 22G","SINDHI BIRYANI 41G","TIKKA BOTI 22G","TURMERIC POWDER 50G"];
 const groceryProducts = ["Chocobliss Crave-Coco Powder 50gm ","Chocobliss Crave-Dark Bar 200gm","Chocobliss Crave-Milky Bar 200gm ","Chocobliss Double Chocolate GB 180gm ","Chocobliss Hazelnut Spread GB 180gm ","Chocobliss Hazelnut Spread GB 350gm ","Chocobliss Milky Spread GB 180gm x 24","Chocobliss Milky Spread GB 350gm x24","Chocobliss Peanut Chocolate GB 180gm x24","DI Butter Salted 100gm x36","DI Butter Salted 200gm x24","DI Cheddar Shred 200gm 48Pcs","DI Desi Ghee TP 1000gm X 6","DI Desi Ghee TP 500gm X12","DI Mozzarella Shred 200gm x48","DI Pizza Cheese Shred 200gm x48","Youngs BeeHives Squeeze PB 170gm x48","Youngs BeeHives Squeeze PB 250gm x48","Youngs BeeHives Squeeze PB 450gm x24","Youngs Chicken Spread PH 1000ml x12","Youngs Chicken Spread PH 100ml 3x36","Youngs Chicken Spread PH 200ml x48","Youngs Chicken Spread PH 500ml x24","Youngs Chicken Spread SC 25gm 10x24","Youngs Chkn Spr Black Pepper 200ml PHx4","Youngs Chkn Spr Black Pepper 500ml PH x 24","Youngs Chocolate Spread GB 170gm x24","Youngs Chocolate Spread GB 360gm x24","Youngs Creamy Mayonnaise PH 200ml x48","Youngs Mayo Chup PH 200ml x48","Youngs Mayo Garlic PH 200ml x48","Youngs Mayo Red Chilli PH 200ml x48","Youngs Mayonnaise PH 1000ml x12","Youngs Mayonnaise PH 100ml 3x36","Youngs Mayonnaise PH 200ml x48","Youngs Mayonnaise PH 40ml 12X12","Youngs Mayonnaise PH 500ml x24","Youngs Natural Honey GB 125gm x48","Youngs Natural Honey GB 500gm x12","Youngs Orla Canola Oil Bottle 3 Ltr x 6","Youngs Orla Canola Oil PLW PH 1 Ltr x 5","Youngs Orla Canola Oil SAP 1 Ltr x 5","Youngs Orla Cooking Oil Bottle 3 Ltr x6","Youngs Orla Cooking Oil PLW PH 1 Ltr x 5","Coke 1.5 Ltr","Sprite 1.5 Ltr"];
 const allProducts = [
-  { cat: "🐔 Chicken", items: chickenProducts },
-  { cat: "🌶️ Masala", items: masalaProducts },
-  { cat: "🛒 Grocery", items: groceryProducts }
+  { cat: "By Parts Products", items: byPartsProducts },
+  { cat: "Further Products", items: furtherProducts },
+  { cat: "Ready to Cook Products", items: readyToCookProducts },
+  { cat: "Masala", items: masalaProducts },
+  { cat: "Grocery", items: groceryProducts }
 ];
+/* Map product name → category (case-insensitive lookup helper below) */
+const productCategoryMap = {};
+allProducts.forEach(group => {
+  group.items.forEach(name => {
+    productCategoryMap[name] = group.cat;
+    productCategoryMap[name.toLowerCase().trim()] = group.cat;
+  });
+});
+function getProductCategory(name) {
+  if (!name) return 'Other';
+  const n = String(name).trim();
+  if (productCategoryMap[n]) return productCategoryMap[n];
+  if (productCategoryMap[n.toLowerCase()]) return productCategoryMap[n.toLowerCase()];
+  // fuzzy: check if any known product is contained / equals ignoring extra spaces
+  const low = n.toLowerCase().replace(/\s+/g, ' ');
+  for (const group of allProducts) {
+    for (const item of group.items) {
+      if (item.toLowerCase().replace(/\s+/g, ' ') === low) return group.cat;
+    }
+  }
+  return 'Other';
+}
+
 
 /* ══════════ STORAGE (Cloud API + IndexedDB migration/fallback) ══════════ */
 const DB_NAME = 'StarChickenDB';
@@ -1822,6 +1872,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   startPktLiveClock();
   setupSearch();
   setupCustomerAutocomplete();
+  // Sidebar: default show today's invoices only
+  const histDate = document.getElementById('historyDateFilter');
+  if (histDate) histDate.value = getPakistanDateISO();
+  if (typeof updateHistoryDateBtns === 'function') updateHistoryDateBtns();
   await refreshHistory();
   updatePrintMeta();
   updateStatus();
@@ -1836,10 +1890,47 @@ async function refreshHistory() {
   renderHistory();
 }
 
+function updateHistoryDateBtns() {
+  const el = document.getElementById('historyDateFilter');
+  const isToday = el && el.value;
+  const btnT = document.getElementById('histBtnToday');
+  const btnA = document.getElementById('histBtnAll');
+  if (btnT) {
+    btnT.style.background = isToday ? 'var(--primary)' : '';
+    btnT.style.color = isToday ? '#fff' : '';
+    btnT.style.borderColor = isToday ? 'var(--primary)' : '';
+  }
+  if (btnA) {
+    btnA.style.background = !isToday ? 'var(--primary)' : '';
+    btnA.style.color = !isToday ? '#fff' : '';
+    btnA.style.borderColor = !isToday ? 'var(--primary)' : '';
+  }
+}
+function setHistoryDateToday() {
+  const el = document.getElementById('historyDateFilter');
+  if (el) el.value = getPakistanDateISO();
+  updateHistoryDateBtns();
+  renderHistory();
+}
+function clearHistoryDate() {
+  const el = document.getElementById('historyDateFilter');
+  if (el) el.value = '';
+  updateHistoryDateBtns();
+  renderHistory();
+}
+
 function renderHistory() {
   const q = (document.getElementById('historySearch').value || '').toLowerCase().trim();
   const shopFilter = (document.getElementById('historyShopFilter') && document.getElementById('historyShopFilter').value) || '';
+  const dateFilter = (document.getElementById('historyDateFilter') && document.getElementById('historyDateFilter').value) || '';
   let list = allHistory;
+  // Date filter uses the invoice's own date field (not last-edit time)
+  if (dateFilter) {
+    list = list.filter(inv => {
+      const iso = (typeof invDateISO === 'function') ? invDateISO(inv) : (inv.date || '');
+      return iso === dateFilter;
+    });
+  }
   if (shopFilter) {
     list = list.filter(inv => (inv.shopName || '').trim() === shopFilter);
   }
@@ -1851,7 +1942,7 @@ function renderHistory() {
   }
 
   const countEl = document.getElementById('historyCount');
-  if (shopFilter || q) {
+  if (shopFilter || q || dateFilter) {
     countEl.textContent = list.length + '/' + allHistory.length;
   } else {
     countEl.textContent = allHistory.length;
@@ -1859,8 +1950,8 @@ function renderHistory() {
   const el = document.getElementById('historyList');
 
   if (!list.length) {
-    const msg = (shopFilter || q)
-      ? 'No invoices found for this filter.'
+    const msg = (shopFilter || q || dateFilter)
+      ? (dateFilter ? 'No invoices on this date.' : 'No invoices found for this filter.')
       : 'No saved invoices yet.<br>Create &amp; save one!';
     el.innerHTML = '<div class="sidebar-empty">' + msg + '</div>';
     return;
@@ -1898,11 +1989,19 @@ function collectInvoice() {
   const grand = Math.max(0, sub - disc);
   const paid = parseFloat(document.getElementById('amountPaid').value) || 0;
   const balance = grand - paid;
+  // Sales / dashboard always use the invoice DATE field (not save time).
+  // When editing an old bill, keep the form date as-is — never force today's date.
+  const dateVal = (document.getElementById('invoiceDate').value || '').trim();
+  const timeVal = (document.getElementById('invoiceTime') && document.getElementById('invoiceTime').value) || '';
+  const prev = (currentId && typeof allHistory !== 'undefined')
+    ? allHistory.find(x => x.id === currentId)
+    : null;
+  const nowTs = Date.now();
   return {
-    id: currentId || ('inv_' + Date.now() + '_' + Math.random().toString(36).slice(2,7)),
+    id: currentId || ('inv_' + nowTs + '_' + Math.random().toString(36).slice(2,7)),
     invoiceNo: document.getElementById('invoiceNo').value,
-    date: document.getElementById('invoiceDate').value,
-    time: (document.getElementById('invoiceTime') && document.getElementById('invoiceTime').value) || '',
+    date: dateVal || (prev && prev.date) || getPakistanDateISO(),
+    time: timeVal || (prev && prev.time) || '',
     customerName: document.getElementById('customerName').value.trim(),
     shopName: document.getElementById('shopName').value.trim(),
     billMaker: document.getElementById('billMaker').value.trim(),
@@ -1913,7 +2012,9 @@ function collectInvoice() {
     grandTotal: grand,
     amountPaid: paid,
     balance: balance,
-    savedAt: Date.now()
+    // createdAt stays fixed for the life of the invoice; savedAt is last edit time
+    createdAt: (prev && prev.createdAt) || (prev && prev.savedAt) || nowTs,
+    savedAt: nowTs
   };
 }
 
@@ -1928,8 +2029,16 @@ async function saveInvoice() {
     document.getElementById('shopName').focus();
     return;
   }
-  if (document.getElementById('invoiceTime')) {
-    document.getElementById('invoiceTime').value = getPakistanTime();
+  // Only set live time for brand-new invoices.
+  // Editing an old bill must keep its original date (and time) so dashboard
+  // sales stay on that bill's date — not today's date.
+  if (!currentId) {
+    if (document.getElementById('invoiceTime')) {
+      document.getElementById('invoiceTime').value = getPakistanTime();
+    }
+    // Ensure date is today for a new bill if empty
+    const dateEl = document.getElementById('invoiceDate');
+    if (dateEl && !dateEl.value) dateEl.value = getPakistanDateISO();
   }
   stopPktLiveClock();
   const inv = collectInvoice();
@@ -2598,15 +2707,18 @@ document.addEventListener('keydown', function(e) {
 
 function renderDashboard() {
   const list = (typeof allHistory !== 'undefined' && allHistory) ? allHistory : [];
-  const now = new Date();
-  const todayStart = (typeof startOfDay === 'function') ? startOfDay(now) : new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  // Use Pakistan business date so "Today" matches the date printed on bills
+  const todayISO = getPakistanDateISO();
+  const todayParts = todayISO.split('-').map(Number);
+  const monthKeyNow = todayParts[0] + '-' + String(todayParts[1]).padStart(2, '0');
 
   let todayTotal = 0, todayCnt = 0;
   let monthTotal = 0, monthCnt = 0;
   let grandTotal = 0;
   const monthMap = {};
 
+  // Last 12 months keys in Pakistan calendar (approx via local Date is fine for chart labels)
+  const now = new Date();
   for (let i = 11; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -2616,12 +2728,12 @@ function renderDashboard() {
   list.forEach(inv => {
     const amt = Number(inv.grandTotal) || 0;
     grandTotal += amt;
-    const d = (typeof parseInvDate === 'function') ? parseInvDate(inv) : null;
-    if (d) {
-      const t = d.getTime();
-      if (t >= todayStart.getTime()) { todayTotal += amt; todayCnt++; }
-      if (t >= monthStart.getTime()) { monthTotal += amt; monthCnt++; }
-      const mKey = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    // Sale day = the date ON the invoice, never the last-edit (savedAt) time
+    const iso = invDateISO(inv);
+    if (iso) {
+      if (iso === todayISO) { todayTotal += amt; todayCnt++; }
+      if (iso.slice(0, 7) === monthKeyNow) { monthTotal += amt; monthCnt++; }
+      const mKey = iso.slice(0, 7);
       if (monthMap.hasOwnProperty(mKey)) monthMap[mKey] += amt;
     }
   });
@@ -2765,66 +2877,154 @@ let _dashFullProducts = [];
 let _dashFullCustomers = [];
 let _dashFullProdNote = 'All dates';
 let _dashFullCustNote = 'All dates';
+let _dashFilteredProducts = []; // currently displayed (after search/branch)
+let _dashFilteredCustomers = [];
+
+function getDashPCBranch() {
+  const el = document.getElementById('dashPCBranch');
+  return el ? (el.value || '').trim() : '';
+}
+function syncDashBranch(val) {
+  // single control already drives both lists
+  renderDashboardTopLists();
+}
+
+function filterListByDateAndBranch(fromId, toId, branch) {
+  const base = filterListByDateInputs(fromId, toId);
+  if (!branch) return base;
+  const filtered = base.list.filter(inv => (inv.shopName || '').trim() === branch);
+  return { list: filtered, fromStr: base.fromStr, toStr: base.toStr };
+}
 
 function renderDashboardTopLists() {
-  const prod = filterListByDateInputs('dashProdFrom', 'dashProdTo');
-  const cust = filterListByDateInputs('dashCustFrom', 'dashCustTo');
+  const branch = getDashPCBranch();
+  const searchQ = ((document.getElementById('dashProdSearch') && document.getElementById('dashProdSearch').value) || '').trim().toLowerCase();
+
+  // Keep customer date inputs linked to product date inputs
+  const pf = document.getElementById('dashProdFrom');
+  const pt = document.getElementById('dashProdTo');
+  const cf = document.getElementById('dashCustFrom');
+  const ct = document.getElementById('dashCustTo');
+  if (pf && cf) cf.value = pf.value || '';
+  if (pt && ct) ct.value = pt.value || '';
+
+  const prod = filterListByDateAndBranch('dashProdFrom', 'dashProdTo', branch);
+  const cust = filterListByDateAndBranch('dashCustFrom', 'dashCustTo', branch);
+
+  const branchLabel = branch || 'All Branches';
   const noteP = document.getElementById('dashProdDateNote');
   const noteC = document.getElementById('dashCustDateNote');
-  _dashFullProdNote = dashFmtDateNote(prod.fromStr, prod.toStr, 'All dates');
-  _dashFullCustNote = dashFmtDateNote(cust.fromStr, cust.toStr, 'All dates');
-  if (noteP) noteP.textContent = _dashFullProdNote;
+  _dashFullProdNote = dashFmtDateNote(prod.fromStr, prod.toStr, 'All dates') + ' · ' + branchLabel;
+  _dashFullCustNote = dashFmtDateNote(cust.fromStr, cust.toStr, 'All dates') + ' · ' + branchLabel;
+  if (noteP) noteP.textContent = _dashFullProdNote + (searchQ ? ' · Search: "' + searchQ + '"' : '');
   if (noteC) noteC.textContent = _dashFullCustNote;
+
+  const badgeP = document.getElementById('dashProdFilterBadge');
+  const badgeC = document.getElementById('dashCustFilterBadge');
+  if (badgeP) badgeP.textContent = branch ? '· ' + branch : '';
+  if (badgeC) badgeC.textContent = branch ? '· ' + branch : '';
 
   const fmtD = (n) => 'Rs. ' + Math.round(Number(n) || 0).toLocaleString('en-PK');
 
+  /* ── Products aggregation ── */
   const productMap = {};
   prod.list.forEach(inv => {
     (inv.items || []).forEach(it => {
       const name = (it.name || 'Unknown').trim() || 'Unknown';
-      if (!productMap[name]) productMap[name] = { amount: 0, qty: 0, weight: 0 };
+      if (!productMap[name]) productMap[name] = { amount: 0, qty: 0, weight: 0, category: getProductCategory(name) };
       productMap[name].amount += Number(it.amount) || 0;
       productMap[name].qty += Number(it.qty) || 0;
       productMap[name].weight += Number(it.weight) || 0;
     });
   });
 
-  const allProdNames = Object.keys(productMap).sort((a, b) => productMap[b].amount - productMap[a].amount);
+  let allProdNames = Object.keys(productMap).sort((a, b) => productMap[b].amount - productMap[a].amount);
+
+  // Category / product smart search
+  if (searchQ) {
+    // 1) Does query match a category name?
+    const catNames = allProducts.map(g => g.cat);
+    const matchedCat = catNames.find(c => c.toLowerCase().includes(searchQ) || searchQ.includes(c.toLowerCase()));
+    if (matchedCat) {
+      allProdNames = allProdNames.filter(n => productMap[n].category === matchedCat);
+    } else {
+      // 2) Match product names
+      const directHits = allProdNames.filter(n => n.toLowerCase().includes(searchQ));
+      if (directHits.length) {
+        // Collect categories of matched products, then show hits first + rest of those categories
+        const hitCats = new Set(directHits.map(n => productMap[n].category));
+        const primary = directHits.slice();
+        const related = allProdNames.filter(n => hitCats.has(productMap[n].category) && !directHits.includes(n));
+        allProdNames = primary.concat(related);
+      } else {
+        allProdNames = [];
+      }
+    }
+  }
+
   _dashFullProducts = allProdNames.map(name => {
     const p = productMap[name];
-    const meta = (p.weight ? (Math.round(p.weight * 100) / 100) + ' kg' : '') +
+    const meta = (p.category ? p.category + ' · ' : '') +
+      (p.weight ? (Math.round(p.weight * 100) / 100) + ' kg' : '') +
       (p.qty ? (p.weight ? ' · ' : '') + (Math.round(p.qty * 100) / 100) + ' qty' : '');
-    return { name, amount: p.amount, meta };
+    return { name, amount: p.amount, meta, category: p.category, qty: p.qty, weight: p.weight };
   });
+  _dashFilteredProducts = _dashFullProducts.slice();
 
-  const prodNames = allProdNames.slice(0, 10);
+  // Group display by category when searching category, else top 10
   const prodEl = document.getElementById('dashTopProducts');
   const prodBtn = document.getElementById('dashProdViewAll');
-  if (!prodNames.length) {
-    prodEl.innerHTML = '<div class="dash-empty">No products sold yet</div>';
+  const showLimit = searchQ ? 50 : 10;
+
+  if (!_dashFullProducts.length) {
+    prodEl.innerHTML = '<div class="dash-empty">' + (searchQ ? 'No products match your search' : 'No products sold yet') + '</div>';
     if (prodBtn) prodBtn.style.display = 'none';
   } else {
-    prodEl.innerHTML = prodNames.map((name, i) => {
-      const p = productMap[name];
-      const rankCls = i === 0 ? 'r1' : (i === 1 ? 'r2' : (i === 2 ? 'r3' : ''));
-      const meta = (p.weight ? (Math.round(p.weight * 100) / 100) + ' kg' : '') +
-        (p.qty ? (p.weight ? ' · ' : '') + (Math.round(p.qty * 100) / 100) + ' qty' : '');
-      return '<div class="dash-list-item">' +
-        '<div class="dash-rank ' + rankCls + '">' + (i + 1) + '</div>' +
-        '<div style="flex:1;min-width:0"><div class="dash-li-name">' + esc(name) + '</div>' +
-        '<div class="dash-li-meta">' + esc(meta) + '</div></div>' +
-        '<div class="dash-li-amt">' + fmtD(p.amount) + '</div></div>';
-    }).join('');
+    // When search active, group by category with headers
+    if (searchQ) {
+      let html = '';
+      let lastCat = null;
+      let rank = 0;
+      _dashFullProducts.slice(0, showLimit).forEach((row) => {
+        if (row.category !== lastCat) {
+          lastCat = row.category;
+          html += '<div style="font-size:0.68rem;font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:0.4px;margin:10px 0 4px;padding:4px 0;border-bottom:1px solid var(--border)">' + esc(lastCat || 'Other') + '</div>';
+        }
+        rank++;
+        const rankCls = rank === 1 ? 'r1' : (rank === 2 ? 'r2' : (rank === 3 ? 'r3' : ''));
+        html += '<div class="dash-list-item">' +
+          '<div class="dash-rank ' + rankCls + '">' + rank + '</div>' +
+          '<div style="flex:1;min-width:0"><div class="dash-li-name">' + esc(row.name) + '</div>' +
+          '<div class="dash-li-meta">' + esc(row.meta) + '</div></div>' +
+          '<div class="dash-li-amt">' + fmtD(row.amount) + '</div></div>';
+      });
+      prodEl.innerHTML = html;
+    } else {
+      const prodNames = allProdNames.slice(0, 10);
+      prodEl.innerHTML = prodNames.map((name, i) => {
+        const p = productMap[name];
+        const rankCls = i === 0 ? 'r1' : (i === 1 ? 'r2' : (i === 2 ? 'r3' : ''));
+        const meta = (p.category ? p.category + ' · ' : '') +
+          (p.weight ? (Math.round(p.weight * 100) / 100) + ' kg' : '') +
+          (p.qty ? (p.weight ? ' · ' : '') + (Math.round(p.qty * 100) / 100) + ' qty' : '');
+        return '<div class="dash-list-item">' +
+          '<div class="dash-rank ' + rankCls + '">' + (i + 1) + '</div>' +
+          '<div style="flex:1;min-width:0"><div class="dash-li-name">' + esc(name) + '</div>' +
+          '<div class="dash-li-meta">' + esc(meta) + '</div></div>' +
+          '<div class="dash-li-amt">' + fmtD(p.amount) + '</div></div>';
+      }).join('');
+    }
     if (prodBtn) {
-      if (allProdNames.length > 10) {
+      if (_dashFullProducts.length > showLimit) {
         prodBtn.style.display = 'block';
-        prodBtn.textContent = 'View all products (' + allProdNames.length + ') →';
+        prodBtn.textContent = 'View all products (' + _dashFullProducts.length + ') →';
       } else {
         prodBtn.style.display = 'none';
       }
     }
   }
 
+  /* ── Customers aggregation (same branch + dates) ── */
   const customerMap = {};
   cust.list.forEach(inv => {
     const cn = (inv.customerName || '').trim();
@@ -2837,12 +3037,9 @@ function renderDashboardTopLists() {
   const allCustNames = Object.keys(customerMap).sort((a, b) => customerMap[b].total - customerMap[a].total);
   _dashFullCustomers = allCustNames.map(name => {
     const c = customerMap[name];
-    return {
-      name,
-      total: c.total,
-      meta: c.count + (c.count === 1 ? ' invoice' : ' invoices')
-    };
+    return { name, total: c.total, meta: c.count + (c.count === 1 ? ' invoice' : ' invoices') };
   });
+  _dashFilteredCustomers = _dashFullCustomers.slice();
 
   const custNames = allCustNames.slice(0, 10);
   const custEl = document.getElementById('dashTopCustomers');
@@ -2908,6 +3105,235 @@ document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') closeDashFullList();
 });
 
+
+
+/* ══════════ DASHBOARD PRODUCT/CUSTOMER EXPORT ══════════ */
+function exportDashProductsExcel() {
+  if (typeof XLSX === 'undefined') {
+    toast('Excel library not loaded. Check internet & retry.', 'error');
+    return;
+  }
+  const rows = _dashFilteredProducts && _dashFilteredProducts.length ? _dashFilteredProducts : _dashFullProducts;
+  if (!rows.length) {
+    toast('No product data to export.', 'error');
+    return;
+  }
+  const branch = getDashPCBranch() || 'All Branches';
+  const note = _dashFullProdNote || '';
+
+  const sTitle = { font: { bold: true, sz: 16, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: 'D32F2F' } }, alignment: { horizontal: 'left', vertical: 'center' } };
+  const sSub = { font: { bold: true, sz: 11, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: 'B71C1C' } }, alignment: { horizontal: 'left', vertical: 'center' } };
+  const sHeader = { font: { bold: true, sz: 10, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '1C1C1E' } }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: { top: { style: 'thin', color: { rgb: '1C1C1E' } }, bottom: { style: 'thin', color: { rgb: '1C1C1E' } }, left: { style: 'thin', color: { rgb: '1C1C1E' } }, right: { style: 'thin', color: { rgb: '1C1C1E' } } } };
+  const sCell = { font: { sz: 10 }, alignment: { vertical: 'center' }, border: { top: { style: 'thin', color: { rgb: 'E5E5EA' } }, bottom: { style: 'thin', color: { rgb: 'E5E5EA' } }, left: { style: 'thin', color: { rgb: 'E5E5EA' } }, right: { style: 'thin', color: { rgb: 'E5E5EA' } } } };
+  const sAlt = { font: { sz: 10 }, fill: { fgColor: { rgb: 'FAFAFA' } }, alignment: { vertical: 'center' }, border: { top: { style: 'thin', color: { rgb: 'E5E5EA' } }, bottom: { style: 'thin', color: { rgb: 'E5E5EA' } }, left: { style: 'thin', color: { rgb: 'E5E5EA' } }, right: { style: 'thin', color: { rgb: 'E5E5EA' } } } };
+  const sNum = Object.assign({}, sCell, { alignment: { horizontal: 'right', vertical: 'center' }, numFmt: '#,##0' });
+  const sNumAlt = Object.assign({}, sAlt, { alignment: { horizontal: 'right', vertical: 'center' }, numFmt: '#,##0' });
+  const sNum2 = Object.assign({}, sNum, { numFmt: '#,##0.00' });
+  const sNum2Alt = Object.assign({}, sNumAlt, { numFmt: '#,##0.00' });
+  const sCat = { font: { bold: true, sz: 10, color: { rgb: 'D32F2F' } }, fill: { fgColor: { rgb: 'FFEBEE' } }, alignment: { vertical: 'center' } };
+  const sTotal = { font: { bold: true, sz: 10, color: { rgb: 'D32F2F' } }, fill: { fgColor: { rgb: 'FFEBEE' } }, alignment: { horizontal: 'right', vertical: 'center' }, numFmt: '#,##0', border: { top: { style: 'medium', color: { rgb: 'D32F2F' } }, bottom: { style: 'medium', color: { rgb: 'D32F2F' } } } };
+  const sTotalL = { font: { bold: true, sz: 10, color: { rgb: 'D32F2F' } }, fill: { fgColor: { rgb: 'FFEBEE' } }, alignment: { vertical: 'center' }, border: { top: { style: 'medium', color: { rgb: 'D32F2F' } }, bottom: { style: 'medium', color: { rgb: 'D32F2F' } } } };
+  const sGold = { font: { bold: true, sz: 10, color: { rgb: '1C1C1E' } }, fill: { fgColor: { rgb: 'FFF8E1' } }, alignment: { vertical: 'center' } };
+
+  function cell(v, style) {
+    const t = typeof v === 'number' ? 'n' : 's';
+    return { v: v == null ? '' : v, t: t, s: style || sCell };
+  }
+  function applyRow(ws, r, values, styles) {
+    values.forEach((v, c) => { ws[XLSX.utils.encode_cell({ r: r, c: c })] = cell(v, styles ? styles[c] : sCell); });
+  }
+
+  const wb = XLSX.utils.book_new();
+  const ws = {};
+  let r = 0;
+  applyRow(ws, r, ['STAR CHICKEN — Top Products Report'], [sTitle]);
+  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }];
+  r++;
+  applyRow(ws, r, [note + '  |  Generated: ' + new Date().toLocaleString('en-PK')], [sSub]);
+  ws['!merges'].push({ s: { r: 1, c: 0 }, e: { r: 1, c: 5 } });
+  r += 2;
+
+  // Category summary
+  const catMap = {};
+  rows.forEach(row => {
+    const c = row.category || 'Other';
+    if (!catMap[c]) catMap[c] = { amount: 0, qty: 0, weight: 0, count: 0 };
+    catMap[c].amount += row.amount || 0;
+    catMap[c].qty += row.qty || 0;
+    catMap[c].weight += row.weight || 0;
+    catMap[c].count++;
+  });
+  applyRow(ws, r, ['CATEGORY SUMMARY'], [sGold]);
+  ws['!merges'].push({ s: { r: r, c: 0 }, e: { r: r, c: 4 } });
+  r++;
+  applyRow(ws, r, ['Category', 'Products', 'Total Qty', 'Total Weight (kg)', 'Total Amount (Rs)'], [sHeader, sHeader, sHeader, sHeader, sHeader]);
+  r++;
+  const catOrder = ['By Parts Products', 'Further Products', 'Ready to Cook Products', 'Masala', 'Grocery', 'Other'];
+  const catKeys = Object.keys(catMap).sort((a, b) => {
+    const ia = catOrder.indexOf(a); const ib = catOrder.indexOf(b);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+  });
+  let gAmt = 0, gQty = 0, gWgt = 0;
+  catKeys.forEach((c, i) => {
+    const m = catMap[c];
+    gAmt += m.amount; gQty += m.qty; gWgt += m.weight;
+    const st = i % 2 ? [sAlt, sNumAlt, sNumAlt, sNum2Alt, sNumAlt] : [sCell, sNum, sNum, sNum2, sNum];
+    applyRow(ws, r, [c, m.count, Math.round(m.qty * 100) / 100, Math.round(m.weight * 100) / 100, Math.round(m.amount)], st);
+    r++;
+  });
+  applyRow(ws, r, ['TOTAL', rows.length, Math.round(gQty * 100) / 100, Math.round(gWgt * 100) / 100, Math.round(gAmt)], [sTotalL, sTotal, sTotal, Object.assign({}, sTotal, { numFmt: '#,##0.00' }), sTotal]);
+  r += 2;
+
+  // Detail by category
+  applyRow(ws, r, ['PRODUCT DETAIL'], [sGold]);
+  ws['!merges'].push({ s: { r: r, c: 0 }, e: { r: r, c: 5 } });
+  r++;
+  applyRow(ws, r, ['#', 'Category', 'Product', 'Qty', 'Weight (kg)', 'Amount (Rs)'], [sHeader, sHeader, sHeader, sHeader, sHeader, sHeader]);
+  r++;
+  let idx = 0;
+  catKeys.forEach(cat => {
+    const catRows = rows.filter(x => (x.category || 'Other') === cat);
+    catRows.forEach(row => {
+      idx++;
+      const st = idx % 2 ? [sNumAlt, sAlt, sAlt, sNumAlt, sNum2Alt, sNumAlt] : [sNum, sCell, sCell, sNum, sNum2, sNum];
+      applyRow(ws, r, [idx, cat, row.name, Math.round((row.qty || 0) * 100) / 100, Math.round((row.weight || 0) * 100) / 100, Math.round(row.amount || 0)], st);
+      r++;
+    });
+  });
+  applyRow(ws, r, ['', '', 'GRAND TOTAL', Math.round(gQty * 100) / 100, Math.round(gWgt * 100) / 100, Math.round(gAmt)], [sTotalL, sTotalL, sTotalL, sTotal, Object.assign({}, sTotal, { numFmt: '#,##0.00' }), sTotal]);
+
+  ws['!cols'] = [{ wch: 6 }, { wch: 26 }, { wch: 32 }, { wch: 12 }, { wch: 14 }, { wch: 14 }];
+  ws['!rows'] = [{ hpt: 28 }, { hpt: 18 }];
+  ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: r, c: 5 } });
+  XLSX.utils.book_append_sheet(wb, ws, 'Products');
+
+  // Customers sheet
+  const custRows = _dashFilteredCustomers && _dashFilteredCustomers.length ? _dashFilteredCustomers : _dashFullCustomers;
+  if (custRows.length) {
+    const ws2 = {};
+    let r2 = 0;
+    applyRow(ws2, r2, ['STAR CHICKEN — Top Customers Report'], [sTitle]);
+    ws2['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }];
+    r2++;
+    applyRow(ws2, r2, [(_dashFullCustNote || '') + '  |  Generated: ' + new Date().toLocaleString('en-PK')], [sSub]);
+    ws2['!merges'].push({ s: { r: 1, c: 0 }, e: { r: 1, c: 3 } });
+    r2 += 2;
+    applyRow(ws2, r2, ['#', 'Customer', 'Invoices', 'Total Amount (Rs)'], [sHeader, sHeader, sHeader, sHeader]);
+    r2++;
+    let cTotal = 0;
+    custRows.forEach((row, i) => {
+      cTotal += row.total || 0;
+      const st = i % 2 ? [sNumAlt, sAlt, sNumAlt, sNumAlt] : [sNum, sCell, sNum, sNum];
+      const invCnt = parseInt(String(row.meta || '').replace(/\D/g, ''), 10) || 0;
+      applyRow(ws2, r2, [i + 1, row.name, invCnt, Math.round(row.total || 0)], st);
+      r2++;
+    });
+    applyRow(ws2, r2, ['', 'TOTAL', custRows.length, Math.round(cTotal)], [sTotalL, sTotalL, sTotal, sTotal]);
+    ws2['!cols'] = [{ wch: 6 }, { wch: 28 }, { wch: 12 }, { wch: 16 }];
+    ws2['!rows'] = [{ hpt: 28 }, { hpt: 18 }];
+    ws2['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: r2, c: 3 } });
+    XLSX.utils.book_append_sheet(wb, ws2, 'Customers');
+  }
+
+  const fileName = 'StarChicken_Products_' + (branch.replace(/\s+/g, '_') || 'AllBranches') + '.xlsx';
+  XLSX.writeFile(wb, fileName);
+  toast('Professional Excel report downloaded!', 'success');
+}
+
+function exportDashProductsPDF() {
+  const rows = _dashFilteredProducts && _dashFilteredProducts.length ? _dashFilteredProducts : _dashFullProducts;
+  const custRows = _dashFilteredCustomers && _dashFilteredCustomers.length ? _dashFilteredCustomers : _dashFullCustomers;
+  if (!rows.length && !custRows.length) {
+    toast('No data to export.', 'error');
+    return;
+  }
+  const note = _dashFullProdNote || '';
+  const fmtD = (n) => 'Rs. ' + Math.round(Number(n) || 0).toLocaleString('en-PK');
+
+  // Category summary
+  const catMap = {};
+  rows.forEach(row => {
+    const c = row.category || 'Other';
+    if (!catMap[c]) catMap[c] = { amount: 0, qty: 0, weight: 0, count: 0 };
+    catMap[c].amount += row.amount || 0;
+    catMap[c].qty += row.qty || 0;
+    catMap[c].weight += row.weight || 0;
+    catMap[c].count++;
+  });
+  const catOrder = ['By Parts Products', 'Further Products', 'Ready to Cook Products', 'Masala', 'Grocery', 'Other'];
+  const catKeys = Object.keys(catMap).sort((a, b) => {
+    const ia = catOrder.indexOf(a); const ib = catOrder.indexOf(b);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+  });
+
+  let catHtml = catKeys.map(c => {
+    const m = catMap[c];
+    return '<tr><td>' + esc(c) + '</td><td style="text-align:right">' + m.count + '</td><td style="text-align:right">' +
+      (Math.round(m.qty * 100) / 100) + '</td><td style="text-align:right">' + (Math.round(m.weight * 100) / 100) +
+      '</td><td style="text-align:right">' + fmtD(m.amount) + '</td></tr>';
+  }).join('');
+
+  let prodHtml = '';
+  catKeys.forEach(cat => {
+    prodHtml += '<tr style="background:#FFEBEE"><td colspan="5"><strong>' + esc(cat) + '</strong></td></tr>';
+    rows.filter(x => (x.category || 'Other') === cat).forEach((row, i) => {
+      prodHtml += '<tr><td>' + (i + 1) + '</td><td>' + esc(row.name) + '</td><td style="text-align:right">' +
+        (Math.round((row.qty || 0) * 100) / 100) + '</td><td style="text-align:right">' +
+        (Math.round((row.weight || 0) * 100) / 100) + '</td><td style="text-align:right">' + fmtD(row.amount) + '</td></tr>';
+    });
+  });
+
+  let custHtml = custRows.map((row, i) =>
+    '<tr><td>' + (i + 1) + '</td><td>' + esc(row.name) + '</td><td style="text-align:right">' + esc(row.meta || '') +
+    '</td><td style="text-align:right">' + fmtD(row.total) + '</td></tr>'
+  ).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Star Chicken — Products Report</title>
+<style>
+  body{font-family:Arial,sans-serif;font-size:12px;color:#1c1c1e;margin:24px;line-height:1.4}
+  h1{font-size:18px;color:#D32F2F;margin:0 0 4px}
+  h2{font-size:14px;margin:18px 0 8px;border-bottom:2px solid #D32F2F;padding-bottom:4px}
+  .meta{color:#666;margin-bottom:12px}
+  table{width:100%;border-collapse:collapse;margin-bottom:12px}
+  th{background:#1C1C1E;color:#fff;padding:7px 8px;text-align:left;font-size:11px}
+  td{padding:6px 8px;border-bottom:1px solid #e5e5ea}
+  tr:nth-child(even) td{background:#fafafa}
+  @media print{body{margin:12px}}
+</style></head><body>
+  <h1>STAR CHICKEN — Products & Customers Report</h1>
+  <div class="meta">${esc(note)} · Generated: ${esc(new Date().toLocaleString('en-PK'))}</div>
+
+  <h2>Category Summary</h2>
+  <table>
+    <thead><tr><th>Category</th><th style="text-align:right">Products</th><th style="text-align:right">Qty</th><th style="text-align:right">Weight</th><th style="text-align:right">Amount</th></tr></thead>
+    <tbody>${catHtml || '<tr><td colspan="5">No data</td></tr>'}</tbody>
+  </table>
+
+  <h2>Product Detail</h2>
+  <table>
+    <thead><tr><th>#</th><th>Product</th><th style="text-align:right">Qty</th><th style="text-align:right">Weight</th><th style="text-align:right">Amount</th></tr></thead>
+    <tbody>${prodHtml || '<tr><td colspan="5">No data</td></tr>'}</tbody>
+  </table>
+
+  <h2>Top Customers</h2>
+  <table>
+    <thead><tr><th>#</th><th>Customer</th><th style="text-align:right">Invoices</th><th style="text-align:right">Amount</th></tr></thead>
+    <tbody>${custHtml || '<tr><td colspan="4">No data</td></tr>'}</tbody>
+  </table>
+
+  <p style="margin-top:24px;color:#888;text-align:center;font-size:11px">Star Chicken · Quality Chicken Products</p>
+  <script>window.onload=function(){window.print();}<\/script>
+</body></html>`;
+
+  const w = window.open('', '_blank');
+  if (!w) {
+    toast('Please allow pop-ups to export PDF.', 'error');
+    return;
+  }
+  w.document.write(html);
+  w.document.close();
+  toast('PDF print dialog opened — choose Save as PDF', 'success');
+}
 
 function openReportsMenu() {
   document.getElementById('reportsMenuOverlay').classList.add('show');
@@ -3263,13 +3689,36 @@ function closeSalesModal() {
   document.getElementById('salesOverlay').classList.remove('show');
 }
 function parseInvDate(inv) {
-  // Prefer invoice date (YYYY-MM-DD); fallback to savedAt
-  if (inv.date && /^\d{4}-\d{2}-\d{2}/.test(inv.date)) {
-    const d = new Date(inv.date + 'T12:00:00');
-    if (!isNaN(d)) return d;
+  // ALWAYS prefer the bill's own date field for sales/dashboard.
+  // savedAt / createdAt are only fallbacks when date is missing (legacy data).
+  // Never treat "last edited today" as "sale date = today".
+  if (inv && inv.date && /^\d{4}-\d{2}-\d{2}/.test(String(inv.date))) {
+    const d = new Date(String(inv.date).slice(0, 10) + 'T12:00:00');
+    if (!isNaN(d.getTime())) return d;
   }
-  if (inv.savedAt) return new Date(inv.savedAt);
+  // Legacy fallback only
+  if (inv && inv.createdAt) {
+    const d = new Date(inv.createdAt);
+    if (!isNaN(d.getTime())) return d;
+  }
+  if (inv && inv.savedAt) {
+    const d = new Date(inv.savedAt);
+    if (!isNaN(d.getTime())) return d;
+  }
   return null;
+}
+/** Invoice date as YYYY-MM-DD (Pakistan business date). */
+function invDateISO(inv) {
+  if (inv && inv.date && /^\d{4}-\d{2}-\d{2}/.test(String(inv.date))) {
+    return String(inv.date).slice(0, 10);
+  }
+  const d = parseInvDate(inv);
+  if (!d) return null;
+  // Format local calendar date as ISO (invoice dates are already stored as PKT ISO)
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + day;
 }
 function startOfDay(d) {
   const x = new Date(d);
@@ -3296,26 +3745,33 @@ function fmtSale(n) {
   return 'Rs. ' + Math.round(Number(n) || 0).toLocaleString('en-PK');
 }
 function calcPeriodSales() {
-  const now = new Date();
-  const todayStart = startOfDay(now);
+  // Filter by invoice DATE field (via parseInvDate / invDateISO), not last-edit time
+  const todayISO = getPakistanDateISO();
+  const todayNoon = new Date(todayISO + 'T12:00:00');
+  const todayStart = startOfDay(todayNoon);
 
-  // Today
-  const today = sumInvoices(filterByRange(todayStart, now));
+  // Today — exact calendar match on bill date
+  const todayList = allHistory.filter(inv => {
+    const shopFilter = (document.getElementById('saleShop') && document.getElementById('saleShop').value) || '';
+    if (shopFilter && (inv.shopName || '').trim() !== shopFilter) return false;
+    return invDateISO(inv) === todayISO;
+  });
+  const today = sumInvoices(todayList);
   document.getElementById('saleToday').textContent = fmtSale(today.total);
   document.getElementById('saleTodayCnt').textContent = today.count + (today.count === 1 ? ' invoice' : ' invoices');
 
-  // This week (Mon–Sun, local)
-  const day = now.getDay(); // 0 Sun
+  // This week (Mon–Sun)
+  const day = todayNoon.getDay(); // 0 Sun
   const mondayOffset = day === 0 ? -6 : 1 - day;
   const weekStart = new Date(todayStart);
   weekStart.setDate(weekStart.getDate() + mondayOffset);
-  const week = sumInvoices(filterByRange(weekStart, now));
+  const week = sumInvoices(filterByRange(weekStart, todayNoon));
   document.getElementById('saleWeek').textContent = fmtSale(week.total);
   document.getElementById('saleWeekCnt').textContent = week.count + (week.count === 1 ? ' invoice' : ' invoices');
 
   // This month
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const month = sumInvoices(filterByRange(monthStart, now));
+  const monthStart = new Date(todayNoon.getFullYear(), todayNoon.getMonth(), 1);
+  const month = sumInvoices(filterByRange(monthStart, todayNoon));
   document.getElementById('saleMonth').textContent = fmtSale(month.total);
   document.getElementById('saleMonthCnt').textContent = month.count + (month.count === 1 ? ' invoice' : ' invoices');
 }
