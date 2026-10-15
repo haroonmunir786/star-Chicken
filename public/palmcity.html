@@ -1268,8 +1268,16 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
       <div class="dash-card" style="margin-bottom:14px">
         <div class="dash-card-b" style="padding:12px 16px">
           <div class="dash-filter-row" style="margin-bottom:0;border-bottom:none;padding-bottom:0">
-            <label>Search</label>
-            <input type="search" id="dashProdSearch" placeholder="Search product or category…" oninput="renderDashboardTopLists()" style="height:34px;padding:0 12px;border:1.5px solid var(--border);border-radius:8px;font-family:inherit;font-size:0.82rem;background:#fff;flex:1;min-width:160px;max-width:280px">
+            <label>Category</label>
+            <select id="dashProdCategory" onchange="renderDashboardTopLists()" style="height:34px;padding:0 10px;border:1.5px solid var(--border);border-radius:8px;font-family:inherit;font-size:0.82rem;background:#fff;min-width:180px;max-width:260px">
+              <option value="">All Categories</option>
+              <option value="Main Products">Main Products</option>
+              <option value="By Parts Products">By Parts Products</option>
+              <option value="Marinated Products">Marinated Products</option>
+              <option value="Further Products">Further Products</option>
+              <option value="Youngs & National">Youngs & National</option>
+              <option value="Grocery">Grocery</option>
+            </select>
             <label>From</label>
             <input type="date" id="dashProdFrom" onchange="syncDashDates('dashProdFrom')">
             <label>To</label>
@@ -1545,17 +1553,19 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
 
 <script>
 /* ══════════ PRODUCTS ══════════ */
-const byPartsProducts = ["SBB Trimming","SBB Slice","Skinless Breast","Boneless Handi","Boneless Breast","Breast RS","Breast Yum","Inner Fillet","Premium Mince","Zinger CP S/O","Zinger CP S/L","Zinger S/L JC/RS","Thigh Trimming","Trimming Bone","Drumstick S/O","Drumstick S/L","Whole Leg","Drummet A","Drummet B","Niblet A","Niblet B","Wing Tip","3 Joint Wings","2 Joint Wings S/O","2 Joint Wings S/L","Karahi Cut","Whole Bird S/O","Whole Bird S/L","D Trimming","Neck","Carcass","Skin","Tail","Heart","Liver","Gizzard","Shanks","MDM Mince"];
+const mainProducts = ["SBB Trimming","SBB Slice","Skinless Breast","Boneless Handi","Boneless Breast","Breast RS","Breast Yum","Premium Mince","Zinger CP S/O","Zinger CP S/L","Zinger S/L JC/RS","Drumstick S/O","Drumstick S/L","Karahi Cut","Whole Bird S/O","Whole Bird S/L"];
+const byPartsProducts = ["Inner Fillet","Thigh Trimming","Trimming Bone","Whole Leg","Drummet A","Drummet B","Niblet A","Niblet B","Wing Tip","3 Joint Wings","2 Joint Wings S/O","2 Joint Wings S/L","D Trimming","Neck","Carcass","Skin","Tail","Heart","Liver","Gizzard","Shanks","MDM Mince"];
 const furtherProducts = ["Marinated ButterFly JC","Marinated ButterFly LC","Marinated Niblet 1kg","Marinated Niblet","Marinated Drummet 1kg","Marinated Drummet","Marinated 5 cut","Injected Chicken Pieces","Marinated Zinger CP","Marinated Zinger SBL","Marinated Zinger S/O","Marinated Zinger S/L","Marinated Drumstick","Marinated Strips","Marinated Strips 2kg","Marinated Crispy"];
 const readyToCookProducts = ["Kebab","Nuggets","Chicken Fries","Burger Patty 12 Pcs","Burger Patty 8 Pcs","Chicken Samosa 12 pcs","Chicken Samosa 24 pcs","Fried Samosa","Fried Spring Roll","Chicken Roll 12 pcs","Chicken Roll 24 pcs","Breading Flour","Chapli Kabab","Chicken Kofta"];
-const chickenProducts = byPartsProducts.concat(furtherProducts, readyToCookProducts);
+const chickenProducts = mainProducts.concat(byPartsProducts, furtherProducts, readyToCookProducts);
 const masalaProducts = ["ACHAR GOSHT 22G","BIRYANI 39G","BLACK PEPPER 25G","BOMBAY BIRYANI 35G","BOMBAY BIRYANI 70G","BROAST 97G","CHAAT MASALA 45G","CHATPATA CHAAT MASALA 15G","CHICKEN JALFREZI 50G","CHICKEN TANDOORI 20G","CHICKEN TANDOORI 40G","CHICKEN TIKKA 20G","CHICKEN TIKKA 40G","CHILLI POWDER 50G","DAIGHI DANEDAR HALEEM 293G","GARAM MASALA POWDER 25G","KARAHI 24G","KARAHI 47G","KOFTA 43G","MURGHI 21G","MURGHI MASALA 43G","NIHARI 28G","NIHARI 56G","PAYA MASALA 39G","PULAO 35G","PULAO BIRYANI 25G","PULAO BIRYANI 50G","Quick Cook HALEEM (POFF) 300G","QUICK COOK HALEEM 300G","QUORMA 100G","QUORMA 21G","SHAMI KABAB 22G","SINDHI BIRYANI 41G","TIKKA BOTI 22G","TURMERIC POWDER 50G"];
 const groceryProducts = ["Chocobliss Crave-Coco Powder 50gm ","Chocobliss Crave-Dark Bar 200gm","Chocobliss Crave-Milky Bar 200gm ","Chocobliss Double Chocolate GB 180gm ","Chocobliss Hazelnut Spread GB 180gm ","Chocobliss Hazelnut Spread GB 350gm ","Chocobliss Milky Spread GB 180gm x 24","Chocobliss Milky Spread GB 350gm x24","Chocobliss Peanut Chocolate GB 180gm x24","DI Butter Salted 100gm x36","DI Butter Salted 200gm x24","DI Cheddar Shred 200gm 48Pcs","DI Desi Ghee TP 1000gm X 6","DI Desi Ghee TP 500gm X12","DI Mozzarella Shred 200gm x48","DI Pizza Cheese Shred 200gm x48","Youngs BeeHives Squeeze PB 170gm x48","Youngs BeeHives Squeeze PB 250gm x48","Youngs BeeHives Squeeze PB 450gm x24","Youngs Chicken Spread PH 1000ml x12","Youngs Chicken Spread PH 100ml 3x36","Youngs Chicken Spread PH 200ml x48","Youngs Chicken Spread PH 500ml x24","Youngs Chicken Spread SC 25gm 10x24","Youngs Chkn Spr Black Pepper 200ml PHx4","Youngs Chkn Spr Black Pepper 500ml PH x 24","Youngs Chocolate Spread GB 170gm x24","Youngs Chocolate Spread GB 360gm x24","Youngs Creamy Mayonnaise PH 200ml x48","Youngs Mayo Chup PH 200ml x48","Youngs Mayo Garlic PH 200ml x48","Youngs Mayo Red Chilli PH 200ml x48","Youngs Mayonnaise PH 1000ml x12","Youngs Mayonnaise PH 100ml 3x36","Youngs Mayonnaise PH 200ml x48","Youngs Mayonnaise PH 40ml 12X12","Youngs Mayonnaise PH 500ml x24","Youngs Natural Honey GB 125gm x48","Youngs Natural Honey GB 500gm x12","Youngs Orla Canola Oil Bottle 3 Ltr x 6","Youngs Orla Canola Oil PLW PH 1 Ltr x 5","Youngs Orla Canola Oil SAP 1 Ltr x 5","Youngs Orla Cooking Oil Bottle 3 Ltr x6","Youngs Orla Cooking Oil PLW PH 1 Ltr x 5","Coke 1.5 Ltr","Sprite 1.5 Ltr"];
 const allProducts = [
+  { cat: "Main Products", items: mainProducts },
   { cat: "By Parts Products", items: byPartsProducts },
-  { cat: "Further Products", items: furtherProducts },
-  { cat: "Ready to Cook Products", items: readyToCookProducts },
-  { cat: "Masala", items: masalaProducts },
+  { cat: "Marinated Products", items: furtherProducts },
+  { cat: "Further Products", items: readyToCookProducts },
+  { cat: "Youngs & National", items: masalaProducts },
   { cat: "Grocery", items: groceryProducts }
 ];
 /* Map product name → category (case-insensitive lookup helper below) */
@@ -2896,9 +2906,14 @@ function filterListByDateAndBranch(fromId, toId, branch) {
   return { list: filtered, fromStr: base.fromStr, toStr: base.toStr };
 }
 
+function getDashProdCategory() {
+  const el = document.getElementById('dashProdCategory');
+  return el ? (el.value || '').trim() : '';
+}
+
 function renderDashboardTopLists() {
   const branch = getDashPCBranch();
-  const searchQ = ((document.getElementById('dashProdSearch') && document.getElementById('dashProdSearch').value) || '').trim().toLowerCase();
+  const catFilter = getDashProdCategory();
 
   // Keep customer date inputs linked to product date inputs
   const pf = document.getElementById('dashProdFrom');
@@ -2914,14 +2929,19 @@ function renderDashboardTopLists() {
   const branchLabel = branch || 'All Branches';
   const noteP = document.getElementById('dashProdDateNote');
   const noteC = document.getElementById('dashCustDateNote');
-  _dashFullProdNote = dashFmtDateNote(prod.fromStr, prod.toStr, 'All dates') + ' · ' + branchLabel;
+  _dashFullProdNote = dashFmtDateNote(prod.fromStr, prod.toStr, 'All dates') + ' · ' + branchLabel + (catFilter ? ' · ' + catFilter : '');
   _dashFullCustNote = dashFmtDateNote(cust.fromStr, cust.toStr, 'All dates') + ' · ' + branchLabel;
-  if (noteP) noteP.textContent = _dashFullProdNote + (searchQ ? ' · Search: "' + searchQ + '"' : '');
+  if (noteP) noteP.textContent = _dashFullProdNote;
   if (noteC) noteC.textContent = _dashFullCustNote;
 
   const badgeP = document.getElementById('dashProdFilterBadge');
   const badgeC = document.getElementById('dashCustFilterBadge');
-  if (badgeP) badgeP.textContent = branch ? '· ' + branch : '';
+  if (badgeP) {
+    const parts = [];
+    if (branch) parts.push(branch);
+    if (catFilter) parts.push(catFilter);
+    badgeP.textContent = parts.length ? '· ' + parts.join(' · ') : '';
+  }
   if (badgeC) badgeC.textContent = branch ? '· ' + branch : '';
 
   const fmtD = (n) => 'Rs. ' + Math.round(Number(n) || 0).toLocaleString('en-PK');
@@ -2940,26 +2960,9 @@ function renderDashboardTopLists() {
 
   let allProdNames = Object.keys(productMap).sort((a, b) => productMap[b].amount - productMap[a].amount);
 
-  // Category / product smart search
-  if (searchQ) {
-    // 1) Does query match a category name?
-    const catNames = allProducts.map(g => g.cat);
-    const matchedCat = catNames.find(c => c.toLowerCase().includes(searchQ) || searchQ.includes(c.toLowerCase()));
-    if (matchedCat) {
-      allProdNames = allProdNames.filter(n => productMap[n].category === matchedCat);
-    } else {
-      // 2) Match product names
-      const directHits = allProdNames.filter(n => n.toLowerCase().includes(searchQ));
-      if (directHits.length) {
-        // Collect categories of matched products, then show hits first + rest of those categories
-        const hitCats = new Set(directHits.map(n => productMap[n].category));
-        const primary = directHits.slice();
-        const related = allProdNames.filter(n => hitCats.has(productMap[n].category) && !directHits.includes(n));
-        allProdNames = primary.concat(related);
-      } else {
-        allProdNames = [];
-      }
-    }
+  // Category dropdown filter — show only products of selected category
+  if (catFilter) {
+    allProdNames = allProdNames.filter(n => productMap[n].category === catFilter);
   }
 
   _dashFullProducts = allProdNames.map(name => {
@@ -2971,49 +2974,24 @@ function renderDashboardTopLists() {
   });
   _dashFilteredProducts = _dashFullProducts.slice();
 
-  // Group display by category when searching category, else top 10
   const prodEl = document.getElementById('dashTopProducts');
   const prodBtn = document.getElementById('dashProdViewAll');
-  const showLimit = searchQ ? 50 : 10;
+  // When a category is selected, show more rows (up to 50); otherwise top 10
+  const showLimit = catFilter ? 50 : 10;
 
   if (!_dashFullProducts.length) {
-    prodEl.innerHTML = '<div class="dash-empty">' + (searchQ ? 'No products match your search' : 'No products sold yet') + '</div>';
+    prodEl.innerHTML = '<div class="dash-empty">' + (catFilter ? 'No products sold in this category' : 'No products sold yet') + '</div>';
     if (prodBtn) prodBtn.style.display = 'none';
   } else {
-    // When search active, group by category with headers
-    if (searchQ) {
-      let html = '';
-      let lastCat = null;
-      let rank = 0;
-      _dashFullProducts.slice(0, showLimit).forEach((row) => {
-        if (row.category !== lastCat) {
-          lastCat = row.category;
-          html += '<div style="font-size:0.68rem;font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:0.4px;margin:10px 0 4px;padding:4px 0;border-bottom:1px solid var(--border)">' + esc(lastCat || 'Other') + '</div>';
-        }
-        rank++;
-        const rankCls = rank === 1 ? 'r1' : (rank === 2 ? 'r2' : (rank === 3 ? 'r3' : ''));
-        html += '<div class="dash-list-item">' +
-          '<div class="dash-rank ' + rankCls + '">' + rank + '</div>' +
-          '<div style="flex:1;min-width:0"><div class="dash-li-name">' + esc(row.name) + '</div>' +
-          '<div class="dash-li-meta">' + esc(row.meta) + '</div></div>' +
-          '<div class="dash-li-amt">' + fmtD(row.amount) + '</div></div>';
-      });
-      prodEl.innerHTML = html;
-    } else {
-      const prodNames = allProdNames.slice(0, 10);
-      prodEl.innerHTML = prodNames.map((name, i) => {
-        const p = productMap[name];
-        const rankCls = i === 0 ? 'r1' : (i === 1 ? 'r2' : (i === 2 ? 'r3' : ''));
-        const meta = (p.category ? p.category + ' · ' : '') +
-          (p.weight ? (Math.round(p.weight * 100) / 100) + ' kg' : '') +
-          (p.qty ? (p.weight ? ' · ' : '') + (Math.round(p.qty * 100) / 100) + ' qty' : '');
-        return '<div class="dash-list-item">' +
-          '<div class="dash-rank ' + rankCls + '">' + (i + 1) + '</div>' +
-          '<div style="flex:1;min-width:0"><div class="dash-li-name">' + esc(name) + '</div>' +
-          '<div class="dash-li-meta">' + esc(meta) + '</div></div>' +
-          '<div class="dash-li-amt">' + fmtD(p.amount) + '</div></div>';
-      }).join('');
-    }
+    const displayRows = _dashFullProducts.slice(0, showLimit);
+    prodEl.innerHTML = displayRows.map((row, i) => {
+      const rankCls = i === 0 ? 'r1' : (i === 1 ? 'r2' : (i === 2 ? 'r3' : ''));
+      return '<div class="dash-list-item">' +
+        '<div class="dash-rank ' + rankCls + '">' + (i + 1) + '</div>' +
+        '<div style="flex:1;min-width:0"><div class="dash-li-name">' + esc(row.name) + '</div>' +
+        '<div class="dash-li-meta">' + esc(row.meta) + '</div></div>' +
+        '<div class="dash-li-amt">' + fmtD(row.amount) + '</div></div>';
+    }).join('');
     if (prodBtn) {
       if (_dashFullProducts.length > showLimit) {
         prodBtn.style.display = 'block';
@@ -3168,7 +3146,7 @@ function exportDashProductsExcel() {
   r++;
   applyRow(ws, r, ['Category', 'Products', 'Total Qty', 'Total Weight (kg)', 'Total Amount (Rs)'], [sHeader, sHeader, sHeader, sHeader, sHeader]);
   r++;
-  const catOrder = ['By Parts Products', 'Further Products', 'Ready to Cook Products', 'Masala', 'Grocery', 'Other'];
+  const catOrder = ['Main Products', 'By Parts Products', 'Marinated Products', 'Further Products', 'Youngs & National', 'Grocery', 'Other'];
   const catKeys = Object.keys(catMap).sort((a, b) => {
     const ia = catOrder.indexOf(a); const ib = catOrder.indexOf(b);
     return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
@@ -3260,7 +3238,7 @@ function exportDashProductsPDF() {
     catMap[c].weight += row.weight || 0;
     catMap[c].count++;
   });
-  const catOrder = ['By Parts Products', 'Further Products', 'Ready to Cook Products', 'Masala', 'Grocery', 'Other'];
+  const catOrder = ['Main Products', 'By Parts Products', 'Marinated Products', 'Further Products', 'Youngs & National', 'Grocery', 'Other'];
   const catKeys = Object.keys(catMap).sort((a, b) => {
     const ia = catOrder.indexOf(a); const ib = catOrder.indexOf(b);
     return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
