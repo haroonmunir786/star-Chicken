@@ -3788,24 +3788,31 @@ document.addEventListener('keydown', function(e) {
 
 
 /* ══════════ CUSTOMER DETAILS (name, phone, address, remarks) ══════════ */
-const CUST_STORAGE_KEY = 'sc_palm-city_customers';
+// Customer records are stored in Supabase through the authenticated Render API.
+// Browser localStorage is intentionally not used for customer data.
+let customerCache = [];
+let customerRefreshPromise = null;
 
 function loadCustomers() {
-  try {
-    const raw = localStorage.getItem(CUST_STORAGE_KEY);
-    if (!raw) return [];
-    const arr = JSON.parse(raw);
-    return Array.isArray(arr) ? arr : [];
-  } catch (e) {
-    return [];
-  }
+  return customerCache.slice();
 }
 
-function saveCustomers(list) {
+async function refreshCustomersFromServer() {
+  if (customerRefreshPromise) return customerRefreshPromise;
+  customerRefreshPromise = (async () => {
+    const response = await fetch('/api/customers', { credentials: 'same-origin' });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.error || 'Could not load customer details');
+    }
+    const rows = await response.json();
+    customerCache = Array.isArray(rows) ? rows : [];
+    return customerCache;
+  })();
   try {
-    localStorage.setItem(CUST_STORAGE_KEY, JSON.stringify(list));
-  } catch (e) {
-    toast('Could not save customers (storage full?)', 'error');
+    return await customerRefreshPromise;
+  } finally {
+    customerRefreshPromise = null;
   }
 }
 
@@ -3813,12 +3820,21 @@ function uidCust() {
   return 'c_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
-function openCustomerDetailsModal() {
+async function openCustomerDetailsModal() {
   resetCustomerForm();
-  renderCustomerList();
   const el = document.getElementById('customerDetailsOverlay');
   if (el) el.classList.add('show');
   document.body.style.overflow = 'hidden';
+  const listEl = document.getElementById('custList');
+  if (listEl) listEl.innerHTML = '<div class="cust-empty">Loading customers…</div>';
+  try {
+    await refreshCustomersFromServer();
+    renderCustomerList();
+  } catch (e) {
+    console.error(e);
+    if (listEl) listEl.innerHTML = '<div class="cust-empty">Could not load customers. Check your connection and try opening Customer Details again.</div>';
+    toast(e.message || 'Could not load customers', 'error');
+  }
   setTimeout(() => {
     const n = document.getElementById('custName');
     if (n) n.focus();
@@ -3850,7 +3866,7 @@ function resetCustomerForm() {
   document.querySelectorAll('.cust-card.active').forEach(c => c.classList.remove('active'));
 }
 
-function saveCustomerDetail() {
+async function saveCustomerDetail() {
   const name = (document.getElementById('custName').value || '').trim();
   if (!name) {
     toast('Customer name is required', 'error');
@@ -3861,27 +3877,10 @@ function saveCustomerDetail() {
   const address = (document.getElementById('custAddress').value || '').trim();
   const remarks = (document.getElementById('custRemarks').value || '').trim();
   const editId = document.getElementById('custEditId').value;
+  const current = loadCustomers();
 
-  let list = loadCustomers();
-  if (editId) {
-    const idx = list.findIndex(c => c.id === editId);
-    if (idx >= 0) {
-      list[idx] = {
-        ...list[idx],
-        name,
-        phone,
-        address,
-        remarks,
-        updatedAt: Date.now()
-      };
-      toast('Customer updated', 'success');
-    } else {
-      toast('Customer not found', 'error');
-      return;
-    }
-  } else {
-    // prevent exact duplicate name+phone
-    const dup = list.find(c =>
+  if (!editId) {
+    const dup = current.find(c =>
       (c.name || '').trim().toLowerCase() === name.toLowerCase() &&
       (c.phone || '').trim() === phone
     );
@@ -3889,20 +3888,35 @@ function saveCustomerDetail() {
       toast('Same name & phone already exists — edit that entry', 'error');
       return;
     }
-    list.unshift({
-      id: uidCust(),
-      name,
-      phone,
-      address,
-      remarks,
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    });
-    toast('Customer saved', 'success');
   }
-  saveCustomers(list);
-  resetCustomerForm();
-  renderCustomerList();
+
+  const now = Date.now();
+  const record = {
+    id: editId || uidCust(), name, phone, address, remarks,
+    createdAt: editId ? (current.find(c => c.id === editId)?.createdAt || now) : now,
+    updatedAt: now
+  };
+  const button = document.getElementById('custSaveBtn');
+  if (button) { button.disabled = true; button.textContent = 'Saving…'; }
+  try {
+    const response = await fetch(editId ? '/api/customers/' + encodeURIComponent(editId) : '/api/customers', {
+      method: editId ? 'PUT' : 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(record)
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || 'Could not save customer');
+    await refreshCustomersFromServer();
+    resetCustomerForm();
+    renderCustomerList();
+    toast(editId ? 'Customer updated' : 'Customer saved', 'success');
+  } catch (e) {
+    console.error(e);
+    toast(e.message || 'Could not save customer', 'error');
+  } finally {
+    if (button) { button.disabled = false; button.textContent = document.getElementById('custEditId').value ? '💾 Update' : '💾 Save'; }
+  }
 }
 
 function editCustomerDetail(id) {
@@ -3927,15 +3941,25 @@ function editCustomerDetail(id) {
 }
 
 async function deleteCustomerDetail(id) {
-  const list = loadCustomers();
-  const c = list.find(x => x.id === id);
+  const c = loadCustomers().find(x => x.id === id);
   if (!c) return;
   if (!confirm('Delete customer "' + (c.name || '') + '"?')) return;
-  const next = list.filter(x => x.id !== id);
-  saveCustomers(next);
-  if (document.getElementById('custEditId').value === id) resetCustomerForm();
-  renderCustomerList();
-  toast('Customer deleted', 'success');
+  try {
+    const response = await fetch('/api/customers/' + encodeURIComponent(id), {
+      method: 'DELETE', credentials: 'same-origin'
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.error || 'Could not delete customer');
+    }
+    customerCache = customerCache.filter(x => x.id !== id);
+    if (document.getElementById('custEditId').value === id) resetCustomerForm();
+    renderCustomerList();
+    toast('Customer deleted', 'success');
+  } catch (e) {
+    console.error(e);
+    toast(e.message || 'Could not delete customer', 'error');
+  }
 }
 
 function useCustomerOnInvoice(id) {
@@ -3999,6 +4023,10 @@ function renderCustomerList() {
     );
   }).join('');
 }
+
+
+// Warm the shared customer list for invoice-name autocomplete. Customer records are cloud-only.
+refreshCustomersFromServer().catch(e => console.warn('Customer list will load when opened:', e));
 
 
 function openReportsMenu() {

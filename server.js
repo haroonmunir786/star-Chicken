@@ -188,6 +188,112 @@ app.put('/api/ordering/state', auth, async (req, res) => {
   }
 });
 
+/* ---------- Customer Details API ---------- */
+function cleanCustomer(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Invalid customer data');
+  const id = String(raw.id || '').trim();
+  const name = String(raw.name || '').trim();
+  if (!id) throw new Error('Customer ID is required');
+  if (!name) throw new Error('Customer name is required');
+  return {
+    id,
+    name: name.slice(0, 200),
+    phone: String(raw.phone || '').trim().slice(0, 80),
+    address: String(raw.address || '').trim().slice(0, 1000),
+    remarks: String(raw.remarks || '').trim().slice(0, 2000),
+    createdAt: Number(raw.createdAt) || Date.now(),
+    updatedAt: Number(raw.updatedAt) || Date.now()
+  };
+}
+
+function dbRowToCustomer(row) {
+  return {
+    id: row.id,
+    name: row.name || '',
+    phone: row.phone || '',
+    address: row.address || '',
+    remarks: row.remarks || '',
+    createdAt: Number(row.created_at) || 0,
+    updatedAt: Number(row.updated_at) || 0
+  };
+}
+
+app.get('/api/customers', auth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `select id, name, phone, address, remarks, created_at, updated_at
+       from public.palmcity_customers order by updated_at desc, created_at desc`
+    );
+    res.json(result.rows.map(dbRowToCustomer));
+  } catch (e) {
+    console.error('Could not load customers:', e);
+    res.status(500).json({ error: 'Could not load customers. Confirm the palmcity_customers table exists in Supabase.' });
+  }
+});
+
+app.post('/api/customers', auth, async (req, res) => {
+  let customer;
+  try { customer = cleanCustomer(req.body); }
+  catch (e) { return res.status(400).json({ error: e.message }); }
+  try {
+    const dup = await pool.query(
+      `select id from public.palmcity_customers
+       where lower(trim(name)) = lower($1) and trim(phone) = $2 limit 1`,
+      [customer.name, customer.phone]
+    );
+    if (dup.rowCount) return res.status(409).json({ error: 'Same name & phone already exists — edit that entry' });
+    const result = await pool.query(
+      `insert into public.palmcity_customers
+       (id, name, phone, address, remarks, created_at, updated_at)
+       values ($1,$2,$3,$4,$5,$6,$7)
+       returning id, name, phone, address, remarks, created_at, updated_at`,
+      [customer.id, customer.name, customer.phone, customer.address, customer.remarks, customer.createdAt, customer.updatedAt]
+    );
+    res.status(201).json(dbRowToCustomer(result.rows[0]));
+  } catch (e) {
+    console.error('Could not save customer:', e);
+    if (e.code === '23505') return res.status(409).json({ error: 'Customer ID already exists' });
+    res.status(500).json({ error: 'Could not save customer' });
+  }
+});
+
+app.put('/api/customers/:id', auth, async (req, res) => {
+  let customer;
+  try { customer = cleanCustomer({ ...req.body, id: req.params.id }); }
+  catch (e) { return res.status(400).json({ error: e.message }); }
+  try {
+    const dup = await pool.query(
+      `select id from public.palmcity_customers
+       where lower(trim(name)) = lower($1) and trim(phone) = $2 and id <> $3 limit 1`,
+      [customer.name, customer.phone, customer.id]
+    );
+    if (dup.rowCount) return res.status(409).json({ error: 'Same name & phone already exists — edit that entry' });
+    const result = await pool.query(
+      `update public.palmcity_customers
+       set name=$2, phone=$3, address=$4, remarks=$5, updated_at=$6
+       where id=$1
+       returning id, name, phone, address, remarks, created_at, updated_at`,
+      [customer.id, customer.name, customer.phone, customer.address, customer.remarks, customer.updatedAt]
+    );
+    if (!result.rowCount) return res.status(404).json({ error: 'Customer not found' });
+    res.json(dbRowToCustomer(result.rows[0]));
+  } catch (e) {
+    console.error('Could not update customer:', e);
+    res.status(500).json({ error: 'Could not update customer' });
+  }
+});
+
+app.delete('/api/customers/:id', auth, async (req, res) => {
+  try {
+    const result = await pool.query('delete from public.palmcity_customers where id=$1', [req.params.id]);
+    if (!result.rowCount) return res.status(404).json({ error: 'Customer not found' });
+    res.status(204).end();
+  } catch (e) {
+    console.error('Could not delete customer:', e);
+    res.status(500).json({ error: 'Could not delete customer' });
+  }
+});
+
 /* ---------- Invoice numbering ---------- */
 // Preview-only: shows what the NEXT number would be, without consuming it.
 // The number is only actually assigned (atomically) when an invoice is saved.
