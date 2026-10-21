@@ -1,0 +1,2095 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#B5121B">
+<title>Star Chicken Ordering System</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='48' fill='%23C8161D'/%3E%3Cpath fill='%23F5B80B' d='M50 16l10.6 21.5 23.7 3.4-17.2 16.7 4.1 23.6L50 70.1 28.8 81.2l4.1-23.6L15.7 40.9l23.7-3.4z'/%3E%3C/svg%3E">
+<style>
+:root{
+  --red:#C8161D; --red-dk:#9A0F16; --red-bg:#FCEBEC;
+  --gold:#F5B80B; --gold-bg:#FFF6DA;
+  --ink:#1F1B1A; --muted:#6A6562; --line:#E2DFDC; --bg:#F1F2F4; --card:#fff;
+  --ok:#1B8A4B; --ok-bg:#E5F5EC; --warn:#B26A00; --warn-bg:#FFF1D6;
+  --r-lg:14px; --r-md:10px; --r-sm:7px;
+  --font:"Segoe UI",Roboto,"Helvetica Neue",Arial,system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 var(--font);font-variant-numeric:tabular-nums;padding-bottom:env(safe-area-inset-bottom)}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+[hidden]{display:none!important}
+h1,h2,h3,p{margin:0}
+
+/* ---------- Header ---------- */
+.top{background:linear-gradient(135deg,var(--red) 0%,var(--red-dk) 100%);color:#fff;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.brand .lg{width:48px;height:48px;border-radius:50%;background:#fff;display:grid;place-items:center;flex:none;overflow:hidden;box-shadow:0 0 0 3px rgba(245,184,11,.9)}
+.brand .lg img{width:100%;height:100%;object-fit:contain;display:block}
+.brand h1{font-size:19px;font-weight:800;letter-spacing:.2px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brand p{font-size:12.5px;opacity:.85}
+.today{font-size:13px;text-align:right;opacity:.95;white-space:nowrap}
+.today b{display:block;font-size:15px}
+
+/* ---------- Tabs ---------- */
+.tabs{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--line);display:flex;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{flex:1 0 auto;min-width:96px;padding:13px 16px;background:none;border:0;border-bottom:3px solid transparent;font-weight:600;color:var(--muted);display:flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap}
+.tabs button svg{width:18px;height:18px}
+.tabs button[aria-selected=true]{color:var(--red);border-bottom-color:var(--red)}
+
+/* ---------- Layout ---------- */
+main{max-width:1040px;margin:0 auto;padding:14px 12px 28px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);margin-bottom:14px}
+.card>.hd{padding:14px 16px 0}
+.card>.bd{padding:14px 16px 16px}
+.card h2{font-size:16.5px;font-weight:700}
+.card .sub{color:var(--muted);font-size:13.5px;margin-top:2px}
+.lbl{font-size:13px;font-weight:600;color:var(--muted);margin-bottom:6px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:560px){.grid2{grid-template-columns:1fr}}
+label.f{display:block;font-size:13px;font-weight:600;color:var(--muted)}
+label.f>input,label.f>select,label.f>textarea{display:block;width:100%;margin-top:5px;font-weight:500;color:var(--ink)}
+input[type=text],input[type=date],input[type=number],input[type=search],input[type=tel],select,textarea,input:not([type]){border:1px solid #CFCBC8;border-radius:var(--r-md);padding:10px 12px;background:#fff;min-height:44px}
+textarea{resize:vertical}
+input:focus,select:focus,textarea:focus{border-color:var(--red);outline:2px solid rgba(200,22,29,.18);outline-offset:0}
+
+/* ---------- Buttons ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 18px;border-radius:var(--r-md);border:1px solid #CFCBC8;background:#fff;font-weight:600;text-align:center}
+.btn svg{width:18px;height:18px;flex:none}
+.btn:hover{background:#F7F6F5}
+.btn.pri{background:var(--red);border-color:var(--red);color:#fff}
+.btn.pri:hover{background:var(--red-dk)}
+.btn.gold{background:var(--gold);border-color:var(--gold);color:#2b2100}
+.btn.gold:hover{background:#e5a900}
+.btn.danger{color:var(--red);border-color:#E7B3B6}
+.btn.danger.fill{background:var(--red);color:#fff;border-color:var(--red)}
+.btn.sm{min-height:36px;padding:0 12px;font-size:14px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.ico{width:38px;height:38px;border-radius:var(--r-sm);border:1px solid var(--line);background:#fff;display:grid;place-items:center;flex:none}
+.ico svg{width:18px;height:18px}
+.ico:hover{background:var(--red-bg);border-color:#E7B3B6;color:var(--red)}
+
+/* ---------- Branch chips ---------- */
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.chip{display:inline-flex;align-items:center;gap:8px;min-height:42px;padding:0 15px;border-radius:999px;border:1.5px solid #D4D0CD;background:#fff;font-weight:600}
+.chip.sel{background:var(--ink);border-color:var(--ink);color:#fff}
+.dot{width:10px;height:10px;border-radius:50%;background:#CFCBC8;flex:none}
+.dot.done{background:var(--ok)} .dot.draft{background:var(--gold)}
+.chip.sel .dot.none{background:#7d7977}
+.legend{display:flex;gap:14px;font-size:12.5px;color:var(--muted);margin:-6px 0 12px;flex-wrap:wrap}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+
+/* ---------- Banners ---------- */
+.notice{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:12px 16px;border-radius:var(--r-md);margin-bottom:14px;font-size:14px}
+.notice.ok{background:var(--ok-bg);color:#115a31;border:1px solid #b9e2c9}
+.notice.warn{background:var(--warn-bg);color:#6e4200;border:1px solid #f0d08e}
+.notice.err{background:var(--red-bg);color:#7a0d12;border:1px solid #efb9bc}
+.notice b{font-weight:700}
+#alerts{max-width:1040px;margin:0 auto;padding:12px 12px 0}
+#alerts .notice{margin-bottom:0}
+
+/* ---------- Order list ---------- */
+.tools{display:flex;gap:12px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.search{position:relative;flex:1 1 220px}
+.search svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);width:18px;height:18px;color:var(--muted);pointer-events:none}
+.search input{width:100%;padding-left:38px}
+.tg{display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:14px;user-select:none;min-height:44px}
+.tg input{width:20px;height:20px;accent-color:var(--red)}
+.lh,.row{display:grid;grid-template-columns:34px 1fr 150px 84px;gap:10px;align-items:center;padding:0 14px}
+.lh{background:#F7F6F5;font-size:12.5px;font-weight:700;color:var(--muted);height:34px;border-bottom:1px solid var(--line)}
+.lh span:nth-child(3){text-align:center}.lh span:nth-child(4){text-align:right}
+.row{padding-top:8px;padding-bottom:8px;border-bottom:1px solid #EEECEA;min-height:62px}
+.row:last-child{border-bottom:0}
+.row .no{color:var(--muted);font-size:13px;text-align:center}
+.row .nm b{display:block;font-weight:650;line-height:1.25}
+.row .nm small{color:var(--muted);font-size:12.5px}
+.row .nm small .mres{display:none;color:var(--ink);font-weight:700}
+.row .dres{text-align:right;font-weight:700;color:var(--muted)}
+.row.on{background:var(--gold-bg);box-shadow:inset 4px 0 0 var(--gold)}
+.row.on .dres{color:var(--ink)}
+.stepper{display:flex;align-items:stretch;border:1.5px solid #CFCBC8;border-radius:var(--r-md);overflow:hidden;background:#fff;height:44px}
+.row.on .stepper{border-color:#D9A400}
+.stepper button{width:44px;border:0;background:#F4F3F2;font-size:22px;font-weight:500;line-height:1;color:var(--ink)}
+.stepper button:active{background:#E6E3E1}
+.stepper input{flex:1;min-width:0;width:100%;border:0;border-radius:0;text-align:center;font-size:17px;font-weight:700;padding:0;min-height:0;-moz-appearance:textfield;appearance:textfield}
+.stepper input::-webkit-outer-spin-button,.stepper input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.stepper input:focus{outline:0;background:#FFFDF2}
+.stepper button:disabled,.stepper input:disabled{opacity:.45;cursor:not-allowed}
+.empty{padding:34px 16px;text-align:center;color:var(--muted)}
+@media(max-width:560px){
+  .lh,.row{grid-template-columns:26px 1fr 128px;gap:8px;padding:0 10px}
+  .lh span:nth-child(4),.row .dres{display:none}
+  .row .nm small .mres{display:inline}
+  .stepper button{width:38px}
+}
+
+/* ---------- Sticky bar ---------- */
+.bar{position:sticky;bottom:0;z-index:15;background:#fff;border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:0 -6px 22px rgba(30,20,20,.12);padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+.totals{display:flex;gap:18px}
+.totals div{line-height:1.2}
+.totals span{display:block;font-size:12px;color:var(--muted);font-weight:600}
+.totals b{font-size:20px;font-weight:800}
+.totals b small{font-size:13px;font-weight:600;color:var(--muted)}
+.bar .acts{display:flex;gap:8px;flex-wrap:wrap}
+@media(max-width:560px){.bar .acts{width:100%}.bar .acts .btn{flex:1;padding:0 8px;white-space:nowrap}.totals{width:100%;justify-content:space-between}}
+
+/* ---------- Master table ---------- */
+.tablewrap{overflow:auto;max-height:68vh;border-top:1px solid var(--line);border-radius:0 0 var(--r-lg) var(--r-lg)}
+table.mt{border-collapse:separate;border-spacing:0;width:100%;min-width:720px;font-size:14px}
+.mt th,.mt td{padding:8px 10px;border-bottom:1px solid #EEECEA;text-align:center;white-space:nowrap}
+.mt thead th{position:sticky;top:0;background:#2A2524;color:#fff;font-weight:650;z-index:3;white-space:normal;line-height:1.2}
+.mt td.l,.mt th.l{text-align:left}
+.mt td.dt{font-weight:650}
+.mt tbody tr:nth-child(even) td{background:#FAFAF9}
+.mt tbody tr.on td{background:var(--gold-bg)}
+.mt td.z{color:#C2BEBB}
+.mt td.tot{font-weight:800}
+.mt tfoot td{position:sticky;bottom:0;background:var(--gold);font-weight:800;border-top:2px solid var(--ink);z-index:2}
+.mt th:nth-child(2),.mt td:nth-child(2){position:sticky;left:0;z-index:1;background:inherit}
+.mt thead th:nth-child(2){z-index:4}
+.mt tbody td:nth-child(2){background:#fff}
+.mt tbody tr:nth-child(even) td:nth-child(2){background:#FAFAF9}
+.mt tbody tr.on td:nth-child(2){background:var(--gold-bg)}
+.mt tfoot td:nth-child(2){background:var(--gold)}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+
+/* ---------- Setup ---------- */
+.prow{display:grid;grid-template-columns:30px 1fr 110px 38px;gap:8px;align-items:center;margin-bottom:8px}
+.prow .no{color:var(--muted);font-size:13px;text-align:center}
+.prow input{width:100%;min-height:40px;padding:6px 10px}
+.brow{display:grid;grid-template-columns:1fr 38px;gap:8px;margin-bottom:8px}
+.brow input{width:100%;min-height:40px;padding:6px 10px}
+.addrow{display:grid;grid-template-columns:1fr 110px auto;gap:8px;margin-top:12px;padding-top:14px;border-top:1px dashed var(--line)}
+@media(max-width:560px){.addrow{grid-template-columns:1fr 90px}.addrow .btn{grid-column:1/-1}.prow{grid-template-columns:24px 1fr 84px 38px}}
+.scroll{max-height:60vh;overflow:auto;padding-right:2px}
+.cols2{display:grid;grid-template-columns:1.6fr 1fr;gap:14px;align-items:start}
+@media(max-width:820px){.cols2{grid-template-columns:1fr}}
+
+/* ---------- Backup ---------- */
+.stat{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)}
+.stat:last-child{border-bottom:0}
+.snap{display:flex;gap:10px;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.snap:last-child{border-bottom:0}
+.snap small{color:var(--muted);display:block}
+.logoPrev{width:84px;height:84px;border-radius:50%;border:1px solid var(--line);background:#fff;display:grid;place-items:center;overflow:hidden;flex:none}
+.logoPrev img{width:100%;height:100%;object-fit:contain}
+.brandrow{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+.hint{font-size:13px;color:var(--muted)}
+
+/* ---------- Modal ---------- */
+dialog.modal{border:0;border-radius:var(--r-lg);padding:0;width:min(560px,calc(100vw - 20px));max-height:calc(100vh - 24px);box-shadow:0 24px 70px rgba(0,0,0,.35);color:var(--ink);overflow:hidden}
+dialog.modal[open]{display:flex;flex-direction:column}
+dialog.modal::backdrop{background:rgba(25,18,18,.55)}
+.mh{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line);background:#fff}
+.mh h3{font-size:17px}
+.mh .x{border:0;background:none;font-size:26px;line-height:1;width:36px;height:36px;border-radius:8px;color:var(--muted)}
+.mb{padding:14px 16px;overflow:auto;flex:1}
+.mf{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;padding:12px 16px;border-top:1px solid var(--line);background:#FAFAF9}
+@media(max-width:560px){.mf .btn{flex:1;white-space:nowrap;padding:0 10px}}
+.rev{width:100%;border-collapse:collapse;font-size:14px;margin:6px 0 12px}
+.rev th{text-align:left;font-size:12.5px;color:var(--muted);padding:4px 6px;border-bottom:1px solid var(--line)}
+.rev td{padding:6px;border-bottom:1px solid #F0EEEC}
+.rev td:nth-child(n+3),.rev th:nth-child(n+3){text-align:right}
+.rev tfoot td{font-weight:800;border-top:2px solid var(--ink);border-bottom:0}
+.revwrap{max-height:36vh;overflow:auto;border:1px solid var(--line);border-radius:var(--r-md);padding:0 8px}
+.sharegrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+.sharegrid .wide{grid-column:1/-1}
+@media(max-width:460px){.sharegrid{grid-template-columns:1fr}}
+.msg{width:100%;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.45;min-height:170px;background:#FAFAF9}
+.sumline{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px}
+.sumline div{background:var(--gold-bg);border:1px solid #F1D88A;border-radius:var(--r-md);padding:8px 14px;line-height:1.25}
+.sumline span{display:block;font-size:12px;color:var(--muted);font-weight:600}
+.sumline b{font-size:18px}
+
+/* ---------- Toast ---------- */
+#toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:100;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;width:max-content;max-width:calc(100vw - 24px)}
+.t{background:var(--ink);color:#fff;padding:11px 16px;border-radius:var(--r-md);font-weight:600;font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,.25);animation:tin .18s ease-out}
+.t.ok{background:var(--ok)} .t.err{background:var(--red)}
+@keyframes tin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.t{animation:none}}
+
+.view[hidden]{display:none}
+
+/* ---------- Print ---------- */
+@media print{
+  body{background:#fff}
+  .top,.tabs,#alerts,.actions,#toast,.chips,.legend,.noprint,.view:not(#v-master):not(#v-transfer),.tools{display:none!important}
+  main{padding:0;max-width:none}
+  .card{border:0}
+  .tablewrap{max-height:none;overflow:visible}
+  .mt thead th{background:#2A2524!important;color:#fff!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .mt tfoot td{background:var(--gold)!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;position:static}
+  .printhead{display:block!important}
+}
+.printhead{display:none;padding:0 0 10px}
+.printhead h2{font-size:20px}
+
+/* Stock transfer */
+.mt td.diff-neg{color:var(--red);font-weight:800;background:#FCEBEC}
+.mt td.diff-pos{color:var(--ok);font-weight:800;background:#E5F5EC}
+.mt td.diff-zero{color:var(--muted)}
+.mt input.tq{width:56px;min-height:34px;padding:4px 6px;text-align:center;font-weight:700;border:1.5px solid #CFCBC8;border-radius:7px;background:#fff}
+.mt input.tq:focus{border-color:var(--red);outline:2px solid rgba(200,22,29,.15)}
+.mt tr.on input.tq{border-color:#D9A400;background:#FFFDF2}
+#tKpis .sumline{margin-bottom:0}
+@media print{
+  .view:not(#v-master):not(#v-transfer){display:none!important}
+  #v-transfer .noprint{display:none!important}
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <div class="lg"><img id="logoImg" alt="Logo"></div>
+    <div><h1 id="brandName">Star Chicken</h1><p>Branch Ordering System</p></div>
+  </div>
+  <div class="today"><span>Today</span><b id="todayLbl"></b></div>
+</header>
+
+<nav class="tabs" role="tablist" aria-label="Sections">
+  <button role="tab" data-tab="order" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Branch Order</button>
+  <button role="tab" data-tab="master" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>Master Sheet</button>
+  <button role="tab" data-tab="transfer" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"/><path d="M8 21H3v-5"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg>Stock Transfer</button>
+  <button role="tab" data-tab="admin" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Settings</button>
+</nav>
+
+<div id="alerts"></div>
+
+<main>
+<!-- ================= BRANCH ORDER ================= -->
+<section id="v-order" class="view">
+  <div class="card"><div class="bd">
+    <div class="lbl">Select your branch</div>
+    <div id="chips" class="chips"></div>
+    <div class="legend"><span><i class="dot none"></i>No order</span><span><i class="dot draft"></i>In progress</span><span><i class="dot done"></i>Completed</span></div>
+    <div class="grid2">
+      <label class="f">Order date<input type="date" id="odate"></label>
+      <label class="f">Ordered by<input type="text" id="oby" placeholder="Name of person placing the order" maxlength="40" autocomplete="name"></label>
+    </div>
+  </div></div>
+
+  <div id="banner"></div>
+
+  <div class="card" style="overflow:hidden">
+    <div class="tools">
+      <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input type="search" id="osearch" placeholder="Search products…" aria-label="Search products"></div>
+      <label class="tg"><input type="checkbox" id="oonly"> Ordered items only</label>
+    </div>
+    <div class="lh"><span>No</span><span>Detail</span><span>Packets</span><span>Weight</span></div>
+    <div id="olist"></div>
+    <div id="oempty" class="empty" hidden>No products match your search.</div>
+  </div>
+
+  <div class="bar" id="obar">
+    <div class="totals">
+      <div><span>Items</span><b id="ti">0</b></div>
+      <div><span>Total Pkt</span><b id="tp">0</b></div>
+      <div><span>Weight</span><b id="tw">0 <small>kg</small></b></div>
+    </div>
+    <div class="acts" id="oacts"></div>
+  </div>
+</section>
+
+<!-- ================= MASTER ================= -->
+<section id="v-master" class="view" hidden>
+  <div class="card noprint"><div class="bd">
+    <div class="grid2">
+      <label class="f">Order date<input type="date" id="mdate"></label>
+      <div>
+        <div class="lbl">Show</div>
+        <label class="tg"><input type="checkbox" id="monly" checked> Ordered items only</label><br>
+        <label class="tg"><input type="checkbox" id="mdraft"> Include in-progress orders</label>
+      </div>
+    </div>
+    <div class="lbl" style="margin-top:14px">Branch status for this date</div>
+    <div id="mstat" class="chips" style="margin-bottom:0"></div>
+    <div id="mdates" class="hint" style="margin-top:10px"></div>
+  </div></div>
+
+  <div class="card" style="overflow:hidden">
+    <div class="printhead"><h2 id="phTitle"></h2></div>
+    <div class="hd noprint" style="padding-bottom:12px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center">
+      <div><h2>Master order sheet</h2><div class="sub" id="msub"></div></div>
+      <div class="actions">
+        <button class="btn pri" id="mShare"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>Share</button>
+        <button class="btn" id="mXlsx"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel</button>
+        <button class="btn" id="mPrint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>Print</button>
+      </div>
+    </div>
+    <div class="tablewrap" id="mwrap"></div>
+  </div>
+
+  <div class="card noprint"><div class="hd"><h2>Order summary (multi-date)</h2><p class="sub">Select one or more order dates for a combined summary and Excel file.</p></div>
+    <div class="bd">
+      <div class="grid2">
+        <label class="f">From date<input type="date" id="sumFrom"></label>
+        <label class="f">To date<input type="date" id="sumTo"></label>
+      </div>
+      <div class="lbl" style="margin-top:14px">Dates with orders</div>
+      <div id="sumDateList" class="chips" style="margin-bottom:8px"></div>
+      <div class="actions" style="margin-bottom:12px;flex-wrap:wrap">
+        <button type="button" class="btn sm" id="sumAll">Select all</button>
+        <button type="button" class="btn sm" id="sumNone">Clear</button>
+        <button type="button" class="btn pri" id="sumXlsx"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel (selected dates)</button>
+      </div>
+      <div id="sumWrap" class="tablewrap" style="max-height:42vh"></div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ================= STOCK TRANSFER ================= -->
+<section id="v-transfer" class="view" hidden>
+  <div class="card noprint"><div class="bd">
+    <div class="grid2">
+      <label class="f">Transfer date<input type="date" id="tdate"></label>
+      <label class="f">Prepared / sent by<input type="text" id="tby" placeholder="Name of person sending stock" maxlength="40" autocomplete="name"></label>
+    </div>
+    <div style="margin-top:12px">
+      <label class="tg"><input type="checkbox" id="tdraft"> Include in-progress (draft) branch orders</label>
+      <label class="tg" style="margin-left:12px"><input type="checkbox" id="tonly" checked> Show ordered / transferred items only</label>
+    </div>
+    <div class="lbl" style="margin-top:14px">Branch order status (from Branch Order)</div>
+    <div id="tstat" class="chips" style="margin-bottom:0"></div>
+    <div id="tdates" class="hint" style="margin-top:10px"></div>
+  </div></div>
+
+  <div class="card noprint"><div class="bd">
+    <div class="sumline" id="tKpis">
+      <div><span>Ordered (pkt)</span><b id="tOrdP">0</b></div>
+      <div><span>Sending (pkt)</span><b id="tSentP">0</b></div>
+      <div><span>Difference</span><b id="tDiffP">0</b></div>
+      <div><span>Weight ordered</span><b id="tOrdW">0 <small>kg</small></b></div>
+      <div><span>Weight sending</span><b id="tSentW">0 <small>kg</small></b></div>
+    </div>
+    <p class="hint" style="margin-top:8px">Difference = Sending − Ordered. Red / negative means short supply (order zyada, stock kam). Green means extra stock sent.</p>
+    <div class="actions" style="margin-top:12px">
+      <button type="button" class="btn gold" id="tCopyOrd">Copy ordered → sending</button>
+      <button type="button" class="btn danger" id="tClearSent">Clear all sending</button>
+      <button type="button" class="btn pri" id="tSave">Save transfer</button>
+    </div>
+  </div></div>
+
+  <div class="card noprint"><div class="bd" style="padding-bottom:8px">
+    <div class="lbl">View</div>
+    <div class="chips" id="tViewChips" style="margin-bottom:0">
+      <button type="button" class="chip sel" data-tv="ordered">① Ordered</button>
+      <button type="button" class="chip" data-tv="sending">② Sending</button>
+      <button type="button" class="chip" data-tv="diff">③ Difference</button>
+      <button type="button" class="chip" data-tv="compare">Compare (all)</button>
+    </div>
+  </div></div>
+
+  <div class="card" style="overflow:hidden">
+    <div class="printhead"><h2 id="tphTitle"></h2></div>
+    <div class="hd noprint" style="padding-bottom:12px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center">
+      <div><h2 id="tTableTitle">Stock transfer</h2><div class="sub" id="tsub"></div></div>
+      <div class="actions">
+        <button class="btn" id="tXlsx"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel</button>
+        <button class="btn" id="tPrint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>Print</button>
+      </div>
+    </div>
+    <div class="tablewrap" id="twrap"></div>
+  </div>
+
+  <div class="card noprint"><div class="hd"><h2>Shortfall list (not fully supplied)</h2><p class="sub">Products where ordered packets are more than what is being sent.</p></div>
+    <div class="bd">
+      <div id="tShort" class="tablewrap" style="max-height:36vh"></div>
+    </div>
+  </div>
+
+  <div class="card noprint"><div class="hd"><h2>Transfer summary (multi-date)</h2><p class="sub">Select one or more transfer / order dates for a combined ordered · sent · difference summary and Excel file.</p></div>
+    <div class="bd">
+      <div class="grid2">
+        <label class="f">From date<input type="date" id="tsumFrom"></label>
+        <label class="f">To date<input type="date" id="tsumTo"></label>
+      </div>
+      <div class="lbl" style="margin-top:14px">Dates with orders or transfers</div>
+      <div id="tsumDateList" class="chips" style="margin-bottom:8px"></div>
+      <div class="actions" style="margin-bottom:12px;flex-wrap:wrap">
+        <button type="button" class="btn sm" id="tsumAll">Select all</button>
+        <button type="button" class="btn sm" id="tsumNone">Clear</button>
+        <button type="button" class="btn pri" id="tsumXlsx"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel (selected dates)</button>
+      </div>
+      <div id="tsumWrap" class="tablewrap" style="max-height:48vh"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= SETUP ================= -->
+<section id="v-admin" class="view" hidden>
+  <div class="card"><div class="hd"><h2>Branding &amp; contact</h2><p class="sub">Appears in the header, in shared messages and in the Excel file.</p></div>
+    <div class="bd">
+      <div class="brandrow">
+        <div class="logoPrev"><img id="logoPrev" alt="Current logo"></div>
+        <div class="actions">
+          <button class="btn" id="logoUp">Upload logo</button>
+          <button class="btn" id="logoReset">Use default star</button>
+          <input type="file" id="logoFile" accept="image/*" hidden>
+        </div>
+      </div>
+      <div class="grid2">
+        <label class="f">Company name<input type="text" id="brandIn" maxlength="40"></label>
+        <label class="f">Head office WhatsApp number (optional)<input type="tel" id="waIn" inputmode="tel" placeholder="e.g. 923001234567"></label>
+      </div>
+      <p class="hint" style="margin-top:8px">Number with country code, digits only. When set, “WhatsApp message” opens a chat straight to head office.</p>
+    </div>
+  </div>
+
+  <div class="cols2">
+    <div class="card"><div class="hd"><h2>Products</h2><p class="sub">Name and packing size in kg — the same list as your Excel sheet.</p></div>
+      <div class="bd">
+        <div class="scroll" id="plist"></div>
+        <div class="addrow">
+          <input type="text" id="newPName" placeholder="New product name" maxlength="60" aria-label="New product name">
+          <input type="number" id="newPPack" placeholder="Pack kg" step="any" min="0" inputmode="decimal" aria-label="Packing size in kg">
+          <button class="btn pri" id="addP">Add product</button>
+        </div>
+      </div>
+    </div>
+    <div class="card"><div class="hd"><h2>Branches</h2><p class="sub">Each branch gets its own column in the Excel file.</p></div>
+      <div class="bd">
+        <div id="blist"></div>
+        <div class="addrow" style="grid-template-columns:1fr auto">
+          <input type="text" id="newBName" placeholder="New branch name" maxlength="30" aria-label="New branch name">
+          <button class="btn pri" id="addB">Add branch</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</section>
+</main>
+
+<div id="toast" aria-live="polite"></div>
+
+<script>
+(()=>{
+'use strict';
+
+/* =====================================================================
+   CONSTANTS & DEFAULT DATA (taken from Star_chicken_ordering (Oct-26).xlsx)
+   ===================================================================== */
+const DEFAULT_BRANCHES=['Kasur SH','Mustafabad','Hatchery','Gajjumata','Marghzar','Gulshan Ravi'];
+const DEFAULT_ITEMS=[["SBB (B Grade Trimming)", 2], ["SBB Slice", 2], ["Skinless Breast", 1], ["Boneless Handi", 1], ["Boneless Breast  Whole", 2], ["Boneless Breast  RS", 2], ["Boneless Breast  YUM", 2], ["Innerfillet", 2], ["Mince Premium", 1], ["Zinger CP S/O", 2], ["SBL Thigh", 2], ["Zinger Skinless", 2], ["Zinger SL JC/RS", 2], ["Thigh Triming", 2], ["Trimming+Bone", 2], ["Drumstick SC", 1], ["Drumstick Skinless", 1], ["Whole Leg", 2], ["Drummet A", 2], ["Drummet B", 2], ["Niblet A", 2], ["Niblet B", 2], ["Wing Tip", 2], ["3 Joined Wings", 2], ["2 Joined Wings SO", 2], ["2 Joined Wings SL", 1], ["Karahi Cut", 1], ["Raw Broast Leg", 1.404], ["Raw Broast Thigh", 1.404], ["Whole Bird S/o", 1.404], ["Whole Bird S/L", 1], ["D-Triming", 2], ["Neck", 1], ["Carcass", 4], ["Skin", 2], ["Tail (kg)", 2], ["Heart (kg)", 1], ["Liver (kg)", 1], ["Gizzard (kg)", 1], ["Shanks (kg)", 1], ["MDM Mince", 1], ["Marinated Butterfly JC", 2.09], ["Marinated Butterfly LC", 2], ["Marinated Butterfly (2 kg)", 2.09], ["Marinated niblit CP", 1], ["Marinated niblit (2 KG)", 2], ["Marinated drummet CP", 1], ["Marinated drummet (2 KG)", 2], ["Marinated 5-cut", 2], ["Mari Injected Broast", 3.5], ["Marinated SBL Thigh", 2], ["Marinated Zinger CP", 2], ["Marinated Zinger JC", 2], ["Marinated Zinger (2 KG)", 2], ["Marinated Zinger SL", 2], ["Marinated Drumstick", 1], ["Marinated Strips CP", 1], ["Marinated Strips (2 KG)", 2], ["Marinated Crispy CP", 1], ["Kebab", 0.5], ["Nuggets", 1], ["Chicken Fries", 1], ["Burger Patty 12 pc", 0.96], ["Burger Patty 8 pc", 0.48], ["Chicken Samosa 12 PCs", 0.3], ["Chicken Samosa 24 PCs", 0.6], ["Spring Roll 12 PCs", 0.42], ["Spring Roll 24 Pcs", 0.84], ["Breading Flour", 4], ["Kofta", 1]];
+const XL_MIME='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const KEY='starchicken_state_v1', LOGO_KEY='starchicken_logo_v1', SNAP_KEY='starchicken_snaps_v1';
+const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const DEFAULT_LOGO='https://cpstarchicken.github.io/food/logo.jpg';
+
+/* =====================================================================
+   HELPERS
+   ===================================================================== */
+const $=(s,r=document)=>r.querySelector(s);
+const $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid=p=>p+Math.random().toString(36).slice(2,8);
+const norm=s=>String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
+const r6=n=>Math.round(n*1e6)/1e6;
+const fmt=n=>String(+(+n).toFixed(3));
+const fmtW=n=>String(+(+n).toFixed(2));
+const pad=n=>String(n).padStart(2,'0');
+const isoDate=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const today=()=>isoDate(new Date());
+const fmtDate=iso=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(iso||'');return m?`${m[3]}-${MONTHS[+m[2]-1]}-${m[1]}`:(iso||'')};
+const fmtTime=ts=>{const d=new Date(ts);return `${pad(d.getDate())}-${MONTHS[d.getMonth()]}-${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`};
+const slug=s=>String(s).replace(/[^a-z0-9]+/gi,'');
+const ICON={
+  share:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>',
+  check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
+  edit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+  trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>',
+  wa:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.5 14.4c-.3-.1-1.7-.8-2-.9-.3-.1-.5-.1-.7.1-.2.3-.8.9-.9 1.1-.2.2-.3.2-.6.1-1.6-.8-2.7-1.4-3.7-3.2-.3-.5.3-.5.8-1.500.1-.2 0-.4 0-.5-.1-.1-.7-1.600-.9-2.200-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.500s1.100 2.900 1.200 3.100c.1.2 2.100 3.200 5.100 4.500 1.900.8 2.600.9 3.600.7.600-.1 1.700-.7 2-1.400.2-.7.2-1.300.2-1.400-.1-.1-.3-.2-.6-.3zM12 2a10 10 0 0 0-8.500 15.200L2 22l4.900-1.500A10 10 0 1 0 12 2z"/></svg>',
+  dl:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>',
+  copy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+  file:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>'
+};
+
+/* =====================================================================
+   STORAGE
+   ===================================================================== */
+let storageOK=true; const memStore={};
+const store={
+  get(k){try{return localStorage.getItem(k)}catch(e){storageOK=false;return memStore[k]??null}},
+  set(k,v){try{localStorage.setItem(k,v);return true}catch(e){storageOK=false;memStore[k]=v;return false}},
+  del(k){try{localStorage.removeItem(k)}catch(e){delete memStore[k]}}
+};
+(()=>{try{localStorage.setItem('__t','1');localStorage.removeItem('__t')}catch(e){storageOK=false}})();
+
+function defaults(){
+  return {v:1,brand:'Star Chicken',
+    branches:DEFAULT_BRANCHES.map((n,i)=>({id:'b'+(i+1),name:n})),
+    items:DEFAULT_ITEMS.map(([n,p],i)=>({id:'p'+(i+1),name:n,pack:p})),
+    orders:{},transfers:{},settings:{wa:'',lastBackup:0},ui:{branch:'b1'}};
+}
+function normalize(d){
+  const base=defaults();
+  if(!d||typeof d!=='object') return base;
+  const out={v:1,brand:String(d.brand||base.brand).slice(0,40),orders:{},transfers:{},settings:{wa:String(d.settings?.wa||'').replace(/\D/g,''),lastBackup:+d.settings?.lastBackup||0},ui:{branch:d.ui?.branch||''}};
+  out.branches=(Array.isArray(d.branches)?d.branches:[]).filter(b=>b&&b.id&&String(b.name||'').trim()).map(b=>({id:String(b.id),name:String(b.name).trim().slice(0,30)}));
+  out.items=(Array.isArray(d.items)?d.items:[]).filter(i=>i&&i.id&&String(i.name||'').trim()&&+i.pack>0).map(i=>({id:String(i.id),name:String(i.name).trim().slice(0,60),pack:+i.pack}));
+  if(!out.branches.length) out.branches=base.branches;
+  if(!out.items.length) out.items=base.items;
+  if(!out.branches.some(b=>b.id===out.ui.branch)) out.ui.branch=out.branches[0].id;
+  if(d.orders&&typeof d.orders==='object'){
+    for(const [date,byB] of Object.entries(d.orders)){
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!byB||typeof byB!=='object') continue;
+      for(const [bid,o] of Object.entries(byB)){
+        if(!o||typeof o!=='object') continue;
+        const qty={}; for(const [iid,q] of Object.entries(o.qty||{})){const n=Math.floor(+q); if(n>0) qty[iid]=Math.min(n,9999)}
+        (out.orders[date]=out.orders[date]||{})[bid]={qty,by:String(o.by||'').slice(0,40),note:String(o.note||'').slice(0,300),status:o.status==='done'?'done':'draft',updated:+o.updated||0,completedAt:+o.completedAt||0};
+      }
+    }
+  }
+  if(d.transfers&&typeof d.transfers==='object'){
+    for(const [date,tr] of Object.entries(d.transfers)){
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!tr||typeof tr!=='object') continue;
+      const qty={};
+      if(tr.qty&&typeof tr.qty==='object'){
+        for(const [bid,byP] of Object.entries(tr.qty)){
+          if(!byP||typeof byP!=='object') continue;
+          const pq={};
+          for(const [iid,q] of Object.entries(byP)){const n=Math.floor(+q); if(n>0) pq[iid]=Math.min(n,9999)}
+          if(Object.keys(pq).length) qty[bid]=pq;
+        }
+      }
+      out.transfers[date]={qty,by:String(tr.by||'').slice(0,40),note:String(tr.note||'').slice(0,300),updated:+tr.updated||0};
+    }
+  }
+  return out;
+}
+// Cloud is the source of truth. Existing browser-local test data is deliberately ignored.
+let S=defaults();
+let saveT=null, cloudLoaded=false, cloudStatus='Connecting to shared database…', cloudSaveInFlight=false, cloudSaveAgain=false;
+async function pushCloudState(){
+  if(!cloudLoaded) return;
+  if(cloudSaveInFlight){cloudSaveAgain=true;return;}
+  cloudSaveInFlight=true;
+  try{
+    const response=await fetch('/api/ordering/state',{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:S})});
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok) throw new Error(data.error||`Save failed (${response.status})`);
+    cloudStatus='Connected · all branches share saved data';
+  }catch(e){
+    cloudStatus='Cloud save failed: '+(e.message||'Check your connection and reload before continuing.');
+    console.error('Ordering cloud save failed:',e);
+  }finally{
+    cloudSaveInFlight=false;
+    if(cloudSaveAgain){cloudSaveAgain=false;pushCloudState();}
+    if(typeof renderAlerts==='function') renderAlerts();
+  }
+}
+function save(now){
+  clearTimeout(saveT);
+  // Keep a local emergency copy, but never use it to initialize the shared system.
+  const run=()=>{store.set(KEY,JSON.stringify(S));pushCloudState();};
+  now?run():(saveT=setTimeout(run,350));
+}
+window.addEventListener('pagehide',()=>save(true));
+document.addEventListener('visibilitychange',()=>{if(document.hidden)save(true)});
+
+const getLogo=()=>store.get(LOGO_KEY)||DEFAULT_LOGO;
+
+/* ---------- Snapshots ---------- */
+function loadSnaps(){try{return JSON.parse(store.get(SNAP_KEY)||'[]')}catch(e){return []}}
+function orderCount(d){let n=0;for(const date in d.orders)n+=Object.keys(d.orders[date]).length;return n}
+function snapshot(reason){
+  const list=loadSnaps();
+  list.unshift({ts:Date.now(),reason,n:orderCount(S),json:JSON.stringify(S)});
+  while(list.length>8)list.pop();
+  while(list.length&&!store.set(SNAP_KEY,JSON.stringify(list)))list.pop();
+}
+
+/* =====================================================================
+   ORDER MODEL
+   ===================================================================== */
+const ui={tab:'order',date:today(),branch:S.ui.branch,search:'',only:false,mdate:today(),monly:true,mdraft:false,tdate:today(),tdraft:false,tonly:true,tview:'ordered'};
+const getOrder=(date,bid)=>S.orders[date]?.[bid]||null;
+function ensureOrder(date,bid){
+  const day=S.orders[date]||(S.orders[date]={});
+  return day[bid]||(day[bid]={qty:{},by:'',note:'',status:'draft',updated:Date.now(),completedAt:0});
+}
+function totals(o){
+  let p=0,w=0,n=0;
+  if(o)for(const it of S.items){const q=o.qty[it.id]||0;if(q>0){p+=q;w+=q*it.pack;n++}}
+  return {p,w:r6(w),n};
+}
+const statusOf=o=>o?.status==='done'?'done':(totals(o).p>0?'draft':'none');
+const branchById=id=>S.branches.find(b=>b.id===id);
+
+/* =====================================================================
+   UI: toast, modal, confirm
+   ===================================================================== */
+function toast(msg,type=''){
+  const t=document.createElement('div');t.className='t '+type;t.textContent=msg;$('#toast').appendChild(t);
+  setTimeout(()=>t.remove(),3200);
+}
+function openModal({title,html='',node=null,actions=[],onOpen}){
+  const d=document.createElement('dialog');d.className='modal';
+  d.innerHTML=`<div class="mh"><h3>${esc(title)}</h3><button type="button" class="x" aria-label="Close">&times;</button></div><div class="mb"></div><div class="mf"></div>`;
+  const mb=$('.mb',d);if(node)mb.appendChild(node);else mb.innerHTML=html;
+  const close=()=>{d.close();d.remove()};
+  $('.x',d).onclick=close;
+  d.addEventListener('click',e=>{if(e.target===d)close()});
+  d.addEventListener('cancel',e=>{e.preventDefault();close()});
+  const mf=$('.mf',d);
+  if(!actions.length)mf.remove();
+  actions.forEach(a=>{
+    const b=document.createElement('button');b.type='button';b.className='btn '+(a.cls||'');b.innerHTML=a.label;
+    b.onclick=async()=>{ if(a.fn){const r=await a.fn(close,b); if(r===false)return;} if(!a.keep)close(); };
+    mf.appendChild(b);
+  });
+  document.body.appendChild(d);d.showModal();
+  onOpen&&onOpen(d,close);
+  return {d,close};
+}
+function confirmBox({title,msg,ok='Confirm',danger=false,cancel='Cancel'}){
+  return new Promise(res=>{
+    let done=false;const fin=v=>{if(!done){done=true;res(v)}};
+    const m=openModal({title,html:`<p>${msg}</p>`,actions:[
+      {label:cancel,fn:()=>fin(false)},
+      {label:ok,cls:danger?'danger fill':'pri',fn:()=>fin(true)}]});
+    m.d.addEventListener('close',()=>fin(false));
+  });
+}
+
+/* =====================================================================
+   ZIP + XLSX WRITER (no external libraries, works offline)
+   ===================================================================== */
+const CRC_T=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
+const crc32=b=>{let c=0xFFFFFFFF;for(let i=0;i<b.length;i++)c=CRC_T[(c^b[i])&255]^(c>>>8);return (c^0xFFFFFFFF)>>>0};
+function zipStore(files,mime){
+  const enc=new TextEncoder(),parts=[],central=[];let off=0;
+  const d=new Date(),dt=((d.getFullYear()-1980)<<9)|((d.getMonth()+1)<<5)|d.getDate(),tm=(d.getHours()<<11)|(d.getMinutes()<<5)|(d.getSeconds()>>1);
+  for(const f of files){
+    const nm=enc.encode(f.name),data=typeof f.data==='string'?enc.encode(f.data):f.data,crc=crc32(data),sz=data.length;
+    const lh=new DataView(new ArrayBuffer(30));
+    lh.setUint32(0,0x04034b50,true);lh.setUint16(4,20,true);lh.setUint16(6,0x0800,true);lh.setUint16(8,0,true);
+    lh.setUint16(10,tm,true);lh.setUint16(12,dt,true);lh.setUint32(14,crc,true);lh.setUint32(18,sz,true);lh.setUint32(22,sz,true);lh.setUint16(26,nm.length,true);lh.setUint16(28,0,true);
+    parts.push(new Uint8Array(lh.buffer),nm,data);
+    const ch=new DataView(new ArrayBuffer(46));
+    ch.setUint32(0,0x02014b50,true);ch.setUint16(4,20,true);ch.setUint16(6,20,true);ch.setUint16(8,0x0800,true);ch.setUint16(10,0,true);
+    ch.setUint16(12,tm,true);ch.setUint16(14,dt,true);ch.setUint32(16,crc,true);ch.setUint32(20,sz,true);ch.setUint32(24,sz,true);ch.setUint16(28,nm.length,true);ch.setUint32(42,off,true);
+    central.push(new Uint8Array(ch.buffer),nm);
+    off+=30+nm.length+sz;
+  }
+  const csz=central.reduce((a,b)=>a+b.length,0);
+  const end=new DataView(new ArrayBuffer(22));
+  end.setUint32(0,0x06054b50,true);end.setUint16(8,files.length,true);end.setUint16(10,files.length,true);end.setUint32(12,csz,true);end.setUint32(16,off,true);
+  return new Blob([...parts,...central,new Uint8Array(end.buffer)],{type:mime});
+}
+const xmlEsc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,'');
+function colName(n){let s='';while(n>0){const m=(n-1)%26;s=String.fromCharCode(65+m)+s;n=Math.floor((n-1)/26)}return s}
+const ref=(r,c)=>colName(c)+r;
+
+function StyleBook(){
+  const fonts=[],fills=['<fill><patternFill patternType="none"/></fill>','<fill><patternFill patternType="gray125"/></fill>'],borders=['<border><left/><right/><top/><bottom/><diagonal/></border>'],xfs=[],cache={};
+  const idx=(a,x)=>{let i=a.indexOf(x);if(i<0){a.push(x);i=a.length-1}return i};
+  const side=(n,s)=>s?`<${n} style="${s[0]}"><color rgb="FF${s[1]}"/></${n}>`:`<${n}/>`;
+  this.get=(o={})=>{
+    const key=JSON.stringify(o);if(key in cache)return cache[key];
+    const f=idx(fonts,`<font>${o.b?'<b/>':''}${o.i?'<i/>':''}<sz val="${o.sz||11}"/><color rgb="FF${o.color||'1F1B1A'}"/><name val="Calibri"/><family val="2"/></font>`);
+    const fi=o.fill?idx(fills,`<fill><patternFill patternType="solid"><fgColor rgb="FF${o.fill}"/><bgColor indexed="64"/></patternFill></fill>`):0;
+    const bo=o.border?idx(borders,`<border>${side('left',o.border.l)}${side('right',o.border.r)}${side('top',o.border.t)}${side('bottom',o.border.b)}<diagonal/></border>`):0;
+    const al=`<alignment horizontal="${o.h||'general'}" vertical="${o.v||'center'}"${o.wrap?' wrapText="1"':''}${o.ind?` indent="${o.ind}"`:''}/>`;
+    const xf=`<xf numFmtId="${o.nf===3?164:(o.nf===2?165:(o.nf||0))}" fontId="${f}" fillId="${fi}" borderId="${bo}" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">${al}</xf>`;
+    xfs.push(xf);return cache[key]=xfs.length-1;
+  };
+  this.get({});
+  this.xml=()=>`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="2"><numFmt numFmtId="164" formatCode="#,##0;-#,##0;&quot;-&quot;"/><numFmt numFmtId="165" formatCode="0.00;-0.00;&quot;-&quot;"/></numFmts><fonts count="${fonts.length}">${fonts.join('')}</fonts><fills count="${fills.length}">${fills.join('')}</fills><borders count="${borders.length}">${borders.join('')}</borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="${xfs.length}">${xfs.join('')}</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+}
+
+function logoPng(){
+  return new Promise(res=>{
+    try{
+      const img=new Image();
+      img.onload=()=>{try{
+        const nw=img.naturalWidth||240,nh=img.naturalHeight||240,sc=Math.min(1,200/Math.max(nw,nh));
+        const w=Math.max(1,Math.round(nw*sc)),h=Math.max(1,Math.round(nh*sc));
+        const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+        const cx=cv.getContext('2d');cx.fillStyle='#fff';cx.fillRect(0,0,w,h);cx.drawImage(img,0,0,w,h);
+        cv.toBlob(b=>{if(!b)return res(null);b.arrayBuffer().then(buf=>res({bytes:new Uint8Array(buf),w,h})).catch(()=>res(null))},'image/png');
+      }catch(e){res(null)}};
+      img.onerror=()=>res(null);img.src=getLogo();
+    }catch(e){res(null)}
+  });
+}
+
+/* Build the order workbook — same layout as the original sheet:
+   Row 1 title + Date, rows 2-3 headers, one row per product, Total row.
+   `fills` = { branchId: order } — only those branches get quantities. */
+async function buildXlsx({date,title,fills,footer=[]}){
+  const B=S.branches,n=B.length,items=S.items;
+  const cNo=1,cDet=2,cPack=3,cB0=4,cTot=4+n,cWt=5+n,last=cWt;
+  const sb=new StyleBook(),rows={},merges=[],heights={};
+  const put=(r,c,x)=>{(rows[r]=rows[r]||{})[c]=x};
+  const thin=['thin','BFBFBF'],box={l:thin,r:thin,t:thin,b:thin};
+  const S_={
+    title:sb.get({b:1,sz:20,color:'C8161D',h:'center',fill:'FFFFFF',border:{b:['medium','C8161D']}}),
+    titleBlank:sb.get({fill:'FFFFFF',border:{b:['medium','C8161D']}}),
+    dlab:sb.get({b:1,sz:13,fill:'F5B80B',h:'center',border:box}),
+    dval:sb.get({b:1,sz:13,h:'center',border:box}),
+    head:sb.get({b:1,sz:13,color:'FFFFFF',fill:'2A2524',h:'center',wrap:1,border:box}),
+    foot:sb.get({b:1,sz:12,fill:'F5B80B',h:'center',nf:3,border:{l:thin,r:thin,t:['medium','1F1B1A'],b:['medium','1F1B1A']}}),
+    footL:sb.get({b:1,sz:12,fill:'F5B80B',h:'left',ind:1,border:{l:thin,r:thin,t:['medium','1F1B1A'],b:['medium','1F1B1A']}}),
+    footW:sb.get({b:1,sz:12,fill:'FFFF00',h:'center',nf:2,border:{l:thin,r:thin,t:['medium','1F1B1A'],b:['medium','1F1B1A']}}),
+    fl:sb.get({b:1,sz:11,color:'6A6562',h:'left'}),
+    fv:sb.get({sz:11,h:'left',wrap:1,v:'top'})
+  };
+  const rowStyle=(on,z)=>{const fill=on?'FFF6DA':(z?'F7F6F5':'FFFFFF');return{
+    no:sb.get({sz:11,color:'6A6562',h:'center',fill,border:box}),
+    det:sb.get({b:1,sz:11,h:'left',ind:1,fill,border:box}),
+    pack:sb.get({sz:11,h:'center',fill,border:box}),
+    q:sb.get({b:1,sz:12,h:'center',fill,nf:1,border:box}),
+    tot:sb.get({b:1,sz:12,h:'center',fill:on?'FBE7A1':fill,nf:3,border:box}),
+    wt:sb.get({sz:11,h:'right',ind:1,fill,nf:2,border:box})};};
+  const str=(r,c,t,s)=>put(r,c,`<c r="${ref(r,c)}" s="${s}" t="inlineStr"><is><t xml:space="preserve">${xmlEsc(t)}</t></is></c>`);
+  const num=(r,c,v,s)=>put(r,c,`<c r="${ref(r,c)}" s="${s}"><v>${v}</v></c>`);
+  const fml=(r,c,f,v,s)=>put(r,c,`<c r="${ref(r,c)}" s="${s}"><f>${f}</f><v>${v}</v></c>`);
+  const blank=(r,c,s)=>put(r,c,`<c r="${ref(r,c)}" s="${s}"/>`);
+
+  // Row 1: title (+logo) and date
+  const titleEnd=Math.max(3,n+1),dLab=titleEnd+1,dFrom=titleEnd+2,dTo=cTot;
+  heights[1]=58;
+  for(let c=1;c<=titleEnd;c++)blank(1,c,S_.titleBlank);
+  str(1,1,title,S_.title);merges.push(`A1:${ref(1,titleEnd)}`);
+  str(1,dLab,'Date',S_.dlab);
+  for(let c=dFrom;c<=dTo;c++)blank(1,c,S_.dval);
+  str(1,dFrom,fmtDate(date),S_.dval);if(dTo>dFrom)merges.push(`${ref(1,dFrom)}:${ref(1,dTo)}`);
+  blank(1,cWt,S_.dval);
+  // Rows 2-3 headers
+  heights[2]=22;heights[3]=22;
+  const heads=['No','Detail','Packing Size (kg)',...B.map(b=>b.name),'Total Pkt','Weight (kg)'];
+  heads.forEach((h,i)=>{str(2,i+1,h,S_.head);blank(3,i+1,S_.head);merges.push(`${ref(2,i+1)}:${ref(3,i+1)}`)});
+  // Items
+  const first=4;let sumP=0,sumW=0;const colSum=B.map(()=>0);
+  items.forEach((it,i)=>{
+    const r=first+i;let p=0;
+    const qs=B.map(b=>{const o=fills[b.id];return o?(o.qty[it.id]||0):0});
+    qs.forEach(q=>p+=q);
+    const on=p>0,st=rowStyle(on,i%2===1);
+    num(r,cNo,i+1,st.no);str(r,cDet,it.name,st.det);num(r,cPack,it.pack,st.pack);
+    B.forEach((b,j)=>{if(qs[j]>0){num(r,cB0+j,qs[j],st.q);colSum[j]+=qs[j]}else blank(r,cB0+j,st.q)});
+    fml(r,cTot,`SUM(${ref(r,cB0)}:${ref(r,cB0+n-1)})`,p,st.tot);
+    const w=r6(p*it.pack);fml(r,cWt,`${ref(r,cPack)}*${ref(r,cTot)}`,w,st.wt);
+    sumP+=p;sumW+=w;
+  });
+  const lastItem=first+items.length-1,tr=lastItem+1;
+  heights[tr]=24;
+  blank(tr,cNo,S_.footL);str(tr,cDet,'TOTAL',S_.footL);blank(tr,cPack,S_.footL);
+  B.forEach((b,j)=>fml(tr,cB0+j,`SUM(${ref(first,cB0+j)}:${ref(lastItem,cB0+j)})`,colSum[j],S_.foot));
+  fml(tr,cTot,`SUM(${ref(tr,cB0)}:${ref(tr,cB0+n-1)})`,sumP,S_.foot);
+  fml(tr,cWt,`SUM(${ref(first,cWt)}:${ref(lastItem,cWt)})`,r6(sumW),S_.footW);
+  // Footer info
+  let fr=tr+2;
+  footer.forEach(([l,v])=>{
+    if(v===''||v==null)return;
+    str(fr,cDet,l,S_.fl);str(fr,cPack,String(v),S_.fv);
+    merges.push(`${ref(fr,cPack)}:${ref(fr,last)}`);
+    for(let c=cPack+1;c<=last;c++)blank(fr,c,S_.fv);
+    if(String(v).length>60||String(v).includes('\n'))heights[fr]=15*Math.min(6,Math.ceil(String(v).length/70)+String(v).split('\n').length-1);
+    fr++;
+  });
+  const lastRow=fr-1;
+
+  const logo=await logoPng();
+  const rowsXml=Object.keys(rows).map(Number).sort((a,b)=>a-b).map(r=>{
+    const cells=Object.keys(rows[r]).map(Number).sort((a,b)=>a-b).map(c=>rows[r][c]).join('');
+    return `<row r="${r}"${heights[r]?` ht="${heights[r]}" customHeight="1"`:''}>${cells}</row>`;
+  }).join('');
+  const widths=[6,32,12,...B.map(()=>13),12,13];
+  const cols=widths.map((w,i)=>`<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join('');
+  const sheet=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:${ref(lastRow,last)}"/><sheetViews><sheetView workbookViewId="0" showGridLines="0"><pane xSplit="3" ySplit="3" topLeftCell="D4" activePane="bottomRight" state="frozen"/><selection pane="topRight"/><selection pane="bottomLeft"/><selection pane="bottomRight" activeCell="D4" sqref="D4"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="18"/><cols>${cols}</cols><sheetData>${rowsXml}</sheetData><mergeCells count="${merges.length}">${merges.map(m=>`<mergeCell ref="${m}"/>`).join('')}</mergeCells><printOptions horizontalCentered="1"/><pageMargins left="0.4" right="0.4" top="0.5" bottom="0.6" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="portrait" fitToWidth="1" fitToHeight="0"/><headerFooter><oddFooter>&amp;L${xmlEsc(S.brand)} – ${xmlEsc(fmtDate(date))}&amp;RPage &amp;P of &amp;N</oddFooter></headerFooter>${logo?'<drawing r:id="rId1"/>':''}</worksheet>`;
+
+  const files=[
+    {name:'[Content_Types].xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>${logo?'<Default Extension="png" ContentType="image/png"/>':''}<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${logo?'<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>':''}</Types>`},
+    {name:'_rels/.rels',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`},
+    {name:'xl/workbook.xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView/></bookViews><sheets><sheet name="Order" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm.Print_Titles" localSheetId="0">Order!$1:$3</definedName></definedNames><calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>`},
+    {name:'xl/_rels/workbook.xml.rels',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`},
+    {name:'xl/styles.xml',data:sb.xml()},
+    {name:'xl/worksheets/sheet1.xml',data:sheet}
+  ];
+  if(logo){
+    const H=62*9525,W=Math.round(H*logo.w/logo.h);
+    files.push({name:'xl/worksheets/_rels/sheet1.xml.rels',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>`});
+    files.push({name:'xl/drawings/drawing1.xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><xdr:oneCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>57150</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>38100</xdr:rowOff></xdr:from><xdr:ext cx="${W}" cy="${H}"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="2" name="Logo" descr="${xmlEsc(S.brand)} logo"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr><xdr:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${W}" cy="${H}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor></xdr:wsDr>`});
+    files.push({name:'xl/drawings/_rels/drawing1.xml.rels',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/></Relationships>`});
+    files.push({name:'xl/media/image1.png',data:logo.bytes});
+  }
+  return zipStore(files,XL_MIME);
+}
+
+/* =====================================================================
+   MESSAGES + SHARING
+   ===================================================================== */
+function orderMessage(date,branch,o){
+  const t=totals(o),L=[];
+  L.push(`⭐ *${S.brand} – Order*`);
+  L.push(`Branch: *${branch.name}*`);
+  L.push(`Date: ${fmtDate(date)}`);
+  if(o.by)L.push(`Ordered by: ${o.by}`);
+  L.push('');
+  S.items.forEach((it,i)=>{const q=o.qty[it.id]||0;if(q>0)L.push(`${i+1}. ${it.name} – ${q}`)});
+  L.push('');
+  L.push(`*Total: ${t.p} pkt*`);
+  if(o.note)L.push('',`Note: ${o.note}`);
+  return L.join('\n');
+}
+function masterData(date){
+  const inc=o=>o&&(o.status==='done'||ui.mdraft)&&totals(o).p>0;
+  const fills={};S.branches.forEach(b=>{const o=getOrder(date,b.id);if(inc(o))fills[b.id]=o});
+  return fills;
+}
+function masterMessage(date){
+  const fills=masterData(date),L=[];
+  L.push(`⭐ *${S.brand} – Consolidated Order*`);
+  L.push(`Date: ${fmtDate(date)}`);
+  L.push('Branches: '+(S.branches.filter(b=>fills[b.id]).map(b=>b.name).join(', ')||'none'));
+  L.push('');
+  let P=0,W=0;
+  S.items.forEach((it,i)=>{
+    const parts=[];let p=0;
+    S.branches.forEach(b=>{const q=fills[b.id]?.qty[it.id]||0;if(q>0){p+=q;parts.push(`${b.name} ${q}`)}});
+    if(p>0){L.push(`${i+1}. ${it.name} – ${p} pkt (${fmtW(p*it.pack)} kg)`);L.push(`    ${parts.join(' · ')}`);P+=p;W+=p*it.pack}
+  });
+  L.push('');L.push(`*Total: ${P} pkt | ${fmtW(r6(W))} kg*`);
+  return L.join('\n');
+}
+function orderFileObject(date,branch,o){
+  return {type:'starchicken-order',v:1,date,branch:{id:branch.id,name:branch.name},by:o.by,note:o.note,status:o.status,completedAt:o.completedAt,
+    items:S.items.filter(it=>(o.qty[it.id]||0)>0).map(it=>({id:it.id,name:it.name,pack:it.pack,qty:o.qty[it.id]}))};
+}
+function download(blob,name){
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500);
+}
+function openWA(text){
+  const num=(S.settings.wa||'').replace(/\D/g,'');
+  window.open(`https://wa.me/${num}?text=${encodeURIComponent(text)}`,'_blank','noopener');
+}
+async function copyText(text){
+  try{await navigator.clipboard.writeText(text);toast('Message copied','ok')}
+  catch(e){const ta=$('.msg');if(ta){ta.select();document.execCommand('copy');toast('Message copied','ok')}}
+}
+const canShareFiles=f=>!!(navigator.share&&navigator.canShare&&navigator.canShare({files:[f]}));
+
+function openShare({title,subtitle,stats,message,fileName,makeBlob,jsonObj,jsonName,simple}){
+  const blobP=makeBlob();blobP.catch(()=>{});
+  const node=document.createElement('div');
+  const buttons=simple
+    ?`<button type="button" class="btn pri" data-a="wa">${ICON.wa}WhatsApp message</button>
+      <button type="button" class="btn" data-a="copy">${ICON.copy}Copy message</button>
+      <button type="button" class="btn" data-a="xl">${ICON.file}Excel file</button>`
+    :`<button type="button" class="btn pri wide" data-a="all">${ICON.share}Share message + Excel</button>
+      <button type="button" class="btn" data-a="wa">${ICON.wa}WhatsApp message</button>
+      <button type="button" class="btn" data-a="xl">${ICON.file}Excel file</button>
+      <button type="button" class="btn" data-a="copy">${ICON.copy}Copy message</button>
+      ${jsonObj?`<button type="button" class="btn" data-a="json">${ICON.dl}Order file (.json)</button>`:''}`;
+  const hint=simple
+    ?`<p class="hint">WhatsApp message opens the chat with the order text. Excel downloads the full sheet. Copy puts the message on the clipboard.</p>`
+    :`<p class="hint">On a phone, “Share message + Excel” opens your share menu (WhatsApp, Email, …). On a computer the Excel file downloads and the message opens in WhatsApp.</p>`;
+  node.innerHTML=`
+    <div class="sumline">${stats.map(s=>`<div><span>${esc(s[0])}</span><b>${esc(s[1])}</b></div>`).join('')}</div>
+    <label class="f">Message preview<textarea class="msg" readonly rows="9"></textarea></label>
+    <div class="sharegrid">${buttons}</div>
+    ${hint}`;
+  $('.msg',node).value=message;
+  node.addEventListener('click',async e=>{
+    const b=e.target.closest('button[data-a]');if(!b)return;
+    const a=b.dataset.a;
+    try{
+      if(a==='copy')return copyText(message);
+      if(a==='wa')return openWA(message);
+      if(a==='json'){download(new Blob([JSON.stringify(jsonObj,null,1)],{type:'application/json'}),jsonName);return toast('Order file downloaded','ok')}
+      const blob=await blobP,file=new File([blob],fileName,{type:XL_MIME});
+      if(a==='xl'){
+        if(canShareFiles(file)){try{await navigator.share({files:[file],title});return}catch(err){if(err.name==='AbortError')return}}
+        download(blob,fileName);return toast('Excel file downloaded','ok');
+      }
+      if(a==='all'){
+        if(canShareFiles(file)){try{await navigator.share({files:[file],text:message,title});return}catch(err){if(err.name==='AbortError')return}}
+        download(blob,fileName);openWA(message);toast('Excel downloaded — attach it to the chat','ok');
+      }
+    }catch(err){console.error(err);toast('Could not complete that action','err')}
+  });
+  openModal({title,node,actions:[{label:'Close'}]});
+}
+
+function shareBranchOrder(date,bid){
+  const branch=branchById(bid),o=getOrder(date,bid);if(!branch||!o)return;
+  const t=totals(o),done=o.status==='done';
+  const fname=`StarChicken_Order_${slug(branch.name)}_${date}.xlsx`;
+  openShare({
+    title:`Share order – ${branch.name}`,
+    stats:[['Branch',branch.name],['Date',fmtDate(date)],['Total Pkt',t.p],['Weight',fmtW(t.w)+' kg']],
+    message:orderMessage(date,branch,o),fileName:fname,
+    makeBlob:()=>buildXlsx({date,title:`${S.brand} Shops Order – ${branch.name}`,fills:{[bid]:o},footer:[
+      ['Branch',branch.name],['Ordered by',o.by],['Status',done?'Completed '+fmtTime(o.completedAt):'In progress (not completed)'],['Note',o.note]]}),
+    simple:true
+  });
+}
+function shareMaster(){
+  const date=ui.mdate,fills=masterData(date),ids=Object.keys(fills);
+  if(!ids.length)return toast('No orders to share for this date','err');
+  let P=0,W=0;ids.forEach(id=>{const t=totals(fills[id]);P+=t.p;W+=t.w});
+  openShare({
+    title:'Share master sheet',
+    stats:[['Date',fmtDate(date)],['Branches',ids.length],['Total Pkt',P],['Weight',fmtW(r6(W))+' kg']],
+    message:masterMessage(date),fileName:`StarChicken_MasterOrder_${date}.xlsx`,
+    makeBlob:()=>buildXlsx({date,title:`${S.brand} Shops Order`,fills,footer:[
+      ['Branches',S.branches.map(b=>b.name+(fills[b.id]?(getOrder(date,b.id).status==='done'?' ✓':' (in progress)'):' – no order')).join(', ')]]})
+  });
+}
+
+/* =====================================================================
+   VIEW: BRANCH ORDER
+   ===================================================================== */
+function renderChips(){
+  $('#chips').innerHTML=S.branches.map(b=>{
+    const st=statusOf(getOrder(ui.date,b.id));
+    return `<button type="button" class="chip${b.id===ui.branch?' sel':''}" data-b="${esc(b.id)}" aria-pressed="${b.id===ui.branch}"><i class="dot ${st}"></i>${esc(b.name)}</button>`;
+  }).join('');
+}
+function renderBanner(){
+  const o=getOrder(ui.date,ui.branch),br=branchById(ui.branch);
+  const el=$('#banner');
+  if(o?.status==='done'){
+    el.innerHTML=`<div class="notice ok"><span>${ICON.check.replace('<svg','<svg width="18" height="18" style="vertical-align:-3px;margin-right:6px"')}<b>Order completed</b> – ${esc(br?.name||'')} · ${fmtTime(o.completedAt)}. It is locked; tap <b>Edit order</b> to change it.</span></div>`;
+  }else el.innerHTML='';
+}
+function rowHTML(it,i,q,locked){
+  const w=fmtW(q*it.pack);
+  return `<div class="row${q>0?' on':''}" data-id="${esc(it.id)}">
+    <div class="no">${i+1}</div>
+    <div class="nm"><b>${esc(it.name)}</b><small>Pack ${fmt(it.pack)} kg<span class="mres">${q>0?` · ${w} kg`:''}</span></small></div>
+    <div class="stepper"><button type="button" data-a="dec" aria-label="Decrease ${esc(it.name)}" ${locked?'disabled':''}>&minus;</button><input type="number" inputmode="numeric" min="0" max="9999" step="1" value="${q>0?q:''}" placeholder="0" aria-label="Packets of ${esc(it.name)}" ${locked?'disabled':''}><button type="button" data-a="inc" aria-label="Increase ${esc(it.name)}" ${locked?'disabled':''}>+</button></div>
+    <div class="dres">${q>0?w+' kg':''}</div></div>`;
+}
+function renderList(){
+  const o=getOrder(ui.date,ui.branch),locked=o?.status==='done',q=norm(ui.search);
+  let html='';
+  S.items.forEach((it,i)=>{
+    const qty=o?.qty[it.id]||0;
+    if(q&&!norm(it.name).includes(q))return;
+    if(ui.only&&!qty)return;
+    html+=rowHTML(it,i,qty,locked);
+  });
+  $('#olist').innerHTML=html;
+  $('#oempty').hidden=!!html;
+  $('#oempty').textContent=ui.only&&!q?'Nothing ordered yet — add quantities above.':'No products match your search.';
+}
+function renderBar(){
+  const o=getOrder(ui.date,ui.branch),t=totals(o),done=o?.status==='done';
+  $('#ti').textContent=t.n;$('#tp').textContent=t.p;$('#tw').innerHTML=`${fmtW(t.w)} <small>kg</small>`;
+  const acts=$('#oacts');
+  acts.innerHTML=done
+    ?`<button type="button" class="btn" data-a="edit">${ICON.edit}Edit order</button><button type="button" class="btn pri" data-a="share">${ICON.share}Share</button>`
+    :`<button type="button" class="btn danger" data-a="clear" ${t.p?'':'disabled'}>Clear</button><button type="button" class="btn pri" data-a="complete" ${t.p?'':'disabled'}>${ICON.check}Complete order</button>`;
+}
+function renderOrderControls(){
+  $('#odate').value=ui.date;
+  const o=getOrder(ui.date,ui.branch),done=o?.status==='done';
+  $('#oby').value=o?.by||'';$('#oby').disabled=!!done;
+}
+function renderOrder(){renderChips();renderOrderControls();renderBanner();renderList();renderBar()}
+
+function setQty(id,val){
+  const o0=getOrder(ui.date,ui.branch);if(o0?.status==='done')return;
+  let n=Math.floor(+val);if(!(n>0))n=0;n=Math.min(n,9999);
+  const o=ensureOrder(ui.date,ui.branch);const before=statusOf(o);
+  if(n>0)o.qty[id]=n;else delete o.qty[id];
+  o.updated=Date.now();
+  const it=S.items.find(x=>x.id===id),row=$(`#olist .row[data-id="${CSS.escape(id)}"]`);
+  if(row&&it){
+    row.classList.toggle('on',n>0);
+    const w=fmtW(n*it.pack);
+    $('.dres',row).textContent=n>0?w+' kg':'';
+    $('.mres',row).textContent=n>0?` · ${w} kg`:'';
+    if(ui.only&&n===0&&document.activeElement===$('input',row)){/* keep row while editing */}
+  }
+  renderBar();
+  if(statusOf(o)!==before)renderChips();
+  save();
+}
+
+$('#chips').addEventListener('click',e=>{
+  const b=e.target.closest('.chip');if(!b)return;
+  ui.branch=b.dataset.b;S.ui.branch=ui.branch;save();renderOrder();
+});
+$('#odate').addEventListener('change',e=>{if(e.target.value){ui.date=e.target.value;renderOrder()}});
+$('#oby').addEventListener('input',e=>{const o=ensureOrder(ui.date,ui.branch);o.by=e.target.value;o.updated=Date.now();save()});
+$('#osearch').addEventListener('input',e=>{ui.search=e.target.value;renderList()});
+$('#oonly').addEventListener('change',e=>{ui.only=e.target.checked;renderList()});
+$('#olist').addEventListener('click',e=>{
+  const b=e.target.closest('button[data-a]');if(!b||b.disabled)return;
+  const row=b.closest('.row'),inp=$('input',row),cur=Math.floor(+inp.value)||0;
+  const v=b.dataset.a==='inc'?cur+1:Math.max(0,cur-1);
+  inp.value=v>0?v:'';setQty(row.dataset.id,v);
+});
+$('#olist').addEventListener('input',e=>{
+  if(e.target.tagName!=='INPUT')return;
+  const row=e.target.closest('.row');
+  let v=e.target.value.replace(/[^\d]/g,'');
+  if(v!==e.target.value&&e.target.type!=='number')e.target.value=v;
+  setQty(row.dataset.id,v);
+});
+$('#olist').addEventListener('focusin',e=>{if(e.target.tagName==='INPUT')setTimeout(()=>e.target.select&&e.target.select(),0)});
+$('#olist').addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&e.target.tagName==='INPUT'){
+    e.preventDefault();const rows=$$('#olist .row input:not(:disabled)'),i=rows.indexOf(e.target);if(rows[i+1])rows[i+1].focus();else e.target.blur();
+  }
+});
+$('#olist').addEventListener('change',e=>{ if(ui.only)renderList() });
+
+$('#oacts').addEventListener('click',async e=>{
+  const b=e.target.closest('button[data-a]');if(!b||b.disabled)return;
+  const a=b.dataset.a,o=getOrder(ui.date,ui.branch);
+  if(a==='clear'){
+    if(await confirmBox({title:'Clear this order?',msg:'All quantities entered for this branch and date will be removed.',ok:'Clear order',danger:true})){
+      o.qty={};o.updated=Date.now();save();renderOrder();toast('Order cleared');
+    }
+  }
+  if(a==='edit'){
+    if(await confirmBox({title:'Edit completed order?',msg:'The order will be re-opened. Remember to complete and share it again so head office gets the updated quantities.',ok:'Edit order'})){
+      o.status='draft';o.updated=Date.now();save();renderOrder();
+    }
+  }
+  if(a==='share')shareBranchOrder(ui.date,ui.branch);
+  if(a==='complete')completeFlow();
+});
+
+function completeFlow(){
+  const o=getOrder(ui.date,ui.branch),br=branchById(ui.branch),t=totals(o);
+  if(!o||t.p<1)return toast('Add at least one product first','err');
+  const rows=S.items.map((it,i)=>({it,i,q:o.qty[it.id]||0})).filter(r=>r.q>0);
+  const node=document.createElement('div');
+  node.innerHTML=`
+    <p style="margin-bottom:10px"><b>${esc(br.name)}</b> · ${fmtDate(ui.date)}</p>
+    <div class="revwrap"><table class="rev"><thead><tr><th>No</th><th>Detail</th><th>Pkt</th><th>Weight</th></tr></thead>
+    <tbody>${rows.map(r=>`<tr><td>${r.i+1}</td><td>${esc(r.it.name)}</td><td>${r.q}</td><td>${fmtW(r.q*r.it.pack)} kg</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td></td><td>Total (${t.n} items)</td><td>${t.p}</td><td>${fmtW(t.w)} kg</td></tr></tfoot></table></div>
+    <label class="f">Ordered by<input type="text" id="cfBy" maxlength="40" placeholder="Your name"></label>
+    <label class="f" style="margin-top:10px">Note for head office (optional)<textarea id="cfNote" rows="2" maxlength="300" placeholder="e.g. urgent delivery before 10 am"></textarea></label>`;
+  $('#cfBy',node).value=o.by||'';$('#cfNote',node).value=o.note||'';
+  openModal({title:'Review & complete order',node,actions:[
+    {label:'Back to order'},
+    {label:ICON.check+'Complete & share',cls:'pri',fn:()=>{
+      o.by=$('#cfBy',node).value.trim();o.note=$('#cfNote',node).value.trim();
+      o.status='done';o.completedAt=Date.now();o.updated=o.completedAt;
+      save(true);snapshot('Order completed – '+br.name);
+      renderOrder();toast('Order completed','ok');
+      setTimeout(()=>shareBranchOrder(ui.date,ui.branch),60);
+    }}]});
+}
+
+/* =====================================================================
+   VIEW: MASTER
+   ===================================================================== */
+function renderMaster(){
+  const date=ui.mdate;$('#mdate').value=date;
+  $('#mstat').innerHTML=S.branches.map(b=>{
+    const o=getOrder(date,b.id),st=statusOf(o),t=totals(o);
+    return `<span class="chip" style="cursor:default"><i class="dot ${st}"></i>${esc(b.name)}${t.p?` <span class="hint">· ${t.p} pkt</span>`:''}</span>`;
+  }).join('');
+  const dates=Object.keys(S.orders).filter(d=>Object.values(S.orders[d]).some(o=>totals(o).p>0)).sort().reverse().slice(0,8);
+  $('#mdates').innerHTML=dates.length?'Recent order dates: '+dates.map(d=>`<a href="#" data-d="${d}" style="color:var(--red);font-weight:600;margin-right:10px">${fmtDate(d)}</a>`).join(''):'No orders saved yet.';
+  const fills=masterData(date),B=S.branches;
+  const rows=S.items.map((it,i)=>{
+    const qs=B.map(b=>fills[b.id]?.qty[it.id]||0),p=qs.reduce((a,b)=>a+b,0);
+    return {it,i,qs,p,w:r6(p*it.pack)};
+  });
+  const shown=rows.filter(r=>!ui.monly||r.p>0);
+  const colT=B.map((b,j)=>rows.reduce((a,r)=>a+r.qs[j],0)),P=colT.reduce((a,b)=>a+b,0),W=r6(rows.reduce((a,r)=>a+r.w,0));
+  $('#msub').textContent=`${fmtDate(date)} · ${Object.keys(fills).length} branch${Object.keys(fills).length===1?'':'es'} · ${P} pkt · ${fmtW(W)} kg`;
+  $('#phTitle').textContent=`${S.brand} Shops Order – ${fmtDate(date)}`;
+  $('#mwrap').innerHTML=`<table class="mt"><thead><tr><th>No</th><th class="l">Detail</th><th>Packing<br>Size</th>${B.map(b=>`<th>${esc(b.name)}</th>`).join('')}<th>Total Pkt</th><th>Weight</th></tr></thead>
+  <tbody>${shown.map(r=>`<tr class="${r.p?'on':''}"><td>${r.i+1}</td><td class="l dt">${esc(r.it.name)}</td><td>${fmt(r.it.pack)}</td>${r.qs.map(q=>`<td class="${q?'':'z'}">${q||'·'}</td>`).join('')}<td class="tot">${r.p||'·'}</td><td>${r.p?fmtW(r.w):'·'}</td></tr>`).join('')||`<tr><td colspan="${B.length+5}" class="empty">No ${ui.mdraft?'':'completed '}orders for this date yet.</td></tr>`}</tbody>
+  <tfoot><tr><td></td><td class="l">TOTAL</td><td></td>${colT.map(c=>`<td>${c}</td>`).join('')}<td>${P}</td><td>${fmtW(W)}</td></tr></tfoot></table>`;
+}
+$('#mdate').addEventListener('change',e=>{if(e.target.value){ui.mdate=e.target.value;renderMaster()}});
+$('#monly').addEventListener('change',e=>{ui.monly=e.target.checked;renderMaster()});
+$('#mdraft').addEventListener('change',e=>{ui.mdraft=e.target.checked;renderMaster()});
+$('#mdates').addEventListener('click',e=>{const a=e.target.closest('a[data-d]');if(a){e.preventDefault();ui.mdate=a.dataset.d;renderMaster()}});
+$('#mShare').onclick=shareMaster;
+$('#mXlsx').onclick=async()=>{
+  const fills=masterData(ui.mdate);if(!Object.keys(fills).length)return toast('No orders for this date','err');
+  try{download(await buildXlsx({date:ui.mdate,title:`${S.brand} Shops Order`,fills,footer:[['Branches',S.branches.map(b=>b.name+(fills[b.id]?'':' – no order')).join(', ')]]}),`StarChicken_MasterOrder_${ui.mdate}.xlsx`);toast('Excel file downloaded','ok')}
+  catch(e){console.error(e);toast('Could not create Excel file','err')}
+};
+$('#mPrint').onclick=()=>window.print();
+
+/* ---------- Multi-date order summary ---------- */
+function allOrderDates(){
+  return Object.keys(S.orders).filter(d=>Object.values(S.orders[d]).some(o=>totals(o).p>0)).sort();
+}
+function selectedSumDates(){
+  return $$('#sumDateList input[type=checkbox]:checked').map(c=>c.value).sort();
+}
+function renderSummary(){
+  const dates=allOrderDates();
+  if(!$('#sumFrom').value&&dates.length){$('#sumFrom').value=dates[0];$('#sumTo').value=dates[dates.length-1]}
+  const from=$('#sumFrom').value||'0000-01-01',to=$('#sumTo').value||'9999-12-31';
+  const inRange=dates.filter(d=>d>=from&&d<=to);
+  const prev=new Set(selectedSumDates());
+  $('#sumDateList').innerHTML=inRange.length?inRange.map(d=>{
+    const checked=prev.size?prev.has(d):true;
+    return `<label class="chip" style="cursor:pointer"><input type="checkbox" value="${d}" ${checked?'checked':''} style="width:16px;height:16px;accent-color:var(--red)"> ${fmtDate(d)}</label>`;
+  }).join(''):'<span class="hint">No orders in this date range.</span>';
+  const sel=selectedSumDates(),B=S.branches;
+  if(!sel.length){
+    $('#sumWrap').innerHTML='<div class="empty">Select at least one date.</div>';
+    return;
+  }
+  // Day summary rows
+  const dayRows=[];
+  let grandP=0,grandW=0;
+  sel.forEach(date=>{
+    const fills=masterData(date);
+    let p=0,w=0,br=0;
+    B.forEach(b=>{const o=fills[b.id];if(o){const t=totals(o);if(t.p){p+=t.p;w+=t.w;br++}}});
+    grandP+=p;grandW+=w;
+    dayRows.push({date,br,p,w:r6(w)});
+  });
+  // Product totals across selected dates
+  const prodRows=S.items.map((it,i)=>{
+    let p=0;
+    const byDate=[];
+    sel.forEach(date=>{
+      const fills=masterData(date);
+      let q=0;B.forEach(b=>{q+=fills[b.id]?.qty[it.id]||0});
+      if(q)byDate.push(`${fmtDate(date)}: ${q}`);
+      p+=q;
+    });
+    return {it,i,p,w:r6(p*it.pack),byDate};
+  }).filter(r=>r.p>0);
+  $('#sumWrap').innerHTML=`
+    <table class="mt" style="min-width:520px"><thead><tr><th class="l">Date</th><th>Branches</th><th>Total Pkt</th><th>Weight</th></tr></thead>
+    <tbody>${dayRows.map(r=>`<tr class="on"><td class="l dt">${fmtDate(r.date)}</td><td>${r.br}</td><td class="tot">${r.p}</td><td>${fmtW(r.w)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td class="l">TOTAL (${sel.length} day${sel.length===1?'':'s'})</td><td></td><td>${grandP}</td><td>${fmtW(r6(grandW))}</td></tr></tfoot></table>
+    <h3 style="margin:16px 0 8px;font-size:15px">Product totals (selected dates)</h3>
+    <table class="mt" style="min-width:560px"><thead><tr><th>No</th><th class="l">Detail</th><th>Pack</th><th>Total Pkt</th><th>Weight</th></tr></thead>
+    <tbody>${prodRows.map(r=>`<tr class="on"><td>${r.i+1}</td><td class="l dt">${esc(r.it.name)}</td><td>${fmt(r.it.pack)}</td><td class="tot">${r.p}</td><td>${fmtW(r.w)}</td></tr>`).join('')||'<tr><td colspan="5" class="empty">No products ordered.</td></tr>'}</tbody>
+    <tfoot><tr><td></td><td class="l">TOTAL</td><td></td><td>${prodRows.reduce((a,r)=>a+r.p,0)}</td><td>${fmtW(r6(prodRows.reduce((a,r)=>a+r.w,0)))}</td></tr></tfoot></table>`;
+}
+async function buildMultiDateXlsx(dates){
+  const B=S.branches,n=B.length,items=S.items;
+  const sb=new StyleBook();
+  const thin=['thin','BFBFBF'],box={l:thin,r:thin,t:thin,b:thin};
+  const S_={
+    title:sb.get({b:1,sz:16,color:'C8161D',h:'center',fill:'FFFFFF'}),
+    head:sb.get({b:1,sz:11,color:'FFFFFF',fill:'2A2524',h:'center',wrap:1,border:box}),
+    foot:sb.get({b:1,sz:11,fill:'F5B80B',h:'center',nf:3,border:box}),
+    footL:sb.get({b:1,sz:11,fill:'F5B80B',h:'left',ind:1,border:box}),
+    footW:sb.get({b:1,sz:11,fill:'FFFF00',h:'center',nf:2,border:box}),
+    cell:sb.get({sz:11,h:'center',border:box}),
+    cellL:sb.get({b:1,sz:11,h:'left',ind:1,border:box}),
+    cellOn:sb.get({b:1,sz:11,h:'center',fill:'FFF6DA',nf:1,border:box}),
+    cellOnL:sb.get({b:1,sz:11,h:'left',ind:1,fill:'FFF6DA',border:box}),
+    muted:sb.get({sz:11,color:'6A6562',h:'center',border:box})
+  };
+  const str=(rows,r,c,t,s)=>{(rows[r]=rows[r]||{})[c]=`<c r="${ref(r,c)}" s="${s}" t="inlineStr"><is><t xml:space="preserve">${xmlEsc(t)}</t></is></c>`};
+  const num=(rows,r,c,v,s)=>{(rows[r]=rows[r]||{})[c]=`<c r="${ref(r,c)}" s="${s}"><v>${v}</v></c>`};
+  const blank=(rows,r,c,s)=>{(rows[r]=rows[r]||{})[c]=`<c r="${ref(r,c)}" s="${s}"/>`};
+  const rowsToXml=rows=>{
+    return Object.keys(rows).map(Number).sort((a,b)=>a-b).map(r=>{
+      const cells=Object.keys(rows[r]).map(Number).sort((a,b)=>a-b).map(c=>rows[r][c]).join('');
+      return `<row r="${r}">${cells}</row>`;
+    }).join('');
+  };
+  const sheetXml=(rows,lastR,lastC,freeze)=>{
+    const cols=Array.from({length:lastC},(_,i)=>`<col min="${i+1}" max="${i+1}" width="${i===1?28:12}" customWidth="1"/>`).join('');
+    const view=freeze
+      ?`<sheetView workbookViewId="0"><pane ySplit="${freeze}" topLeftCell="A${freeze+1}" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft"/></sheetView>`
+      :`<sheetView workbookViewId="0"/>`;
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:${ref(lastR,lastC)}"/><sheetViews>${view}</sheetViews><sheetFormatPr defaultRowHeight="18"/><cols>${cols}</cols><sheetData>${rowsToXml(rows)}</sheetData><pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5"/></worksheet>`;
+  };
+
+  // --- Summary sheet ---
+  const sumRows={};let sr=1;
+  str(sumRows,sr,1,`${S.brand} – Order Summary`,S_.title);
+  sr=2;str(sumRows,sr,1,`Dates: ${dates.map(fmtDate).join(', ')}`,S_.cellL);
+  sr=4;
+  ['Date','Branches','Total Pkt','Weight (kg)'].forEach((h,i)=>str(sumRows,sr,i+1,h,S_.head));
+  let gP=0,gW=0;const dayData=[];
+  dates.forEach(date=>{
+    const fills=masterData(date);let p=0,w=0,br=0;
+    B.forEach(b=>{const o=fills[b.id];if(o){const t=totals(o);if(t.p){p+=t.p;w+=t.w;br++}}});
+    gP+=p;gW+=w;dayData.push({date,fills,p,w:r6(w),br});
+  });
+  dayData.forEach((d,i)=>{
+    const r=sr+1+i;
+    str(sumRows,r,1,fmtDate(d.date),S_.cellOnL);num(sumRows,r,2,d.br,S_.cellOn);num(sumRows,r,3,d.p,S_.cellOn);num(sumRows,r,4,d.w,S_.footW);
+  });
+  const sumTotR=sr+1+dayData.length;
+  str(sumRows,sumTotR,1,'TOTAL',S_.footL);blank(sumRows,sumTotR,2,S_.foot);num(sumRows,sumTotR,3,gP,S_.foot);num(sumRows,sumTotR,4,r6(gW),S_.footW);
+  // Product totals on summary
+  let pr=sumTotR+2;
+  str(sumRows,pr,1,'Product totals (all selected dates)',S_.title);pr++;
+  ['No','Detail','Pack kg','Total Pkt','Weight (kg)'].forEach((h,i)=>str(sumRows,pr,i+1,h,S_.head));
+  const pStart=pr+1;let pIdx=0,pSum=0,wSum=0;
+  items.forEach((it,i)=>{
+    let p=0;dates.forEach(date=>{const fills=masterData(date);B.forEach(b=>{p+=fills[b.id]?.qty[it.id]||0})});
+    if(!p)return;
+    const r=pStart+pIdx;pIdx++;
+    num(sumRows,r,1,i+1,S_.muted);str(sumRows,r,2,it.name,S_.cellOnL);num(sumRows,r,3,it.pack,S_.cell);num(sumRows,r,4,p,S_.cellOn);num(sumRows,r,5,r6(p*it.pack),S_.cell);
+    pSum+=p;wSum+=p*it.pack;
+  });
+  const pEnd=pStart+Math.max(pIdx,1)-1;
+  const pTot=pEnd+1;
+  if(pIdx){str(sumRows,pTot,2,'TOTAL',S_.footL);num(sumRows,pTot,4,pSum,S_.foot);num(sumRows,pTot,5,r6(wSum),S_.footW)}
+  const sumLast=Math.max(pTot,sumTotR);
+  const sheets=[{name:'Summary',xml:sheetXml(sumRows,sumLast,5,4)}];
+
+  // --- One sheet per date (master layout) ---
+  dates.forEach((date,di)=>{
+    const fills=masterData(date),rows={};
+    const cNo=1,cDet=2,cPack=3,cB0=4,cTot=4+n,cWt=5+n,last=cWt;
+    str(rows,1,1,`${S.brand} Shops Order – ${fmtDate(date)}`,S_.title);
+    const heads=['No','Detail','Packing Size (kg)',...B.map(b=>b.name),'Total Pkt','Weight (kg)'];
+    heads.forEach((h,i)=>str(rows,2,i+1,h,S_.head));
+    let sumP=0,sumW=0;const colSum=B.map(()=>0);
+    items.forEach((it,i)=>{
+      const r=3+i;let p=0;
+      const qs=B.map(b=>fills[b.id]?.qty[it.id]||0);
+      qs.forEach(q=>p+=q);
+      const on=p>0;
+      num(rows,r,cNo,i+1,on?S_.cellOn:S_.muted);
+      str(rows,r,cDet,it.name,on?S_.cellOnL:S_.cellL);
+      num(rows,r,cPack,it.pack,on?S_.cellOn:S_.cell);
+      B.forEach((b,j)=>{if(qs[j]>0){num(rows,r,cB0+j,qs[j],S_.cellOn);colSum[j]+=qs[j]}else blank(rows,r,cB0+j,S_.cell)});
+      if(p){num(rows,r,cTot,p,S_.cellOn);num(rows,r,cWt,r6(p*it.pack),S_.cell);sumP+=p;sumW+=p*it.pack}
+      else{blank(rows,r,cTot,S_.cell);blank(rows,r,cWt,S_.cell)}
+    });
+    const tr=3+items.length;
+    str(rows,tr,cDet,'TOTAL',S_.footL);
+    B.forEach((b,j)=>num(rows,tr,cB0+j,colSum[j],S_.foot));
+    num(rows,tr,cTot,sumP,S_.foot);num(rows,tr,cWt,r6(sumW),S_.footW);
+    const safeName=fmtDate(date).replace(/[\\/*?:[\]]/g,'-').slice(0,28)||`Day${di+1}`;
+    sheets.push({name:safeName,xml:sheetXml(rows,tr,last,2)});
+  });
+
+  // Package workbook
+  const sheetOverrides=sheets.map((_,i)=>`<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('');
+  const sheetEntries=sheets.map((s,i)=>`<sheet name="${xmlEsc(s.name)}" sheetId="${i+1}" r:id="rId${i+1}"/>`).join('');
+  const sheetRels=sheets.map((_,i)=>`<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i+1}.xml"/>`).join('')
+    +`<Relationship Id="rId${sheets.length+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>`;
+  const files=[
+    {name:'[Content_Types].xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${sheetOverrides}<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`},
+    {name:'_rels/.rels',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`},
+    {name:'xl/workbook.xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sheetEntries}</sheets><calcPr fullCalcOnLoad="1"/></workbook>`},
+    {name:'xl/_rels/workbook.xml.rels',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheetRels}</Relationships>`},
+    {name:'xl/styles.xml',data:sb.xml()},
+    ...sheets.map((s,i)=>({name:`xl/worksheets/sheet${i+1}.xml`,data:s.xml}))
+  ];
+  return zipStore(files,XL_MIME);
+}
+
+$('#sumFrom').addEventListener('change',renderSummary);
+$('#sumTo').addEventListener('change',renderSummary);
+$('#sumDateList').addEventListener('change',renderSummary);
+$('#sumAll').onclick=()=>{$$('#sumDateList input[type=checkbox]').forEach(c=>c.checked=true);renderSummary()};
+$('#sumNone').onclick=()=>{$$('#sumDateList input[type=checkbox]').forEach(c=>c.checked=false);renderSummary()};
+$('#sumXlsx').onclick=async()=>{
+  const dates=selectedSumDates();
+  if(!dates.length)return toast('Select at least one date','err');
+  try{
+    const blob=await buildMultiDateXlsx(dates);
+    const name=dates.length===1?`StarChicken_MasterOrder_${dates[0]}.xlsx`:`StarChicken_Summary_${dates[0]}_to_${dates[dates.length-1]}.xlsx`;
+    download(blob,name);toast(`Excel ready (${dates.length} date${dates.length===1?'':'s'})`,'ok');
+  }catch(e){console.error(e);toast('Could not create Excel file','err')}
+};
+
+/* =====================================================================
+   VIEW: SETUP
+   ===================================================================== */
+function renderSetup(){
+  $('#logoPrev').src=getLogo();$('#brandIn').value=S.brand;$('#waIn').value=S.settings.wa||'';
+  $('#plist').innerHTML=S.items.map((it,i)=>`<div class="prow" data-id="${esc(it.id)}"><span class="no">${i+1}</span><input type="text" class="pn" value="${esc(it.name)}" maxlength="60" aria-label="Product name"><input type="number" class="pp" value="${it.pack}" step="any" min="0" inputmode="decimal" aria-label="Packing size kg"><button type="button" class="ico" data-a="del" aria-label="Delete ${esc(it.name)}">${ICON.trash}</button></div>`).join('');
+  $('#blist').innerHTML=S.branches.map(b=>`<div class="brow" data-id="${esc(b.id)}"><input type="text" class="bn" value="${esc(b.name)}" maxlength="30" aria-label="Branch name"><button type="button" class="ico" data-a="del" aria-label="Delete ${esc(b.name)}">${ICON.trash}</button></div>`).join('');
+}
+function afterCatalogChange(){save();renderHeader();renderOrder();}
+$('#brandIn').addEventListener('change',e=>{const v=e.target.value.trim();if(!v){e.target.value=S.brand;return}S.brand=v.slice(0,40);save();renderHeader()});
+$('#waIn').addEventListener('change',e=>{S.settings.wa=e.target.value.replace(/\D/g,'');e.target.value=S.settings.wa;save();toast('Saved','ok')});
+$('#logoUp').onclick=()=>$('#logoFile').click();
+$('#logoFile').addEventListener('change',e=>{
+  const f=e.target.files[0];e.target.value='';if(!f)return;
+  const url=URL.createObjectURL(f),img=new Image();
+  img.onload=()=>{
+    const sc=Math.min(1,360/Math.max(img.naturalWidth,img.naturalHeight)),w=Math.round(img.naturalWidth*sc)||360,h=Math.round(img.naturalHeight*sc)||360;
+    const cv=document.createElement('canvas');cv.width=w;cv.height=h;cv.getContext('2d').drawImage(img,0,0,w,h);
+    store.set(LOGO_KEY,cv.toDataURL('image/png'));URL.revokeObjectURL(url);renderHeader();$('#logoPrev').src=getLogo();toast('Logo updated','ok');
+  };
+  img.onerror=()=>{URL.revokeObjectURL(url);toast('That file is not a usable image','err')};
+  img.src=url;
+});
+$('#logoReset').onclick=()=>{store.del(LOGO_KEY);renderHeader();$('#logoPrev').src=getLogo();toast('Default logo restored')};
+
+$('#plist').addEventListener('change',e=>{
+  const row=e.target.closest('.prow');if(!row)return;
+  const it=S.items.find(x=>x.id===row.dataset.id);if(!it)return;
+  if(e.target.classList.contains('pn')){const v=e.target.value.trim();if(!v){e.target.value=it.name;return}it.name=v}
+  if(e.target.classList.contains('pp')){const v=+e.target.value;if(!(v>0)){e.target.value=it.pack;toast('Packing size must be more than 0','err');return}it.pack=v}
+  afterCatalogChange();
+});
+$('#plist').addEventListener('click',async e=>{
+  const b=e.target.closest('button[data-a=del]');if(!b)return;
+  const id=b.closest('.prow').dataset.id,it=S.items.find(x=>x.id===id);
+  if(S.items.length<2)return toast('At least one product is required','err');
+  if(await confirmBox({title:'Delete product?',msg:`“${esc(it.name)}” will be removed from the list and from saved orders.`,ok:'Delete',danger:true})){
+    S.items=S.items.filter(x=>x.id!==id);
+    for(const d in S.orders)for(const bid in S.orders[d])delete S.orders[d][bid].qty[id];
+    renderSetup();afterCatalogChange();
+  }
+});
+$('#addP').onclick=()=>{
+  const n=$('#newPName').value.trim(),p=+$('#newPPack').value;
+  if(!n)return toast('Enter a product name','err');
+  if(!(p>0))return toast('Enter a packing size in kg','err');
+  if(S.items.some(i=>norm(i.name)===norm(n)))return toast('That product already exists','err');
+  S.items.push({id:uid('p'),name:n,pack:p});$('#newPName').value='';$('#newPPack').value='';
+  renderSetup();afterCatalogChange();toast('Product added','ok');
+  const l=$('#plist');l.scrollTop=l.scrollHeight;
+};
+$('#blist').addEventListener('change',e=>{
+  const row=e.target.closest('.brow');if(!row)return;
+  const b=branchById(row.dataset.id),v=e.target.value.trim();
+  if(!v){e.target.value=b.name;return}
+  if(S.branches.some(x=>x.id!==b.id&&norm(x.name)===norm(v))){e.target.value=b.name;return toast('That branch name is already used','err')}
+  b.name=v;afterCatalogChange();
+});
+$('#blist').addEventListener('click',async e=>{
+  const btn=e.target.closest('button[data-a=del]');if(!btn)return;
+  const id=btn.closest('.brow').dataset.id,b=branchById(id);
+  if(S.branches.length<2)return toast('At least one branch is required','err');
+  const has=Object.values(S.orders).some(d=>d[id]&&totals(d[id]).p>0);
+  if(await confirmBox({title:'Delete branch?',msg:`“${esc(b.name)}” will be removed${has?' <b>together with all of its saved orders</b>':''}.`,ok:'Delete',danger:true})){
+    S.branches=S.branches.filter(x=>x.id!==id);
+    for(const d in S.orders){delete S.orders[d][id];if(!Object.keys(S.orders[d]).length)delete S.orders[d]}
+    if(ui.branch===id){ui.branch=S.branches[0].id;S.ui.branch=ui.branch}
+    renderSetup();afterCatalogChange();
+  }
+});
+$('#addB').onclick=()=>{
+  const n=$('#newBName').value.trim();if(!n)return toast('Enter a branch name','err');
+  if(S.branches.some(b=>norm(b.name)===norm(n)))return toast('That branch already exists','err');
+  S.branches.push({id:uid('b'),name:n});$('#newBName').value='';renderSetup();afterCatalogChange();toast('Branch added','ok');
+};
+
+
+
+/* =====================================================================
+   STOCK TRANSFER (ordered vs sent vs difference — daily, master format)
+   ===================================================================== */
+function ensureTransfer(date){
+  if(!S.transfers) S.transfers={};
+  return S.transfers[date]||(S.transfers[date]={qty:{},by:'',note:'',updated:Date.now()});
+}
+function getTransfer(date){
+  return S.transfers?.[date]||null;
+}
+function transferSentQty(date, bid, iid){
+  return getTransfer(date)?.qty?.[bid]?.[iid]||0;
+}
+function setTransferQty(date, bid, iid, val){
+  const tr=ensureTransfer(date);
+  if(!tr.qty[bid]) tr.qty[bid]={};
+  let n=Math.floor(+val); if(!(n>0)) n=0; n=Math.min(n,9999);
+  if(n>0) tr.qty[bid][iid]=n; else delete tr.qty[bid][iid];
+  if(!Object.keys(tr.qty[bid]).length) delete tr.qty[bid];
+  tr.updated=Date.now();
+  save();
+}
+/** Ordered fills for transfer date (respects tdraft like master). */
+function transferOrderFills(date){
+  const inc=o=>o&&(o.status==='done'||ui.tdraft)&&totals(o).p>0;
+  const fills={};S.branches.forEach(b=>{const o=getOrder(date,b.id);if(inc(o))fills[b.id]=o});
+  return fills;
+}
+function transferRowData(date){
+  const fills=transferOrderFills(date), B=S.branches, tr=getTransfer(date);
+  return S.items.map((it,i)=>{
+    const ord=B.map(b=>fills[b.id]?.qty[it.id]||0);
+    const sent=B.map(b=>tr?.qty?.[b.id]?.[it.id]||0);
+    const diff=ord.map((o,j)=>sent[j]-o);
+    const ordP=ord.reduce((a,b)=>a+b,0), sentP=sent.reduce((a,b)=>a+b,0);
+    return {it,i,ord,sent,diff,ordP,sentP,diffP:sentP-ordP,ordW:r6(ordP*it.pack),sentW:r6(sentP*it.pack)};
+  });
+}
+function transferTotals(rows){
+  const B=S.branches;
+  const colOrd=B.map((_,j)=>rows.reduce((a,r)=>a+r.ord[j],0));
+  const colSent=B.map((_,j)=>rows.reduce((a,r)=>a+r.sent[j],0));
+  const colDiff=B.map((_,j)=>colSent[j]-colOrd[j]);
+  const ordP=colOrd.reduce((a,b)=>a+b,0), sentP=colSent.reduce((a,b)=>a+b,0);
+  const ordW=r6(rows.reduce((a,r)=>a+r.ordW,0)), sentW=r6(rows.reduce((a,r)=>a+r.sentW,0));
+  return {colOrd,colSent,colDiff,ordP,sentP,diffP:sentP-ordP,ordW,sentW};
+}
+function diffClass(d){
+  if(d<0) return 'diff-neg'; // sent less than ordered = shortfall
+  if(d>0) return 'diff-pos'; // sent extra
+  return 'diff-zero';
+}
+function renderTransfer(){
+  const date=ui.tdate;
+  $('#tdate').value=date;
+  const tr=getTransfer(date);
+  $('#tby').value=tr?.by||'';
+  $('#tdraft').checked=!!ui.tdraft;
+  $('#tonly').checked=!!ui.tonly;
+
+  // Branch status chips
+  $('#tstat').innerHTML=S.branches.map(b=>{
+    const st=statusOf(getOrder(date,b.id));
+    return `<span class="chip" style="cursor:default"><i class="dot ${st}"></i>${esc(b.name)}</span>`;
+  }).join('');
+
+  // Recent dates (orders or transfers)
+  const dates=new Set();
+  Object.keys(S.orders||{}).forEach(d=>{
+    if(Object.values(S.orders[d]).some(o=>totals(o).p>0)) dates.add(d);
+  });
+  Object.keys(S.transfers||{}).forEach(d=>{
+    const q=S.transfers[d]?.qty||{};
+    if(Object.values(q).some(byP=>Object.values(byP).some(n=>n>0))) dates.add(d);
+  });
+  const sorted=[...dates].sort().reverse().slice(0,10);
+  $('#tdates').innerHTML=sorted.length
+    ? 'Recent dates: '+sorted.map(d=>`<a href="#" data-d="${d}" style="color:var(--red);font-weight:600;margin-right:10px">${fmtDate(d)}</a>`).join('')
+    : 'No orders or transfers saved yet.';
+
+  // View chips
+  $$('#tViewChips .chip').forEach(c=>c.classList.toggle('sel', c.dataset.tv===ui.tview));
+
+  const rows=transferRowData(date);
+  const shown=rows.filter(r=>!ui.tonly || r.ordP>0 || r.sentP>0);
+  const T=transferTotals(rows);
+  const B=S.branches;
+
+  $('#tOrdP').textContent=T.ordP;
+  $('#tSentP').textContent=T.sentP;
+  $('#tDiffP').textContent=(T.diffP>0?'+':'')+T.diffP;
+  $('#tDiffP').style.color=T.diffP<0?'var(--red)':(T.diffP>0?'var(--ok)':'');
+  $('#tOrdW').innerHTML=fmtW(T.ordW)+' <small>kg</small>';
+  $('#tSentW').innerHTML=fmtW(T.sentW)+' <small>kg</small>';
+
+  const titles={
+    ordered:'① Ordered stock (from branch orders)',
+    sending:'② Stock being sent / transferred',
+    diff:'③ Difference (Sending − Ordered)',
+    compare:'Compare: Ordered · Sent · Diff'
+  };
+  $('#tTableTitle').textContent=titles[ui.tview]||'Stock transfer';
+  $('#tsub').textContent=`${fmtDate(date)} · Ordered ${T.ordP} pkt · Sending ${T.sentP} pkt · Diff ${T.diffP} pkt`;
+  $('#tphTitle').textContent=`${S.brand} Stock Transfer – ${fmtDate(date)}`;
+
+  let html='';
+  if(ui.tview==='compare'){
+    // Wide: product + for each branch Ord/Sent/Diff + totals
+    const head=B.map(b=>`<th colspan="3">${esc(b.name)}<br><span style="font-weight:500;font-size:11px">Ord · Sent · Diff</span></th>`).join('');
+    html=`<table class="mt" style="min-width:${720+B.length*140}px"><thead><tr><th>No</th><th class="l">Detail</th><th>Pack</th>${head}<th>Tot Ord</th><th>Tot Sent</th><th>Diff</th></tr></thead><tbody>`;
+    if(!shown.length){
+      html+=`<tr><td colspan="${3+B.length*3+3}" class="empty">No ordered or transferred items for this date.</td></tr>`;
+    } else {
+      shown.forEach(r=>{
+        const cells=B.map((_,j)=>{
+          const o=r.ord[j],s=r.sent[j],d=r.diff[j];
+          return `<td class="${o?'':'z'}">${o||'·'}</td><td class="${s?'':'z'}">${s||'·'}</td><td class="${diffClass(d)}">${d||'·'}</td>`;
+        }).join('');
+        html+=`<tr class="${r.ordP||r.sentP?'on':''}"><td>${r.i+1}</td><td class="l dt">${esc(r.it.name)}</td><td>${fmt(r.it.pack)}</td>${cells}<td class="tot">${r.ordP||'·'}</td><td class="tot">${r.sentP||'·'}</td><td class="${diffClass(r.diffP)}">${r.diffP||'·'}</td></tr>`;
+      });
+    }
+    const foot=B.map((_,j)=>`<td>${T.colOrd[j]||''}</td><td>${T.colSent[j]||''}</td><td class="${diffClass(T.colDiff[j])}">${T.colDiff[j]||''}</td>`).join('');
+    html+=`</tbody><tfoot><tr><td></td><td class="l">TOTAL</td><td></td>${foot}<td>${T.ordP}</td><td>${T.sentP}</td><td class="${diffClass(T.diffP)}">${T.diffP}</td></tr></tfoot></table>`;
+  } else if(ui.tview==='sending'){
+    // Editable matrix
+    html=`<table class="mt"><thead><tr><th>No</th><th class="l">Detail</th><th>Pack</th>${B.map(b=>`<th>${esc(b.name)}</th>`).join('')}<th>Total Sent</th><th>Weight</th></tr></thead><tbody>`;
+    if(!shown.length){
+      html+=`<tr><td colspan="${B.length+5}" class="empty">No items to transfer. Complete branch orders first, or uncheck “items only”.</td></tr>`;
+    } else {
+      shown.forEach(r=>{
+        const cells=B.map((b,j)=>{
+          const s=r.sent[j];
+          return `<td><input class="tq" type="number" min="0" max="9999" step="1" inputmode="numeric" data-bid="${esc(b.id)}" data-iid="${esc(r.it.id)}" value="${s||''}" placeholder="0" aria-label="${esc(b.name)} ${esc(r.it.name)}"></td>`;
+        }).join('');
+        html+=`<tr class="${r.sentP?'on':''}" data-row="${esc(r.it.id)}"><td>${r.i+1}</td><td class="l dt">${esc(r.it.name)}</td><td>${fmt(r.it.pack)}</td>${cells}<td class="tot t-sent-tot">${r.sentP||'·'}</td><td class="t-sent-w">${r.sentP?fmtW(r.sentW):'·'}</td></tr>`;
+      });
+    }
+    html+=`</tbody><tfoot><tr><td></td><td class="l">TOTAL</td><td></td>${T.colSent.map(c=>`<td>${c||''}</td>`).join('')}<td>${T.sentP}</td><td>${fmtW(T.sentW)}</td></tr></tfoot></table>`;
+  } else if(ui.tview==='diff'){
+    html=`<table class="mt"><thead><tr><th>No</th><th class="l">Detail</th><th>Pack</th>${B.map(b=>`<th>${esc(b.name)}</th>`).join('')}<th>Diff Pkt</th><th>Diff kg</th></tr></thead><tbody>`;
+    const diffRows=shown.filter(r=>r.diffP!==0||!ui.tonly);
+    if(!diffRows.length){
+      html+=`<tr><td colspan="${B.length+5}" class="empty">No difference — ordered and sent match (or no data).</td></tr>`;
+    } else {
+      diffRows.forEach(r=>{
+        const cells=r.diff.map(d=>`<td class="${diffClass(d)}">${d||'·'}</td>`).join('');
+        const dW=r6(r.diffP*r.it.pack);
+        html+=`<tr class="on"><td>${r.i+1}</td><td class="l dt">${esc(r.it.name)}</td><td>${fmt(r.it.pack)}</td>${cells}<td class="tot ${diffClass(r.diffP)}">${r.diffP||'·'}</td><td class="${diffClass(r.diffP)}">${r.diffP?fmtW(dW):'·'}</td></tr>`;
+      });
+    }
+    const dW=r6(T.diffP); // approximate not accurate across packs — show pkt only in footer weight as blank or sum
+    const diffW=r6(rows.reduce((a,r)=>a+r.diffP*r.it.pack,0));
+    html+=`</tbody><tfoot><tr><td></td><td class="l">TOTAL</td><td></td>${T.colDiff.map(c=>`<td class="${diffClass(c)}">${c||''}</td>`).join('')}<td class="${diffClass(T.diffP)}">${T.diffP}</td><td class="${diffClass(T.diffP)}">${fmtW(diffW)}</td></tr></tfoot></table>`;
+  } else {
+    // ordered — same as master
+    html=`<table class="mt"><thead><tr><th>No</th><th class="l">Detail</th><th>Packing<br>Size</th>${B.map(b=>`<th>${esc(b.name)}</th>`).join('')}<th>Total Pkt</th><th>Weight</th></tr></thead><tbody>`;
+    if(!shown.length){
+      html+=`<tr><td colspan="${B.length+5}" class="empty">No ${ui.tdraft?'':'completed '}orders for this date yet.</td></tr>`;
+    } else {
+      shown.forEach(r=>{
+        html+=`<tr class="${r.ordP?'on':''}"><td>${r.i+1}</td><td class="l dt">${esc(r.it.name)}</td><td>${fmt(r.it.pack)}</td>${r.ord.map(q=>`<td class="${q?'':'z'}">${q||'·'}</td>`).join('')}<td class="tot">${r.ordP||'·'}</td><td>${r.ordP?fmtW(r.ordW):'·'}</td></tr>`;
+      });
+    }
+    html+=`</tbody><tfoot><tr><td></td><td class="l">TOTAL</td><td></td>${T.colOrd.map(c=>`<td>${c||''}</td>`).join('')}<td>${T.ordP}</td><td>${fmtW(T.ordW)}</td></tr></tfoot></table>`;
+  }
+  $('#twrap').innerHTML=html;
+
+  // Shortfall list
+  const short=rows.filter(r=>r.diffP<0).sort((a,b)=>a.diffP-b.diffP);
+  if(!short.length){
+    $('#tShort').innerHTML='<div class="empty">No shortfall — every ordered item is fully covered (or nothing ordered).</div>';
+  } else {
+    let sh=`<table class="mt" style="min-width:520px"><thead><tr><th>No</th><th class="l">Product</th><th>Ordered</th><th>Sending</th><th>Missing</th><th>Missing kg</th></tr></thead><tbody>`;
+    short.forEach(r=>{
+      const miss=-r.diffP;
+      sh+=`<tr class="on"><td>${r.i+1}</td><td class="l dt">${esc(r.it.name)}</td><td>${r.ordP}</td><td>${r.sentP}</td><td class="diff-neg">${miss}</td><td class="diff-neg">${fmtW(r6(miss*r.it.pack))}</td></tr>`;
+    });
+    const missP=short.reduce((a,r)=>a+(-r.diffP),0), missW=r6(short.reduce((a,r)=>a+(-r.diffP)*r.it.pack,0));
+    sh+=`</tbody><tfoot><tr><td></td><td class="l">TOTAL MISSING</td><td></td><td></td><td class="diff-neg">${missP}</td><td class="diff-neg">${fmtW(missW)}</td></tr></tfoot></table>`;
+    // per-branch breakdown of shortfall
+    sh+=`<p class="hint" style="margin:12px 0 6px">Missing by branch</p><table class="mt" style="min-width:480px"><thead><tr><th class="l">Product</th>${B.map(b=>`<th>${esc(b.name)}</th>`).join('')}</tr></thead><tbody>`;
+    short.forEach(r=>{
+      sh+=`<tr><td class="l dt">${esc(r.it.name)}</td>${r.diff.map(d=>`<td class="${d<0?'diff-neg':''}">${d<0?-d:'·'}</td>`).join('')}</tr>`;
+    });
+    sh+=`</tbody></table>`;
+    $('#tShort').innerHTML=sh;
+  }
+  if(typeof renderTransferSummary==='function') try{renderTransferSummary()}catch(e){}
+}
+
+$('#tdate').addEventListener('change',e=>{if(e.target.value){ui.tdate=e.target.value;renderTransfer()}});
+$('#tdraft').addEventListener('change',e=>{ui.tdraft=e.target.checked;renderTransfer()});
+$('#tonly').addEventListener('change',e=>{ui.tonly=e.target.checked;renderTransfer()});
+$('#tby').addEventListener('input',e=>{const tr=ensureTransfer(ui.tdate);tr.by=e.target.value;tr.updated=Date.now();save()});
+$('#tdates').addEventListener('click',e=>{const a=e.target.closest('a[data-d]');if(a){e.preventDefault();ui.tdate=a.dataset.d;renderTransfer()}});
+$('#tViewChips').addEventListener('click',e=>{
+  const c=e.target.closest('.chip[data-tv]');if(!c)return;
+  ui.tview=c.dataset.tv;renderTransfer();
+});
+$('#twrap').addEventListener('input',e=>{
+  const inp=e.target.closest('input.tq');if(!inp)return;
+  setTransferQty(ui.tdate, inp.dataset.bid, inp.dataset.iid, inp.value);
+  // light refresh of KPIs without full re-render (keep focus)
+  const rows=transferRowData(ui.tdate), T=transferTotals(rows);
+  $('#tOrdP').textContent=T.ordP;
+  $('#tSentP').textContent=T.sentP;
+  $('#tDiffP').textContent=(T.diffP>0?'+':'')+T.diffP;
+  $('#tDiffP').style.color=T.diffP<0?'var(--red)':(T.diffP>0?'var(--ok)':'');
+  $('#tOrdW').innerHTML=fmtW(T.ordW)+' <small>kg</small>';
+  $('#tSentW').innerHTML=fmtW(T.sentW)+' <small>kg</small>';
+  const row=inp.closest('tr'), iid=inp.dataset.iid;
+  const r=rows.find(x=>x.it.id===iid);
+  if(row&&r){
+    row.classList.toggle('on', r.sentP>0);
+    const tot=row.querySelector('.t-sent-tot'), wt=row.querySelector('.t-sent-w');
+    if(tot) tot.textContent=r.sentP||'·';
+    if(wt) wt.textContent=r.sentP?fmtW(r.sentW):'·';
+  }
+});
+$('#twrap').addEventListener('focusin',e=>{if(e.target.classList.contains('tq')) setTimeout(()=>e.target.select&&e.target.select(),0)});
+$('#tCopyOrd').onclick=()=>{
+  const fills=transferOrderFills(ui.tdate);
+  if(!Object.keys(fills).length) return toast('No branch orders for this date','err');
+  const tr=ensureTransfer(ui.tdate);
+  tr.qty={};
+  S.branches.forEach(b=>{
+    const o=fills[b.id]; if(!o) return;
+    const pq={};
+    S.items.forEach(it=>{const q=o.qty[it.id]||0; if(q>0) pq[it.id]=q});
+    if(Object.keys(pq).length) tr.qty[b.id]=pq;
+  });
+  tr.updated=Date.now(); save();
+  ui.tview='sending';
+  renderTransfer();
+  toast('Ordered quantities copied to sending','ok');
+};
+$('#tClearSent').onclick=async()=>{
+  if(!await confirmBox({title:'Clear sending quantities?',msg:'All stock-transfer quantities for this date will be removed. Branch orders are not affected.',ok:'Clear',danger:true})) return;
+  if(S.transfers?.[ui.tdate]){ S.transfers[ui.tdate].qty={}; S.transfers[ui.tdate].updated=Date.now(); save(); }
+  renderTransfer(); toast('Sending quantities cleared');
+};
+$('#tSave').onclick=()=>{
+  const tr=ensureTransfer(ui.tdate);
+  tr.by=($('#tby').value||'').trim();
+  tr.updated=Date.now();
+  save(true);
+  toast('Transfer saved for '+fmtDate(ui.tdate),'ok');
+};
+$('#tPrint').onclick=()=>window.print();
+$('#tXlsx').onclick=async()=>{
+  try{
+    const blob=await buildTransferXlsx(ui.tdate);
+    download(blob, `StarChicken_StockTransfer_${ui.tdate}.xlsx`);
+    toast('Excel downloaded','ok');
+  }catch(e){ console.error(e); toast('Could not create Excel','err'); }
+};
+
+async function buildTransferXlsx(date){
+  const rows=transferRowData(date), T=transferTotals(rows), B=S.branches, tr=getTransfer(date);
+  const sb=new StyleBook();
+  const thin=['thin','BFBFBF'], box={l:thin,r:thin,t:thin,b:thin};
+  const S_={
+    title:sb.get({b:1,sz:16,color:'C8161D',h:'center',fill:'FFFFFF'}),
+    head:sb.get({b:1,sz:11,color:'FFFFFF',fill:'2A2524',h:'center',wrap:1,border:box}),
+    foot:sb.get({b:1,sz:11,fill:'F5B80B',h:'center',nf:1,border:box}),
+    footL:sb.get({b:1,sz:11,fill:'F5B80B',h:'left',ind:1,border:box}),
+    cell:sb.get({sz:11,h:'center',border:box}),
+    cellL:sb.get({b:1,sz:11,h:'left',ind:1,border:box}),
+    cellOn:sb.get({b:1,sz:11,h:'center',fill:'FFF6DA',nf:1,border:box}),
+    cellOnL:sb.get({b:1,sz:11,h:'left',ind:1,fill:'FFF6DA',border:box}),
+    neg:sb.get({b:1,sz:11,h:'center',fill:'FCEBEC',color:'C8161D',nf:1,border:box}),
+    pos:sb.get({b:1,sz:11,h:'center',fill:'E5F5EC',color:'1B8A4B',nf:1,border:box}),
+    muted:sb.get({sz:11,color:'6A6562',h:'center',border:box})
+  };
+  const str=(rowsX,r,c,t,s)=>{(rowsX[r]=rowsX[r]||{})[c]=`<c r="${ref(r,c)}" s="${s}" t="inlineStr"><is><t xml:space="preserve">${xmlEsc(t)}</t></is></c>`};
+  const num=(rowsX,r,c,v,s)=>{(rowsX[r]=rowsX[r]||{})[c]=`<c r="${ref(r,c)}" s="${s}"><v>${v}</v></c>`};
+  const blank=(rowsX,r,c,s)=>{(rowsX[r]=rowsX[r]||{})[c]=`<c r="${ref(r,c)}" s="${s}"/>`};
+  const rowsToXml=rowsX=>{
+    return Object.keys(rowsX).map(Number).sort((a,b)=>a-b).map(r=>{
+      const cells=Object.keys(rowsX[r]).map(Number).sort((a,b)=>a-b).map(c=>rowsX[r][c]).join('');
+      return `<row r="${r}">${cells}</row>`;
+    }).join('');
+  };
+  const sheetXml=(rowsX,lastR,lastC)=>{
+    const cols=Array.from({length:lastC},(_,i)=>`<col min="${i+1}" max="${i+1}" width="${i===1?28:11}" customWidth="1"/>`).join('');
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:${ref(lastR,lastC)}"/><sheetViews><sheetView workbookViewId="0"><pane ySplit="2" topLeftCell="A3" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="18"/><cols>${cols}</cols><sheetData>${rowsToXml(rowsX)}</sheetData><pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5"/></worksheet>`;
+  };
+  function buildSheet(kind){
+    const rowsX={}; let lastC=5+B.length;
+    str(rowsX,1,1,`${S.brand} Stock Transfer – ${fmtDate(date)} (${kind})`,S_.title);
+    const heads=['No','Detail','Pack kg',...B.map(b=>b.name),'Total','Weight kg'];
+    heads.forEach((h,i)=>str(rowsX,2,i+1,h,S_.head));
+    const shown=rows.filter(r=>r.ordP>0||r.sentP>0);
+    shown.forEach((r,idx)=>{
+      const rr=3+idx; const on=r.ordP>0||r.sentP>0;
+      num(rowsX,rr,1,r.i+1,on?S_.cellOn:S_.muted);
+      str(rowsX,rr,2,r.it.name,on?S_.cellOnL:S_.cellL);
+      num(rowsX,rr,3,r.it.pack,on?S_.cellOn:S_.cell);
+      B.forEach((b,j)=>{
+        let v=0, style=S_.cell;
+        if(kind==='Ordered'){ v=r.ord[j]; style=v?S_.cellOn:S_.cell; }
+        else if(kind==='Sending'){ v=r.sent[j]; style=v?S_.cellOn:S_.cell; }
+        else { v=r.diff[j]; style=v<0?S_.neg:(v>0?S_.pos:S_.cell); }
+        if(v) num(rowsX,rr,4+j,v,style); else blank(rowsX,rr,4+j,S_.cell);
+      });
+      let tot=0, wt=0;
+      if(kind==='Ordered'){ tot=r.ordP; wt=r.ordW; }
+      else if(kind==='Sending'){ tot=r.sentP; wt=r.sentW; }
+      else { tot=r.diffP; wt=r6(r.diffP*r.it.pack); }
+      const ts=tot<0&&kind==='Difference'?S_.neg:(tot>0&&kind==='Difference'?S_.pos:S_.cellOn);
+      if(tot) num(rowsX,rr,4+B.length,tot,ts); else blank(rowsX,rr,4+B.length,S_.cell);
+      if(tot) num(rowsX,rr,5+B.length,wt,S_.cell); else blank(rowsX,rr,5+B.length,S_.cell);
+    });
+    const trR=3+Math.max(shown.length,1);
+    str(rowsX,trR,2,'TOTAL',S_.footL);
+    B.forEach((b,j)=>{
+      let v=kind==='Ordered'?T.colOrd[j]:(kind==='Sending'?T.colSent[j]:T.colDiff[j]);
+      if(v) num(rowsX,trR,4+j,v,S_.foot); else blank(rowsX,trR,4+j,S_.foot);
+    });
+    const gTot=kind==='Ordered'?T.ordP:(kind==='Sending'?T.sentP:T.diffP);
+    const gW=kind==='Ordered'?T.ordW:(kind==='Sending'?T.sentW:r6(rows.reduce((a,r)=>a+r.diffP*r.it.pack,0)));
+    num(rowsX,trR,4+B.length,gTot,S_.foot);
+    num(rowsX,trR,5+B.length,gW,S_.foot);
+    return sheetXml(rowsX,trR,lastC);
+  }
+  const sheets=[
+    {name:'Ordered',xml:buildSheet('Ordered')},
+    {name:'Sending',xml:buildSheet('Sending')},
+    {name:'Difference',xml:buildSheet('Difference')}
+  ];
+  // Summary sheet
+  const sum={}; let sr=1;
+  str(sum,sr,1,`${S.brand} – Stock Transfer Summary`,S_.title); sr=2;
+  str(sum,sr,1,`Date: ${fmtDate(date)}`+(tr?.by?` · Sent by: ${tr.by}`:''),S_.cellL); sr=4;
+  ['Metric','Packets','Weight kg'].forEach((h,i)=>str(sum,sr,i+1,h,S_.head));
+  str(sum,5,1,'Ordered',S_.cellL); num(sum,5,2,T.ordP,S_.cellOn); num(sum,5,3,T.ordW,S_.cell);
+  str(sum,6,1,'Sending',S_.cellL); num(sum,6,2,T.sentP,S_.cellOn); num(sum,6,3,T.sentW,S_.cell);
+  str(sum,7,1,'Difference (Sent − Ord)',S_.cellL); num(sum,7,2,T.diffP,T.diffP<0?S_.neg:(T.diffP>0?S_.pos:S_.cell)); num(sum,7,3,r6(rows.reduce((a,r)=>a+r.diffP*r.it.pack,0)),S_.cell);
+  sheets.unshift({name:'Summary',xml:sheetXml(sum,7,3)});
+
+  const sheetOverrides=sheets.map((_,i)=>`<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('');
+  const sheetEntries=sheets.map((s,i)=>`<sheet name="${xmlEsc(s.name)}" sheetId="${i+1}" r:id="rId${i+1}"/>`).join('');
+  const sheetRels=sheets.map((_,i)=>`<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i+1}.xml"/>`).join('')
+    +`<Relationship Id="rId${sheets.length+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>`;
+  const files=[
+    {name:'[Content_Types].xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${sheetOverrides}<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`},
+    {name:'_rels/.rels',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`},
+    {name:'xl/workbook.xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sheetEntries}</sheets><calcPr fullCalcOnLoad="1"/></workbook>`},
+    {name:'xl/_rels/workbook.xml.rels',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheetRels}</Relationships>`},
+    {name:'xl/styles.xml',data:sb.xml()},
+    ...sheets.map((s,i)=>({name:`xl/worksheets/sheet${i+1}.xml`,data:s.xml}))
+  ];
+  return zipStore(files, XL_MIME);
+}
+
+
+/* ---------- Multi-date stock transfer summary ---------- */
+function allTransferRelatedDates(){
+  const dates=new Set();
+  Object.keys(S.orders||{}).forEach(d=>{
+    if(Object.values(S.orders[d]||{}).some(o=>totals(o).p>0)) dates.add(d);
+  });
+  Object.keys(S.transfers||{}).forEach(d=>{
+    const q=S.transfers[d]?.qty||{};
+    if(Object.values(q).some(byP=>Object.values(byP||{}).some(n=>n>0))) dates.add(d);
+  });
+  return [...dates].sort();
+}
+function selectedTSumDates(){
+  return $$('#tsumDateList input[type=checkbox]:checked').map(c=>c.value).sort();
+}
+function renderTransferSummary(){
+  const elFrom=$('#tsumFrom'), elTo=$('#tsumTo'), elList=$('#tsumDateList'), elWrap=$('#tsumWrap');
+  if(!elFrom||!elWrap) return;
+  const dates=allTransferRelatedDates();
+  if(!elFrom.value&&dates.length){elFrom.value=dates[0];elTo.value=dates[dates.length-1]}
+  const from=elFrom.value||'0000-01-01', to=elTo.value||'9999-12-31';
+  const inRange=dates.filter(d=>d>=from&&d<=to);
+  const prev=new Set(selectedTSumDates());
+  elList.innerHTML=inRange.length?inRange.map(d=>{
+    const checked=prev.size?prev.has(d):true;
+    return `<label class="chip" style="cursor:pointer"><input type="checkbox" value="${d}" ${checked?'checked':''} style="width:16px;height:16px;accent-color:var(--red)"> ${fmtDate(d)}</label>`;
+  }).join(''):'<span class="hint">No orders or transfers in this date range.</span>';
+  const sel=selectedTSumDates(), B=S.branches;
+  if(!sel.length){
+    elWrap.innerHTML='<div class="empty">Select at least one date.</div>';
+    return;
+  }
+  // Day summary: ordered / sent / diff per date
+  const dayRows=[];
+  let gOrd=0,gSent=0,gOrdW=0,gSentW=0;
+  sel.forEach(date=>{
+    const rows=transferRowData(date);
+    const T=transferTotals(rows);
+    dayRows.push({date, ordP:T.ordP, sentP:T.sentP, diffP:T.diffP, ordW:T.ordW, sentW:T.sentW});
+    gOrd+=T.ordP; gSent+=T.sentP; gOrdW+=T.ordW; gSentW+=T.sentW;
+  });
+  gOrdW=r6(gOrdW); gSentW=r6(gSentW);
+  const gDiff=gSent-gOrd;
+
+  // Product totals across selected dates
+  const prodRows=S.items.map((it,i)=>{
+    let ordP=0, sentP=0;
+    sel.forEach(date=>{
+      const fills=transferOrderFills(date);
+      const tr=getTransfer(date);
+      B.forEach(b=>{
+        ordP+=fills[b.id]?.qty[it.id]||0;
+        sentP+=tr?.qty?.[b.id]?.[it.id]||0;
+      });
+    });
+    return {it,i,ordP,sentP,diffP:sentP-ordP,ordW:r6(ordP*it.pack),sentW:r6(sentP*it.pack)};
+  }).filter(r=>r.ordP>0||r.sentP>0);
+
+  // Branch totals across selected dates
+  const branchRows=B.map(b=>{
+    let ordP=0, sentP=0;
+    sel.forEach(date=>{
+      const fills=transferOrderFills(date);
+      const tr=getTransfer(date);
+      const o=fills[b.id];
+      if(o){ const t=totals(o); ordP+=t.p; }
+      const sq=tr?.qty?.[b.id]||{};
+      Object.values(sq).forEach(q=>sentP+=q||0);
+    });
+    return {b, ordP, sentP, diffP:sentP-ordP};
+  }).filter(r=>r.ordP>0||r.sentP>0);
+
+  elWrap.innerHTML=`
+    <div class="sumline" style="margin-bottom:12px">
+      <div><span>Days</span><b>${sel.length}</b></div>
+      <div><span>Ordered</span><b>${gOrd} <small>pkt</small></b></div>
+      <div><span>Sent</span><b>${gSent} <small>pkt</small></b></div>
+      <div><span>Difference</span><b style="color:${gDiff<0?'var(--red)':(gDiff>0?'var(--ok)':'')}">${gDiff>0?'+':''}${gDiff}</b></div>
+    </div>
+    <h3 style="margin:0 0 8px;font-size:15px">Day-wise summary</h3>
+    <table class="mt" style="min-width:560px"><thead><tr><th class="l">Date</th><th>Ordered</th><th>Sent</th><th>Diff</th><th>Ord kg</th><th>Sent kg</th></tr></thead>
+    <tbody>${dayRows.map(r=>`<tr class="on"><td class="l dt">${fmtDate(r.date)}</td><td class="tot">${r.ordP}</td><td class="tot">${r.sentP}</td><td class="${diffClass(r.diffP)}">${r.diffP||'·'}</td><td>${fmtW(r.ordW)}</td><td>${fmtW(r.sentW)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td class="l">TOTAL (${sel.length} day${sel.length===1?'':'s'})</td><td>${gOrd}</td><td>${gSent}</td><td class="${diffClass(gDiff)}">${gDiff}</td><td>${fmtW(gOrdW)}</td><td>${fmtW(gSentW)}</td></tr></tfoot></table>
+
+    <h3 style="margin:16px 0 8px;font-size:15px">Branch totals (selected dates)</h3>
+    <table class="mt" style="min-width:480px"><thead><tr><th class="l">Branch</th><th>Ordered</th><th>Sent</th><th>Diff</th></tr></thead>
+    <tbody>${branchRows.map(r=>`<tr class="on"><td class="l dt">${esc(r.b.name)}</td><td class="tot">${r.ordP}</td><td class="tot">${r.sentP}</td><td class="${diffClass(r.diffP)}">${r.diffP||'·'}</td></tr>`).join('')||'<tr><td colspan="4" class="empty">No branch data.</td></tr>'}</tbody>
+    <tfoot><tr><td class="l">TOTAL</td><td>${gOrd}</td><td>${gSent}</td><td class="${diffClass(gDiff)}">${gDiff}</td></tr></tfoot></table>
+
+    <h3 style="margin:16px 0 8px;font-size:15px">Product totals (selected dates)</h3>
+    <table class="mt" style="min-width:600px"><thead><tr><th>No</th><th class="l">Detail</th><th>Pack</th><th>Ordered</th><th>Sent</th><th>Diff</th><th>Ord kg</th><th>Sent kg</th></tr></thead>
+    <tbody>${prodRows.map(r=>`<tr class="on"><td>${r.i+1}</td><td class="l dt">${esc(r.it.name)}</td><td>${fmt(r.it.pack)}</td><td class="tot">${r.ordP||'·'}</td><td class="tot">${r.sentP||'·'}</td><td class="${diffClass(r.diffP)}">${r.diffP||'·'}</td><td>${r.ordP?fmtW(r.ordW):'·'}</td><td>${r.sentP?fmtW(r.sentW):'·'}</td></tr>`).join('')||'<tr><td colspan="8" class="empty">No products.</td></tr>'}</tbody>
+    <tfoot><tr><td></td><td class="l">TOTAL</td><td></td><td>${prodRows.reduce((a,r)=>a+r.ordP,0)}</td><td>${prodRows.reduce((a,r)=>a+r.sentP,0)}</td><td class="${diffClass(gDiff)}">${gDiff}</td><td>${fmtW(gOrdW)}</td><td>${fmtW(gSentW)}</td></tr></tfoot></table>
+
+    <h3 style="margin:16px 0 8px;font-size:15px">Shortfall products (ordered &gt; sent)</h3>
+    <table class="mt" style="min-width:520px"><thead><tr><th>No</th><th class="l">Product</th><th>Ordered</th><th>Sent</th><th>Missing</th><th>Missing kg</th></tr></thead>
+    <tbody>${prodRows.filter(r=>r.diffP<0).map(r=>`<tr class="on"><td>${r.i+1}</td><td class="l dt">${esc(r.it.name)}</td><td>${r.ordP}</td><td>${r.sentP}</td><td class="diff-neg">${-r.diffP}</td><td class="diff-neg">${fmtW(r6((-r.diffP)*r.it.pack))}</td></tr>`).join('')||'<tr><td colspan="6" class="empty">No shortfall across selected dates.</td></tr>'}</tbody></table>`;
+}
+
+const _tsumFrom=$('#tsumFrom'); if(_tsumFrom) _tsumFrom.addEventListener('change',renderTransferSummary);
+const _tsumTo=$('#tsumTo'); if(_tsumTo) _tsumTo.addEventListener('change',renderTransferSummary);
+const _tsumDateList=$('#tsumDateList'); if(_tsumDateList) _tsumDateList.addEventListener('change',renderTransferSummary);
+const _tsumAll=$('#tsumAll'); if(_tsumAll) _tsumAll.addEventListener('click',()=>{$$('#tsumDateList input[type=checkbox]').forEach(c=>c.checked=true);renderTransferSummary()});
+const _tsumNone=$('#tsumNone'); if(_tsumNone) _tsumNone.addEventListener('click',()=>{$$('#tsumDateList input[type=checkbox]').forEach(c=>c.checked=false);renderTransferSummary()});
+const _tsumXlsx=$('#tsumXlsx'); if(_tsumXlsx) _tsumXlsx.addEventListener('click',async()=>{
+  const dates=selectedTSumDates();
+  if(!dates.length) return toast('Select at least one date','err');
+  try{
+    const blob=await buildMultiDateTransferXlsx(dates);
+    const name=dates.length===1
+      ?`StarChicken_StockTransfer_${dates[0]}.xlsx`
+      :`StarChicken_TransferSummary_${dates[0]}_to_${dates[dates.length-1]}.xlsx`;
+    download(blob,name);
+    toast(`Excel ready (${dates.length} date${dates.length===1?'':'s'})`,'ok');
+  }catch(e){console.error(e);toast('Could not create Excel file','err')}
+});
+
+async function buildMultiDateTransferXlsx(dates){
+  const B=S.branches;
+  const sb=new StyleBook();
+  const thin=['thin','BFBFBF'], box={l:thin,r:thin,t:thin,b:thin};
+  const S_={
+    title:sb.get({b:1,sz:16,color:'C8161D',h:'center',fill:'FFFFFF'}),
+    head:sb.get({b:1,sz:11,color:'FFFFFF',fill:'2A2524',h:'center',wrap:1,border:box}),
+    foot:sb.get({b:1,sz:11,fill:'F5B80B',h:'center',nf:1,border:box}),
+    footL:sb.get({b:1,sz:11,fill:'F5B80B',h:'left',ind:1,border:box}),
+    cell:sb.get({sz:11,h:'center',border:box}),
+    cellL:sb.get({b:1,sz:11,h:'left',ind:1,border:box}),
+    cellOn:sb.get({b:1,sz:11,h:'center',fill:'FFF6DA',nf:1,border:box}),
+    cellOnL:sb.get({b:1,sz:11,h:'left',ind:1,fill:'FFF6DA',border:box}),
+    neg:sb.get({b:1,sz:11,h:'center',fill:'FCEBEC',color:'C8161D',nf:1,border:box}),
+    pos:sb.get({b:1,sz:11,h:'center',fill:'E5F5EC',color:'1B8A4B',nf:1,border:box}),
+    muted:sb.get({sz:11,color:'6A6562',h:'center',border:box})
+  };
+  const str=(rows,r,c,t,s)=>{(rows[r]=rows[r]||{})[c]=`<c r="${ref(r,c)}" s="${s}" t="inlineStr"><is><t xml:space="preserve">${xmlEsc(t)}</t></is></c>`};
+  const num=(rows,r,c,v,s)=>{(rows[r]=rows[r]||{})[c]=`<c r="${ref(r,c)}" s="${s}"><v>${v}</v></c>`};
+  const blank=(rows,r,c,s)=>{(rows[r]=rows[r]||{})[c]=`<c r="${ref(r,c)}" s="${s}"/>`};
+  const rowsToXml=rows=>{
+    return Object.keys(rows).map(Number).sort((a,b)=>a-b).map(r=>{
+      const cells=Object.keys(rows[r]).map(Number).sort((a,b)=>a-b).map(c=>rows[r][c]).join('');
+      return `<row r="${r}">${cells}</row>`;
+    }).join('');
+  };
+  const sheetXml=(rows,lastR,lastC,freeze)=>{
+    const cols=Array.from({length:lastC},(_,i)=>`<col min="${i+1}" max="${i+1}" width="${i===1?28:12}" customWidth="1"/>`).join('');
+    const view=freeze
+      ?`<sheetView workbookViewId="0"><pane ySplit="${freeze}" topLeftCell="A${freeze+1}" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft"/></sheetView>`
+      :`<sheetView workbookViewId="0"/>`;
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:${ref(lastR,lastC)}"/><sheetViews>${view}</sheetViews><sheetFormatPr defaultRowHeight="18"/><cols>${cols}</cols><sheetData>${rowsToXml(rows)}</sheetData><pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5"/></worksheet>`;
+  };
+
+  // Summary sheet
+  const sumRows={}; let sr=1;
+  str(sumRows,sr,1,`${S.brand} – Stock Transfer Summary`,S_.title);
+  sr=2; str(sumRows,sr,1,`Dates: ${dates.map(fmtDate).join(', ')}`,S_.cellL);
+  sr=4;
+  ['Date','Ordered Pkt','Sent Pkt','Diff','Ord kg','Sent kg'].forEach((h,i)=>str(sumRows,sr,i+1,h,S_.head));
+  let gOrd=0,gSent=0,gOrdW=0,gSentW=0;
+  dates.forEach((date,i)=>{
+    const rows=transferRowData(date), T=transferTotals(rows);
+    const r=sr+1+i;
+    str(sumRows,r,1,fmtDate(date),S_.cellOnL);
+    num(sumRows,r,2,T.ordP,S_.cellOn); num(sumRows,r,3,T.sentP,S_.cellOn);
+    num(sumRows,r,4,T.diffP,T.diffP<0?S_.neg:(T.diffP>0?S_.pos:S_.cell));
+    num(sumRows,r,5,T.ordW,S_.cell); num(sumRows,r,6,T.sentW,S_.cell);
+    gOrd+=T.ordP; gSent+=T.sentP; gOrdW+=T.ordW; gSentW+=T.sentW;
+  });
+  const sumTot=sr+1+dates.length;
+  str(sumRows,sumTot,1,'TOTAL',S_.footL);
+  num(sumRows,sumTot,2,gOrd,S_.foot); num(sumRows,sumTot,3,gSent,S_.foot);
+  num(sumRows,sumTot,4,gSent-gOrd,S_.foot); num(sumRows,sumTot,5,r6(gOrdW),S_.foot); num(sumRows,sumTot,6,r6(gSentW),S_.foot);
+
+  // Product totals on summary
+  let pr=sumTot+2;
+  str(sumRows,pr,1,'Product totals (all selected dates)',S_.title); pr++;
+  ['No','Detail','Pack kg','Ordered','Sent','Diff','Ord kg','Sent kg'].forEach((h,i)=>str(sumRows,pr,i+1,h,S_.head));
+  let pIdx=0, pOrd=0, pSent=0;
+  S.items.forEach((it,i)=>{
+    let ordP=0, sentP=0;
+    dates.forEach(date=>{
+      const fills=transferOrderFills(date);
+      const tr=getTransfer(date);
+      B.forEach(b=>{
+        ordP+=fills[b.id]?.qty[it.id]||0;
+        sentP+=tr?.qty?.[b.id]?.[it.id]||0;
+      });
+    });
+    if(!ordP&&!sentP) return;
+    const r=pr+1+pIdx; pIdx++;
+    num(sumRows,r,1,i+1,S_.muted); str(sumRows,r,2,it.name,S_.cellOnL); num(sumRows,r,3,it.pack,S_.cell);
+    num(sumRows,r,4,ordP,S_.cellOn); num(sumRows,r,5,sentP,S_.cellOn);
+    const d=sentP-ordP;
+    num(sumRows,r,6,d,d<0?S_.neg:(d>0?S_.pos:S_.cell));
+    num(sumRows,r,7,r6(ordP*it.pack),S_.cell); num(sumRows,r,8,r6(sentP*it.pack),S_.cell);
+    pOrd+=ordP; pSent+=sentP;
+  });
+  const pTot=pr+1+Math.max(pIdx,1);
+  if(pIdx){
+    str(sumRows,pTot,2,'TOTAL',S_.footL);
+    num(sumRows,pTot,4,pOrd,S_.foot); num(sumRows,pTot,5,pSent,S_.foot);
+    num(sumRows,pTot,6,pSent-pOrd,S_.foot);
+  }
+  const sheets=[{name:'Summary',xml:sheetXml(sumRows,Math.max(pTot,sumTot),8,4)}];
+
+  // One sheet per date: Ordered / Sent / Diff side by side for each branch would be huge —
+  // use same format as single-date: three blocks isn't needed; one compare sheet per date
+  dates.forEach((date,di)=>{
+    const rows=transferRowData(date), T=transferTotals(rows);
+    const shown=rows.filter(r=>r.ordP>0||r.sentP>0);
+    const rowsX={};
+    str(rowsX,1,1,`${S.brand} Stock Transfer – ${fmtDate(date)}`,S_.title);
+    // headers: No Detail Pack | for each branch Ord Sent Diff | TotOrd TotSent Diff
+    let heads=['No','Detail','Pack'];
+    B.forEach(b=>{heads.push(b.name+' Ord', b.name+' Sent', b.name+' Diff')});
+    heads.push('Tot Ord','Tot Sent','Diff');
+    heads.forEach((h,i)=>str(rowsX,2,i+1,h,S_.head));
+    shown.forEach((r,idx)=>{
+      const rr=3+idx;
+      num(rowsX,rr,1,r.i+1,S_.cellOn); str(rowsX,rr,2,r.it.name,S_.cellOnL); num(rowsX,rr,3,r.it.pack,S_.cell);
+      B.forEach((b,j)=>{
+        const c0=4+j*3;
+        if(r.ord[j]) num(rowsX,rr,c0,r.ord[j],S_.cellOn); else blank(rowsX,rr,c0,S_.cell);
+        if(r.sent[j]) num(rowsX,rr,c0+1,r.sent[j],S_.cellOn); else blank(rowsX,rr,c0+1,S_.cell);
+        const d=r.diff[j];
+        if(d) num(rowsX,rr,c0+2,d,d<0?S_.neg:(d>0?S_.pos:S_.cell)); else blank(rowsX,rr,c0+2,S_.cell);
+      });
+      const tc=4+B.length*3;
+      if(r.ordP) num(rowsX,rr,tc,r.ordP,S_.cellOn); else blank(rowsX,rr,tc,S_.cell);
+      if(r.sentP) num(rowsX,rr,tc+1,r.sentP,S_.cellOn); else blank(rowsX,rr,tc+1,S_.cell);
+      if(r.diffP) num(rowsX,rr,tc+2,r.diffP,r.diffP<0?S_.neg:(r.diffP>0?S_.pos:S_.cell)); else blank(rowsX,rr,tc+2,S_.cell);
+    });
+    const trR=3+Math.max(shown.length,1);
+    str(rowsX,trR,2,'TOTAL',S_.footL);
+    B.forEach((b,j)=>{
+      const c0=4+j*3;
+      num(rowsX,trR,c0,T.colOrd[j],S_.foot);
+      num(rowsX,trR,c0+1,T.colSent[j],S_.foot);
+      num(rowsX,trR,c0+2,T.colDiff[j],S_.foot);
+    });
+    const tc=4+B.length*3;
+    num(rowsX,trR,tc,T.ordP,S_.foot); num(rowsX,trR,tc+1,T.sentP,S_.foot); num(rowsX,trR,tc+2,T.diffP,S_.foot);
+    const safeName=fmtDate(date).replace(/[\\/*?:[\]]/g,'-').slice(0,28)||`Day${di+1}`;
+    sheets.push({name:safeName,xml:sheetXml(rowsX,trR,tc+2,2)});
+  });
+
+  const sheetOverrides=sheets.map((_,i)=>`<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('');
+  const sheetEntries=sheets.map((s,i)=>`<sheet name="${xmlEsc(s.name)}" sheetId="${i+1}" r:id="rId${i+1}"/>`).join('');
+  const sheetRels=sheets.map((_,i)=>`<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i+1}.xml"/>`).join('')
+    +`<Relationship Id="rId${sheets.length+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>`;
+  const files=[
+    {name:'[Content_Types].xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${sheetOverrides}<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`},
+    {name:'_rels/.rels',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`},
+    {name:'xl/workbook.xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sheetEntries}</sheets><calcPr fullCalcOnLoad="1"/></workbook>`},
+    {name:'xl/_rels/workbook.xml.rels',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheetRels}</Relationships>`},
+    {name:'xl/styles.xml',data:sb.xml()},
+    ...sheets.map((s,i)=>({name:`xl/worksheets/sheet${i+1}.xml`,data:s.xml}))
+  ];
+  return zipStore(files, XL_MIME);
+}
+
+/* =====================================================================
+   HEADER / ALERTS / TABS
+   ===================================================================== */
+function renderHeader(){
+  $('#brandName').textContent=S.brand;$('#logoImg').src=getLogo();
+  document.title=`${S.brand} – Branch Ordering System`;
+}
+const ADMIN_PIN='2626';
+let adminUnlocked=false;
+
+function askAdminPin(){
+  return new Promise(res=>{
+    const node=document.createElement('div');
+    node.innerHTML=`
+      <p style="margin-bottom:12px">Settings (products &amp; branches) are locked. Enter the 4-digit PIN to continue.</p>
+      <label class="f">PIN<input type="password" id="pinIn" inputmode="numeric" maxlength="4" pattern="[0-9]*" placeholder="••••" autocomplete="off" style="letter-spacing:8px;font-size:22px;text-align:center;font-weight:700"></label>
+      <p class="hint" id="pinErr" style="margin-top:8px;color:var(--red);min-height:18px"></p>`;
+    const inp=$('#pinIn',node);
+    let done=false;
+    const fin=v=>{if(!done){done=true;res(v)}};
+    const tryUnlock=()=>{
+      const v=(inp.value||'').replace(/\D/g,'');
+      if(v===ADMIN_PIN){adminUnlocked=true;fin(true);return true}
+      $('#pinErr',node).textContent='Wrong PIN. Try again.';
+      inp.value='';inp.focus();
+      return false;
+    };
+    const m=openModal({title:'Enter PIN',node,actions:[
+      {label:'Cancel',fn:()=>fin(false)},
+      {label:'Unlock',cls:'pri',fn:()=>{if(!tryUnlock())return false}}]});
+    inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();if(tryUnlock())m.close()}});
+    setTimeout(()=>inp.focus(),80);
+    m.d.addEventListener('close',()=>fin(false));
+  });
+}
+
+function renderAlerts(){
+  const a=$('#alerts');let h='';
+  const bad=/failed|error|unable/i.test(cloudStatus);
+  h+=`<div class="notice ${bad?'err':''}" style="margin-bottom:8px"><span><b>Shared database:</b> ${esc(cloudStatus)}</span></div>`;
+  a.innerHTML=h;
+}
+function setTab(t){
+  if(t==='admin'&&!adminUnlocked){
+    askAdminPin().then(ok=>{if(ok)setTab('admin')});
+    return;
+  }
+  ui.tab=t;
+  $$('.tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===t));
+  $$('.view').forEach(v=>v.hidden=v.id!=='v-'+t);
+  if(t==='order')renderOrder();
+  if(t==='master'){renderMaster();renderSummary()}
+  if(t==='transfer'){renderTransfer();renderTransferSummary()}
+  if(t==='admin')renderSetup();
+  renderAlerts();window.scrollTo({top:0});
+}
+$('.tabs').addEventListener('click',e=>{const b=e.target.closest('button[data-tab]');if(b)setTab(b.dataset.tab)});
+function renderAll(){renderHeader();setTab(ui.tab==='setup'||ui.tab==='backup'?'order':ui.tab)}
+
+/* =====================================================================
+   START
+   ===================================================================== */
+async function startSharedApp(){
+  $('#todayLbl').textContent=fmtDate(today());
+  try{
+    const response=await fetch('/api/ordering/state',{credentials:'same-origin'});
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok) throw new Error(data.error||`Database load failed (${response.status})`);
+    S=data.state?normalize(data.state):defaults();
+    ui.branch=S.ui.branch;
+    if(!S.branches.some(b=>b.id===ui.branch))ui.branch=S.branches[0].id;
+    cloudLoaded=true;
+    cloudStatus='Connected · all branches share saved data';
+    if(!data.state){
+      const initResponse=await fetch('/api/ordering/state',{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:S})});
+      if(!initResponse.ok) throw new Error('Could not initialize shared ordering data');
+    }
+    { // daily safety copy of the cloud-loaded state
+      const snaps=loadSnaps();
+      if(orderCount(S)>0&&(!snaps.length||Date.now()-snaps[0].ts>12*36e5))snapshot('Daily safety copy');
+    }
+    renderAll();
+  }catch(e){
+    cloudStatus='Unable to connect to shared database: '+(e.message||'Please sign in again and reload.');
+    renderAll();
+    toast('Ordering system is not connected. Do not enter orders until the connection is restored.','err');
+    console.error('Ordering database load failed:',e);
+  }
+}
+startSharedApp();
+})();
+</script>
+</body>
+</html>

@@ -142,6 +142,52 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
+/* ---------- Shared Ordering System API ---------- */
+/*
+  The ordering app has its own single JSON state row in a separate table.
+  This deliberately does not read, alter, or delete any invoice records.
+*/
+app.get('/api/ordering/state', auth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'select state, updated_at from public.ordering_app_state where id = 1'
+    );
+    if (!result.rowCount) return res.json({ state: null, updatedAt: null });
+    res.json({
+      state: result.rows[0].state,
+      updatedAt: result.rows[0].updated_at
+    });
+  } catch (e) {
+    console.error('Could not load ordering state:', e);
+    res.status(500).json({ error: 'Could not load ordering data. Confirm the ordering_app_state table has been created.' });
+  }
+});
+
+app.put('/api/ordering/state', auth, async (req, res) => {
+  const state = req.body?.state;
+  if (!state || typeof state !== 'object' || Array.isArray(state)) {
+    return res.status(400).json({ error: 'A valid ordering state object is required' });
+  }
+  if (JSON.stringify(state).length > 1_800_000) {
+    return res.status(413).json({ error: 'Ordering data is too large to save' });
+  }
+
+  try {
+    const result = await pool.query(
+      `insert into public.ordering_app_state (id, state, updated_at)
+       values (1, $1::jsonb, now())
+       on conflict (id) do update
+         set state = excluded.state, updated_at = now()
+       returning updated_at`,
+      [JSON.stringify(state)]
+    );
+    res.json({ ok: true, updatedAt: result.rows[0].updated_at });
+  } catch (e) {
+    console.error('Could not save ordering state:', e);
+    res.status(500).json({ error: 'Could not save ordering data' });
+  }
+});
+
 /* ---------- Invoice numbering ---------- */
 // Preview-only: shows what the NEXT number would be, without consuming it.
 // The number is only actually assigned (atomically) when an invoice is saved.
@@ -208,19 +254,14 @@ app.post('/api/invoices', auth, async (req, res) => {
   try {
     await client.query('begin');
 
-    // Is this a brand-new invoice, or are we editing one that's already saved?
     const existing = await client.query(
       'select invoice_no from public.invoices where id = $1',
       [inv.id]
     );
 
     if (existing.rowCount) {
-      // Editing: keep the number it already has. Never let the client rename it.
       inv.invoiceNo = existing.rows[0].invoice_no;
     } else {
-      // Brand-new invoice: atomically claim the next number from the counter row.
-      // This UPDATE takes a row lock, so if two devices save at the same instant,
-      // the second one waits and gets the number after, never the same one.
       const counterResult = await client.query(
         `update public.invoice_counters
          set last_number = last_number + 1
@@ -336,8 +377,6 @@ app.post('/api/invoices/bulk', auth, async (req, res) => {
       uploaded++;
     }
 
-    // Make sure future numbers pick up after the highest migrated one,
-    // so old (locally-numbered) invoices never get collided with by new ones.
     let maxNum = 0;
     for (const raw of invoices) {
       const n = parseInt(String(raw.invoiceNo || '').replace(/\D/g, ''), 10);
@@ -363,9 +402,13 @@ app.post('/api/invoices/bulk', auth, async (req, res) => {
   }
 });
 
-/* ---------- Serve the protected app ---------- */
+/* ---------- Serve protected front-end apps ---------- */
 app.get('/', auth, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'palmcity.html'));
+});
+
+app.get('/star-chicken-orders.html', auth, (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'star-chicken-orders.html'));
 });
 
 app.use((req, res) => {
