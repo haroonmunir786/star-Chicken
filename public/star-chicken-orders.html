@@ -368,7 +368,7 @@ dialog.modal::backdrop{background:rgba(25,18,18,.55)}
       <div><span>Weight ordered</span><b id="tOrdW">0 <small>kg</small></b></div>
       <div><span>Weight sending</span><b id="tSentW">0 <small>kg</small></b></div>
     </div>
-    <p class="hint" style="margin-top:8px">Difference = Sending − Ordered. Red / negative means short supply (order zyada, stock kam). Green means extra stock sent.</p>
+    <p class="hint" style="margin-top:8px">Difference = Ordered − Sending. Red / negative means short supply (order zyada, stock kam). Green means extra stock sent.</p>
     <div class="actions" style="margin-top:12px">
       <button type="button" class="btn gold" id="tCopyOrd">Copy ordered → sending</button>
       <button type="button" class="btn danger" id="tClearSent">Clear all sending</button>
@@ -467,6 +467,7 @@ dialog.modal::backdrop{background:rgba(25,18,18,.55)}
 </section>
 </main>
 
+<div id="cloudStatus" role="status" style="position:sticky;top:0;z-index:20;background:#e8f6ee;color:#17653a;padding:7px 12px;font-size:12px;font-weight:700">Connecting to Supabase…</div>
 <div id="toast" aria-live="polite"></div>
 
 <script>
@@ -564,35 +565,12 @@ function normalize(d){
   }
   return out;
 }
-// Cloud is the source of truth. Existing browser-local test data is deliberately ignored.
-let S=defaults();
-let saveT=null, cloudLoaded=false, cloudStatus='Connecting to shared database…', cloudSaveInFlight=false, cloudSaveAgain=false;
-async function pushCloudState(){
-  if(!cloudLoaded) return;
-  if(cloudSaveInFlight){cloudSaveAgain=true;return;}
-  cloudSaveInFlight=true;
-  try{
-    const response=await fetch('/api/ordering/state',{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:S})});
-    const data=await response.json().catch(()=>({}));
-    if(!response.ok) throw new Error(data.error||`Save failed (${response.status})`);
-    cloudStatus='Connected · all branches share saved data';
-  }catch(e){
-    cloudStatus='Cloud save failed: '+(e.message||'Check your connection and reload before continuing.');
-    console.error('Ordering cloud save failed:',e);
-  }finally{
-    cloudSaveInFlight=false;
-    if(cloudSaveAgain){cloudSaveAgain=false;pushCloudState();}
-    if(typeof renderAlerts==='function') renderAlerts();
-  }
-}
-function save(now){
-  clearTimeout(saveT);
-  // Keep a local emergency copy, but never use it to initialize the shared system.
-  const run=()=>{store.set(KEY,JSON.stringify(S));pushCloudState();};
-  now?run():(saveT=setTimeout(run,350));
-}
-window.addEventListener('pagehide',()=>save(true));
-document.addEventListener('visibilitychange',()=>{if(document.hidden)save(true)});
+let S=defaults(), saveT=null, cloudReady=false, saveChain=Promise.resolve();
+function setCloudStatus(msg){const el=$('#cloudStatus');if(el)el.textContent=msg}
+async function saveCloud(){if(!cloudReady)return;const snapshot=JSON.stringify(S);saveChain=saveChain.then(async()=>{const r=await fetch('/api/ordering/state',{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:JSON.parse(snapshot)})});if(r.status===401){location.href='/login';throw new Error('Login required')}if(!r.ok)throw new Error('Cloud save failed ('+r.status+')');setCloudStatus('Connected · saved to Supabase')}).catch(e=>{console.error(e);setCloudStatus('Cloud save failed — check connection before continuing')});return saveChain}
+function save(now){clearTimeout(saveT);now?saveCloud():(saveT=setTimeout(saveCloud,350))}
+window.addEventListener('pagehide',()=>{if(cloudReady)fetch('/api/ordering/state',{method:'PUT',keepalive:true,credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:S})}).catch(()=>{})});
+async function initCloudState(){setCloudStatus('Connecting to Supabase…');try{const r=await fetch('/api/ordering/state',{credentials:'same-origin'});if(r.status===401){location.href='/login';return}if(!r.ok)throw new Error('Unable to load cloud ordering data');const data=await r.json();if(data.state)S=normalize(data.state);else{let legacy=null;try{const raw=store.get(KEY);if(raw)legacy=normalize(JSON.parse(raw))}catch(e){}S=legacy||defaults();const w=await fetch('/api/ordering/state',{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:S})});if(!w.ok)throw new Error('Initial cloud save failed')}cloudReady=true;setCloudStatus('Connected · data stored in Supabase');if(!S.branches.some(b=>b.id===ui.branch))ui.branch=S.branches[0].id;const snaps=loadSnaps();if(orderCount(S)>0&&(!snaps.length||Date.now()-snaps[0].ts>12*36e5))snapshot('Daily safety copy');renderAll()}catch(e){console.error(e);setCloudStatus('Cannot connect to Supabase. Editing is paused to protect your data.');alert('Could not connect to the server. Please refresh or sign in again. No changes were saved.')}}
 
 const getLogo=()=>store.get(LOGO_KEY)||DEFAULT_LOGO;
 
@@ -835,7 +813,7 @@ function orderMessage(date,branch,o){
   L.push(`Date: ${fmtDate(date)}`);
   if(o.by)L.push(`Ordered by: ${o.by}`);
   L.push('');
-  S.items.forEach((it,i)=>{const q=o.qty[it.id]||0;if(q>0)L.push(`${i+1}. ${it.name} – ${q}`)});
+  S.items.forEach((it)=>{const q=o.qty[it.id]||0;if(q>0)L.push(`${it.name} – ${q}`)});
   L.push('');
   L.push(`*Total: ${t.p} pkt*`);
   if(o.note)L.push('',`Note: ${o.note}`);
@@ -1416,23 +1394,23 @@ function transferRowData(date){
   return S.items.map((it,i)=>{
     const ord=B.map(b=>fills[b.id]?.qty[it.id]||0);
     const sent=B.map(b=>tr?.qty?.[b.id]?.[it.id]||0);
-    const diff=ord.map((o,j)=>sent[j]-o);
+    const diff=ord.map((o,j)=>o-sent[j]);
     const ordP=ord.reduce((a,b)=>a+b,0), sentP=sent.reduce((a,b)=>a+b,0);
-    return {it,i,ord,sent,diff,ordP,sentP,diffP:sentP-ordP,ordW:r6(ordP*it.pack),sentW:r6(sentP*it.pack)};
+    return {it,i,ord,sent,diff,ordP,sentP,diffP:ordP-sentP,ordW:r6(ordP*it.pack),sentW:r6(sentP*it.pack)};
   });
 }
 function transferTotals(rows){
   const B=S.branches;
   const colOrd=B.map((_,j)=>rows.reduce((a,r)=>a+r.ord[j],0));
   const colSent=B.map((_,j)=>rows.reduce((a,r)=>a+r.sent[j],0));
-  const colDiff=B.map((_,j)=>colSent[j]-colOrd[j]);
+  const colDiff=B.map((_,j)=>colOrd[j]-colSent[j]);
   const ordP=colOrd.reduce((a,b)=>a+b,0), sentP=colSent.reduce((a,b)=>a+b,0);
   const ordW=r6(rows.reduce((a,r)=>a+r.ordW,0)), sentW=r6(rows.reduce((a,r)=>a+r.sentW,0));
-  return {colOrd,colSent,colDiff,ordP,sentP,diffP:sentP-ordP,ordW,sentW};
+  return {colOrd,colSent,colDiff,ordP,sentP,diffP:ordP-sentP,ordW,sentW};
 }
 function diffClass(d){
-  if(d<0) return 'diff-neg'; // sent less than ordered = shortfall
-  if(d>0) return 'diff-pos'; // sent extra
+  if(d>0) return 'diff-neg'; // ordered more than sent = shortfall
+  if(d<0) return 'diff-pos'; // sent extra
   return 'diff-zero';
 }
 function renderTransfer(){
@@ -1474,14 +1452,14 @@ function renderTransfer(){
   $('#tOrdP').textContent=T.ordP;
   $('#tSentP').textContent=T.sentP;
   $('#tDiffP').textContent=(T.diffP>0?'+':'')+T.diffP;
-  $('#tDiffP').style.color=T.diffP<0?'var(--red)':(T.diffP>0?'var(--ok)':'');
+  $('#tDiffP').style.color=T.diffP>0?'var(--red)':(T.diffP<0?'var(--ok)':'');
   $('#tOrdW').innerHTML=fmtW(T.ordW)+' <small>kg</small>';
   $('#tSentW').innerHTML=fmtW(T.sentW)+' <small>kg</small>';
 
   const titles={
     ordered:'① Ordered stock (from branch orders)',
     sending:'② Stock being sent / transferred',
-    diff:'③ Difference (Sending − Ordered)',
+    diff:'③ Difference (Ordered − Sending)',
     compare:'Compare: Ordered · Sent · Diff'
   };
   $('#tTableTitle').textContent=titles[ui.tview]||'Stock transfer';
@@ -1551,21 +1529,20 @@ function renderTransfer(){
   $('#twrap').innerHTML=html;
 
   // Shortfall list
-  const short=rows.filter(r=>r.diffP<0).sort((a,b)=>a.diffP-b.diffP);
+  const short=rows.filter(r=>r.diffP>0).sort((a,b)=>b.diffP-a.diffP);
   if(!short.length){
     $('#tShort').innerHTML='<div class="empty">No shortfall — every ordered item is fully covered (or nothing ordered).</div>';
   } else {
     let sh=`<table class="mt" style="min-width:520px"><thead><tr><th>No</th><th class="l">Product</th><th>Ordered</th><th>Sending</th><th>Missing</th><th>Missing kg</th></tr></thead><tbody>`;
     short.forEach(r=>{
-      const miss=-r.diffP;
-      sh+=`<tr class="on"><td>${r.i+1}</td><td class="l dt">${esc(r.it.name)}</td><td>${r.ordP}</td><td>${r.sentP}</td><td class="diff-neg">${miss}</td><td class="diff-neg">${fmtW(r6(miss*r.it.pack))}</td></tr>`;
+      sh+=`<tr class="on"><td>${r.i+1}</td><td class="l dt">${esc(r.it.name)}</td><td>${r.ordP}</td><td>${r.sentP}</td><td class="diff-neg">${r.diffP}</td><td class="diff-neg">${fmtW(r6(r.diffP*r.it.pack))}</td></tr>`;
     });
-    const missP=short.reduce((a,r)=>a+(-r.diffP),0), missW=r6(short.reduce((a,r)=>a+(-r.diffP)*r.it.pack,0));
+    const missP=short.reduce((a,r)=>a+r.diffP,0), missW=r6(short.reduce((a,r)=>a+r.diffP*r.it.pack,0));
     sh+=`</tbody><tfoot><tr><td></td><td class="l">TOTAL MISSING</td><td></td><td></td><td class="diff-neg">${missP}</td><td class="diff-neg">${fmtW(missW)}</td></tr></tfoot></table>`;
     // per-branch breakdown of shortfall
     sh+=`<p class="hint" style="margin:12px 0 6px">Missing by branch</p><table class="mt" style="min-width:480px"><thead><tr><th class="l">Product</th>${B.map(b=>`<th>${esc(b.name)}</th>`).join('')}</tr></thead><tbody>`;
     short.forEach(r=>{
-      sh+=`<tr><td class="l dt">${esc(r.it.name)}</td>${r.diff.map(d=>`<td class="${d<0?'diff-neg':''}">${d<0?-d:'·'}</td>`).join('')}</tr>`;
+      sh+=`<tr><td class="l dt">${esc(r.it.name)}</td>${r.diff.map(d=>`<td class="${d>0?'diff-neg':''}">${d>0?d:'·'}</td>`).join('')}</tr>`;
     });
     sh+=`</tbody></table>`;
     $('#tShort').innerHTML=sh;
@@ -1590,7 +1567,7 @@ $('#twrap').addEventListener('input',e=>{
   $('#tOrdP').textContent=T.ordP;
   $('#tSentP').textContent=T.sentP;
   $('#tDiffP').textContent=(T.diffP>0?'+':'')+T.diffP;
-  $('#tDiffP').style.color=T.diffP<0?'var(--red)':(T.diffP>0?'var(--ok)':'');
+  $('#tDiffP').style.color=T.diffP>0?'var(--red)':(T.diffP<0?'var(--ok)':'');
   $('#tOrdW').innerHTML=fmtW(T.ordW)+' <small>kg</small>';
   $('#tSentW').innerHTML=fmtW(T.sentW)+' <small>kg</small>';
   const row=inp.closest('tr'), iid=inp.dataset.iid;
@@ -1685,14 +1662,14 @@ async function buildTransferXlsx(date){
         let v=0, style=S_.cell;
         if(kind==='Ordered'){ v=r.ord[j]; style=v?S_.cellOn:S_.cell; }
         else if(kind==='Sending'){ v=r.sent[j]; style=v?S_.cellOn:S_.cell; }
-        else { v=r.diff[j]; style=v<0?S_.neg:(v>0?S_.pos:S_.cell); }
+        else { v=r.diff[j]; style=v>0?S_.neg:(v<0?S_.pos:S_.cell); }
         if(v) num(rowsX,rr,4+j,v,style); else blank(rowsX,rr,4+j,S_.cell);
       });
       let tot=0, wt=0;
       if(kind==='Ordered'){ tot=r.ordP; wt=r.ordW; }
       else if(kind==='Sending'){ tot=r.sentP; wt=r.sentW; }
       else { tot=r.diffP; wt=r6(r.diffP*r.it.pack); }
-      const ts=tot<0&&kind==='Difference'?S_.neg:(tot>0&&kind==='Difference'?S_.pos:S_.cellOn);
+      const ts=tot>0&&kind==='Difference'?S_.neg:(tot<0&&kind==='Difference'?S_.pos:S_.cellOn);
       if(tot) num(rowsX,rr,4+B.length,tot,ts); else blank(rowsX,rr,4+B.length,S_.cell);
       if(tot) num(rowsX,rr,5+B.length,wt,S_.cell); else blank(rowsX,rr,5+B.length,S_.cell);
     });
@@ -1720,7 +1697,7 @@ async function buildTransferXlsx(date){
   ['Metric','Packets','Weight kg'].forEach((h,i)=>str(sum,sr,i+1,h,S_.head));
   str(sum,5,1,'Ordered',S_.cellL); num(sum,5,2,T.ordP,S_.cellOn); num(sum,5,3,T.ordW,S_.cell);
   str(sum,6,1,'Sending',S_.cellL); num(sum,6,2,T.sentP,S_.cellOn); num(sum,6,3,T.sentW,S_.cell);
-  str(sum,7,1,'Difference (Sent − Ord)',S_.cellL); num(sum,7,2,T.diffP,T.diffP<0?S_.neg:(T.diffP>0?S_.pos:S_.cell)); num(sum,7,3,r6(rows.reduce((a,r)=>a+r.diffP*r.it.pack,0)),S_.cell);
+  str(sum,7,1,'Difference (Ord − Sent)',S_.cellL); num(sum,7,2,T.diffP,T.diffP>0?S_.neg:(T.diffP<0?S_.pos:S_.cell)); num(sum,7,3,r6(rows.reduce((a,r)=>a+r.diffP*r.it.pack,0)),S_.cell);
   sheets.unshift({name:'Summary',xml:sheetXml(sum,7,3)});
 
   const sheetOverrides=sheets.map((_,i)=>`<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('');
@@ -1781,7 +1758,7 @@ function renderTransferSummary(){
     gOrd+=T.ordP; gSent+=T.sentP; gOrdW+=T.ordW; gSentW+=T.sentW;
   });
   gOrdW=r6(gOrdW); gSentW=r6(gSentW);
-  const gDiff=gSent-gOrd;
+  const gDiff=gOrd-gSent;
 
   // Product totals across selected dates
   const prodRows=S.items.map((it,i)=>{
@@ -1794,7 +1771,7 @@ function renderTransferSummary(){
         sentP+=tr?.qty?.[b.id]?.[it.id]||0;
       });
     });
-    return {it,i,ordP,sentP,diffP:sentP-ordP,ordW:r6(ordP*it.pack),sentW:r6(sentP*it.pack)};
+    return {it,i,ordP,sentP,diffP:ordP-sentP,ordW:r6(ordP*it.pack),sentW:r6(sentP*it.pack)};
   }).filter(r=>r.ordP>0||r.sentP>0);
 
   // Branch totals across selected dates
@@ -1808,7 +1785,7 @@ function renderTransferSummary(){
       const sq=tr?.qty?.[b.id]||{};
       Object.values(sq).forEach(q=>sentP+=q||0);
     });
-    return {b, ordP, sentP, diffP:sentP-ordP};
+    return {b, ordP, sentP, diffP:ordP-sentP};
   }).filter(r=>r.ordP>0||r.sentP>0);
 
   elWrap.innerHTML=`
@@ -1816,7 +1793,7 @@ function renderTransferSummary(){
       <div><span>Days</span><b>${sel.length}</b></div>
       <div><span>Ordered</span><b>${gOrd} <small>pkt</small></b></div>
       <div><span>Sent</span><b>${gSent} <small>pkt</small></b></div>
-      <div><span>Difference</span><b style="color:${gDiff<0?'var(--red)':(gDiff>0?'var(--ok)':'')}">${gDiff>0?'+':''}${gDiff}</b></div>
+      <div><span>Difference</span><b style="color:${gDiff>0?'var(--red)':(gDiff<0?'var(--ok)':'')}">${gDiff>0?'+':''}${gDiff}</b></div>
     </div>
     <h3 style="margin:0 0 8px;font-size:15px">Day-wise summary</h3>
     <table class="mt" style="min-width:560px"><thead><tr><th class="l">Date</th><th>Ordered</th><th>Sent</th><th>Diff</th><th>Ord kg</th><th>Sent kg</th></tr></thead>
@@ -1835,7 +1812,7 @@ function renderTransferSummary(){
 
     <h3 style="margin:16px 0 8px;font-size:15px">Shortfall products (ordered &gt; sent)</h3>
     <table class="mt" style="min-width:520px"><thead><tr><th>No</th><th class="l">Product</th><th>Ordered</th><th>Sent</th><th>Missing</th><th>Missing kg</th></tr></thead>
-    <tbody>${prodRows.filter(r=>r.diffP<0).map(r=>`<tr class="on"><td>${r.i+1}</td><td class="l dt">${esc(r.it.name)}</td><td>${r.ordP}</td><td>${r.sentP}</td><td class="diff-neg">${-r.diffP}</td><td class="diff-neg">${fmtW(r6((-r.diffP)*r.it.pack))}</td></tr>`).join('')||'<tr><td colspan="6" class="empty">No shortfall across selected dates.</td></tr>'}</tbody></table>`;
+    <tbody>${prodRows.filter(r=>r.diffP>0).map(r=>`<tr class="on"><td>${r.i+1}</td><td class="l dt">${esc(r.it.name)}</td><td>${r.ordP}</td><td>${r.sentP}</td><td class="diff-neg">${r.diffP}</td><td class="diff-neg">${fmtW(r6(r.diffP*r.it.pack))}</td></tr>`).join('')||'<tr><td colspan="6" class="empty">No shortfall across selected dates.</td></tr>'}</tbody></table>`;
 }
 
 const _tsumFrom=$('#tsumFrom'); if(_tsumFrom) _tsumFrom.addEventListener('change',renderTransferSummary);
@@ -1902,14 +1879,14 @@ async function buildMultiDateTransferXlsx(dates){
     const r=sr+1+i;
     str(sumRows,r,1,fmtDate(date),S_.cellOnL);
     num(sumRows,r,2,T.ordP,S_.cellOn); num(sumRows,r,3,T.sentP,S_.cellOn);
-    num(sumRows,r,4,T.diffP,T.diffP<0?S_.neg:(T.diffP>0?S_.pos:S_.cell));
+    num(sumRows,r,4,T.diffP,T.diffP>0?S_.neg:(T.diffP<0?S_.pos:S_.cell));
     num(sumRows,r,5,T.ordW,S_.cell); num(sumRows,r,6,T.sentW,S_.cell);
     gOrd+=T.ordP; gSent+=T.sentP; gOrdW+=T.ordW; gSentW+=T.sentW;
   });
   const sumTot=sr+1+dates.length;
   str(sumRows,sumTot,1,'TOTAL',S_.footL);
   num(sumRows,sumTot,2,gOrd,S_.foot); num(sumRows,sumTot,3,gSent,S_.foot);
-  num(sumRows,sumTot,4,gSent-gOrd,S_.foot); num(sumRows,sumTot,5,r6(gOrdW),S_.foot); num(sumRows,sumTot,6,r6(gSentW),S_.foot);
+  num(sumRows,sumTot,4,gOrd-gSent,S_.foot); num(sumRows,sumTot,5,r6(gOrdW),S_.foot); num(sumRows,sumTot,6,r6(gSentW),S_.foot);
 
   // Product totals on summary
   let pr=sumTot+2;
@@ -1930,8 +1907,8 @@ async function buildMultiDateTransferXlsx(dates){
     const r=pr+1+pIdx; pIdx++;
     num(sumRows,r,1,i+1,S_.muted); str(sumRows,r,2,it.name,S_.cellOnL); num(sumRows,r,3,it.pack,S_.cell);
     num(sumRows,r,4,ordP,S_.cellOn); num(sumRows,r,5,sentP,S_.cellOn);
-    const d=sentP-ordP;
-    num(sumRows,r,6,d,d<0?S_.neg:(d>0?S_.pos:S_.cell));
+    const d=ordP-sentP;
+    num(sumRows,r,6,d,d>0?S_.neg:(d<0?S_.pos:S_.cell));
     num(sumRows,r,7,r6(ordP*it.pack),S_.cell); num(sumRows,r,8,r6(sentP*it.pack),S_.cell);
     pOrd+=ordP; pSent+=sentP;
   });
@@ -1939,7 +1916,7 @@ async function buildMultiDateTransferXlsx(dates){
   if(pIdx){
     str(sumRows,pTot,2,'TOTAL',S_.footL);
     num(sumRows,pTot,4,pOrd,S_.foot); num(sumRows,pTot,5,pSent,S_.foot);
-    num(sumRows,pTot,6,pSent-pOrd,S_.foot);
+    num(sumRows,pTot,6,pOrd-pSent,S_.foot);
   }
   const sheets=[{name:'Summary',xml:sheetXml(sumRows,Math.max(pTot,sumTot),8,4)}];
 
@@ -1963,12 +1940,12 @@ async function buildMultiDateTransferXlsx(dates){
         if(r.ord[j]) num(rowsX,rr,c0,r.ord[j],S_.cellOn); else blank(rowsX,rr,c0,S_.cell);
         if(r.sent[j]) num(rowsX,rr,c0+1,r.sent[j],S_.cellOn); else blank(rowsX,rr,c0+1,S_.cell);
         const d=r.diff[j];
-        if(d) num(rowsX,rr,c0+2,d,d<0?S_.neg:(d>0?S_.pos:S_.cell)); else blank(rowsX,rr,c0+2,S_.cell);
+        if(d) num(rowsX,rr,c0+2,d,d>0?S_.neg:(d<0?S_.pos:S_.cell)); else blank(rowsX,rr,c0+2,S_.cell);
       });
       const tc=4+B.length*3;
       if(r.ordP) num(rowsX,rr,tc,r.ordP,S_.cellOn); else blank(rowsX,rr,tc,S_.cell);
       if(r.sentP) num(rowsX,rr,tc+1,r.sentP,S_.cellOn); else blank(rowsX,rr,tc+1,S_.cell);
-      if(r.diffP) num(rowsX,rr,tc+2,r.diffP,r.diffP<0?S_.neg:(r.diffP>0?S_.pos:S_.cell)); else blank(rowsX,rr,tc+2,S_.cell);
+      if(r.diffP) num(rowsX,rr,tc+2,r.diffP,r.diffP>0?S_.neg:(r.diffP<0?S_.pos:S_.cell)); else blank(rowsX,rr,tc+2,S_.cell);
     });
     const trR=3+Math.max(shown.length,1);
     str(rowsX,trR,2,'TOTAL',S_.footL);
@@ -2037,8 +2014,7 @@ function askAdminPin(){
 
 function renderAlerts(){
   const a=$('#alerts');let h='';
-  const bad=/failed|error|unable/i.test(cloudStatus);
-  h+=`<div class="notice ${bad?'err':''}" style="margin-bottom:8px"><span><b>Shared database:</b> ${esc(cloudStatus)}</span></div>`;
+  if(!storageOK)h+=`<div class="notice err" style="margin-bottom:8px"><span><b>Browser storage is blocked.</b> Orders will be lost when this page closes. Open the file in a normal (not private) browser window.</span></div>`;
   a.innerHTML=h;
 }
 function setTab(t){
@@ -2061,34 +2037,8 @@ function renderAll(){renderHeader();setTab(ui.tab==='setup'||ui.tab==='backup'?'
 /* =====================================================================
    START
    ===================================================================== */
-async function startSharedApp(){
-  $('#todayLbl').textContent=fmtDate(today());
-  try{
-    const response=await fetch('/api/ordering/state',{credentials:'same-origin'});
-    const data=await response.json().catch(()=>({}));
-    if(!response.ok) throw new Error(data.error||`Database load failed (${response.status})`);
-    S=data.state?normalize(data.state):defaults();
-    ui.branch=S.ui.branch;
-    if(!S.branches.some(b=>b.id===ui.branch))ui.branch=S.branches[0].id;
-    cloudLoaded=true;
-    cloudStatus='Connected · all branches share saved data';
-    if(!data.state){
-      const initResponse=await fetch('/api/ordering/state',{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:S})});
-      if(!initResponse.ok) throw new Error('Could not initialize shared ordering data');
-    }
-    { // daily safety copy of the cloud-loaded state
-      const snaps=loadSnaps();
-      if(orderCount(S)>0&&(!snaps.length||Date.now()-snaps[0].ts>12*36e5))snapshot('Daily safety copy');
-    }
-    renderAll();
-  }catch(e){
-    cloudStatus='Unable to connect to shared database: '+(e.message||'Please sign in again and reload.');
-    renderAll();
-    toast('Ordering system is not connected. Do not enter orders until the connection is restored.','err');
-    console.error('Ordering database load failed:',e);
-  }
-}
-startSharedApp();
+$('#todayLbl').textContent=fmtDate(today());
+initCloudState();
 })();
 </script>
 </body>

@@ -625,6 +625,8 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
 .menu-nav-item:nth-child(4) .mn-icon { background: #F3E5F5; }
 .menu-nav-item:nth-child(5) .mn-icon { background: #E8F5E9; }
 .menu-nav-item:nth-child(6) .mn-icon { background: #ECEFF1; }
+.menu-nav-item:nth-child(7) .mn-icon { background: #E0F7FA; }
+.menu-nav-item:nth-child(8) .mn-icon { background: #FCE4EC; }
 .menu-nav-item .mn-text {
   display: flex; flex-direction: column; gap: 2px; min-width: 0;
 }
@@ -1054,6 +1056,21 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dash-li-meta { font-size: 0.7rem; color: var(--muted); }
 .dash-li-amt { font-size: 0.84rem; font-weight: 800; color: var(--primary); white-space: nowrap; }
+.dash-list-total {
+  display: flex; align-items: center; gap: 10px; padding: 12px 0 4px;
+  margin-top: 6px; border-top: 2px solid var(--primary);
+}
+.dash-list-total .dash-total-label {
+  font-size: 0.8rem; font-weight: 800; color: var(--primary);
+  text-transform: uppercase; letter-spacing: 0.4px; flex-shrink: 0;
+  min-width: 48px;
+}
+.dash-list-total .dash-total-meta {
+  flex: 1; min-width: 0; font-size: 0.78rem; font-weight: 600; color: var(--ink-soft);
+}
+.dash-list-total .dash-total-amt {
+  font-size: 0.9rem; font-weight: 800; color: var(--primary); white-space: nowrap;
+}
 .dash-empty { text-align: center; padding: 28px 12px; color: var(--muted); font-size: 0.85rem; }
 .dash-month-chart {
   display: flex; align-items: flex-end; gap: 6px; height: 160px; padding-top: 8px;
@@ -1077,10 +1094,83 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
   font-size: 0.6rem; font-weight: 700; color: var(--ink-soft);
   text-align: center;
 }
+
+/* Category contribution donut */
+.dash-cat-wrap {
+  display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+  justify-content: center; padding: 8px 0 4px;
+}
+.dash-cat-donut {
+  width: 180px; height: 180px; flex-shrink: 0; position: relative;
+}
+.dash-cat-donut svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.dash-cat-center {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; pointer-events: none;
+}
+.dash-cat-center .dc-total {
+  font-size: 0.95rem; font-weight: 800; color: var(--ink); line-height: 1.15;
+}
+.dash-cat-center .dc-label {
+  font-size: 0.65rem; font-weight: 600; color: var(--muted); text-transform: uppercase;
+  letter-spacing: 0.3px; margin-top: 2px;
+}
+.dash-cat-legend {
+  flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 8px;
+}
+.dash-cat-leg-row {
+  display: flex; align-items: center; gap: 10px; font-size: 0.82rem;
+  padding: 4px 0;
+}
+.dash-cat-swatch {
+  width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0;
+}
+.dash-cat-leg-name {
+  flex: 1 1 auto; min-width: 100px; font-weight: 700; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.dash-cat-leg-pct {
+  font-weight: 700; color: var(--muted); font-size: 0.78rem;
+  flex-shrink: 0; min-width: 42px; text-align: right;
+}
+.dash-cat-leg-amt {
+  font-weight: 800; color: var(--primary); font-size: 0.82rem;
+  white-space: nowrap; flex-shrink: 0; min-width: 80px; text-align: right;
+}
+.dash-cat-note {
+  font-size: 0.72rem; color: var(--muted); text-align: center; margin-top: 6px;
+}
+@media (max-width: 480px) {
+  .dash-cat-wrap { flex-direction: column; }
+  .dash-cat-legend { width: 100%; min-width: 0; }
+  .dash-cat-leg-name { min-width: 80px; }
+}
+
 @media (max-width: 900px) {
   .dash-kpis { grid-template-columns: 1fr 1fr; }
   .dash-grid-2 { grid-template-columns: 1fr; }
 }
+
+/* Party type segment (Star Chicken / Party / All) */
+.party-seg {
+  display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px;
+}
+.party-seg button {
+  flex: 1; min-width: 90px; height: 36px; padding: 0 10px;
+  border: 1.5px solid var(--border); border-radius: 9px;
+  background: #fff; font-family: inherit; font-size: 0.78rem; font-weight: 700;
+  color: var(--ink-soft); cursor: pointer; transition: all 0.15s;
+}
+.party-seg button:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); }
+.party-seg button.on {
+  background: var(--primary); color: #fff; border-color: var(--primary);
+}
+.party-seg button.on.party { background: #6A1B9A; border-color: #6A1B9A; }
+.party-seg button.on.all { background: #1565C0; border-color: #1565C0; }
+select[multiple] {
+  min-height: 110px; padding: 6px 8px;
+}
+.multi-hint { font-size: 0.7rem; color: var(--muted); margin-top: 4px; }
 
 /* Dashboard date filters */
 .dash-filter-row {
@@ -1293,6 +1383,13 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
           <small>Branch order · Master · Stock Transfer</small>
         </span>
       </button>
+      <button type="button" class="menu-nav-item" onclick="closeReportsMenu(); openInventorySystem()">
+        <span class="mn-icon">📋</span>
+        <span class="mn-text">
+          <strong>Inventory Management</strong>
+          <small>Stock sheet · Branches · Daily balance</small>
+        </span>
+      </button>
       <button type="button" class="menu-nav-item" onclick="closeReportsMenu(); openCustomerDetailsModal()">
         <span class="mn-icon">👤</span>
         <span class="mn-text">
@@ -1359,6 +1456,15 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
   <iframe id="orderFrame" class="order-iframe" title="Star Chicken Ordering System"></iframe>
 </div>
 
+<!-- Inventory / Stock Management full screen -->
+<div class="order-overlay no-print" id="inventoryOverlay">
+  <div class="order-overlay-bar">
+    <h3>📋 Inventory Management</h3>
+    <button type="button" class="btn-back" onclick="closeInventorySystem()">← Back to POS</button>
+  </div>
+  <iframe id="inventoryFrame" class="order-iframe" title="Star Chicken Stock Management"></iframe>
+</div>
+
 <!-- All Invoices History Modal (opens from Menu) -->
 <div class="hist-overlay no-print" id="historyOverlay" onclick="if(event.target===this)closeHistoryModal()">
   <div class="hist-modal" role="dialog" aria-labelledby="histTitle">
@@ -1368,6 +1474,11 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
     </div>
     <div class="hist-filters">
       <input type="hidden" id="historyDateFilter" value="">
+      <div class="party-seg" id="histPartySeg" style="margin-bottom:8px">
+        <button type="button" data-mode="star" onclick="setPartyFilter('hist','star')">⭐ Star</button>
+        <button type="button" data-mode="party" class="party" onclick="setPartyFilter('hist','party')">👥 Party</button>
+        <button type="button" data-mode="all" class="all on" onclick="setPartyFilter('hist','all')">🔗 All</button>
+      </div>
       <div class="hf-row">
         <button type="button" class="btn btn-ghost btn-xs" id="histBtnToday" onclick="setHistoryDateToday()" title="Today only" style="flex:1;height:36px;padding:0 10px">Today</button>
         <button type="button" class="btn btn-ghost btn-xs" id="histBtnAll" onclick="clearHistoryDate()" title="Show all dates" style="flex:1;height:36px;padding:0 10px">All</button>
@@ -1377,14 +1488,7 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
       </div>
       <div class="hf-row">
         <select id="historyShopFilter" onchange="renderHistory()" style="width:100%;height:36px;padding:0 10px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;font-family:inherit;background:#FAFAFA;color:var(--ink);">
-          <option value="">All Shops</option>
-          <option value="Kasur">Kasur</option>
-          <option value="Hatchery">Hatchery</option>
-          <option value="Mustafabad">Mustafabad</option>
-          <option value="Gajjumatta">Gajjumatta</option>
-          <option value="Gulshan Ravi">Gulshan Ravi</option>
-          <option value="Murghzar">Murghzar</option>
-          <option value="Link Road">Link Road</option>
+          <option value="">All Parties</option>
         </select>
       </div>
     </div>
@@ -1425,16 +1529,16 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
               <div id="customerDropdown"></div>
             </div>
             <div class="form-group">
-              <label>Shop Name</label>
+              <label>Party Type</label>
+              <select id="partyType" onchange="onPartyTypeChange(); markDirty(); updatePrintMeta()">
+                <option value="star">Star Chicken</option>
+                <option value="party">Party Customer</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Party</label>
               <select id="shopName" onchange="markDirty(); updatePrintMeta()">
-                <option value="">— Select Shop —</option>
-                <option value="Kasur">Kasur</option>
-                <option value="Hatchery">Hatchery</option>
-                <option value="Mustafabad">Mustafabad</option>
-                <option value="Gajjumatta">Gajjumatta</option>
-                <option value="Gulshan Ravi">Gulshan Ravi</option>
-                <option value="Murghzar">Murghzar</option>
-                <option value="Link Road">Link Road</option>
+                <option value="">— Select Party —</option>
               </select>
             </div>
             <div class="form-group">
@@ -1629,6 +1733,11 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
       </div>
     </div>
     <div class="dash-body">
+      <div class="party-seg" id="dashPartySeg">
+        <button type="button" data-mode="star" class="on" onclick="setPartyFilter('dash','star')">⭐ Star Chicken</button>
+        <button type="button" data-mode="party" class="party" onclick="setPartyFilter('dash','party')">👥 Party Customer</button>
+        <button type="button" data-mode="all" class="all" onclick="setPartyFilter('dash','all')">🔗 All</button>
+      </div>
       <div class="dash-kpis">
         <div class="dash-kpi k-today">
           <div class="dk-label">Today Sale</div>
@@ -1671,6 +1780,15 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
           <div class="dash-card-b">
             <div class="dash-month-chart" id="dashMonthChart"><div class="dash-empty">No data yet</div></div>
           </div>
+        </div>
+      </div>
+
+      <!-- Category contribution (linked to Branch date filter above) -->
+      <div class="dash-card" style="margin-bottom:14px">
+        <div class="dash-card-h">📊 Category Contribution <span style="font-weight:500;color:var(--muted);font-size:0.72rem;margin-left:6px">(same dates as Branch)</span></div>
+        <div class="dash-card-b">
+          <div id="dashCatChart"><div class="dash-empty">No category data yet</div></div>
+          <div class="dash-cat-note" id="dashCatNote"></div>
         </div>
       </div>
 
@@ -1758,22 +1876,20 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
       <button class="btn btn-ghost btn-sm" onclick="closeProductSaleModal()" style="height:32px;padding:0 10px;">✕</button>
     </div>
     <div class="sales-modal-body">
+      <div class="party-seg" id="psPartySeg">
+        <button type="button" data-mode="star" class="on" onclick="setPartyFilter('ps','star')">⭐ Star Chicken</button>
+        <button type="button" data-mode="party" class="party" onclick="setPartyFilter('ps','party')">👥 Party Customer</button>
+        <button type="button" data-mode="all" class="all" onclick="setPartyFilter('ps','all')">🔗 All</button>
+      </div>
       <div class="ps-date-row">
         <label for="psDate">Date</label>
         <input type="date" id="psDate" onchange="calcProductSale()">
         <button class="btn btn-primary btn-sm" onclick="setPsToday(); calcProductSale()" style="height:38px;">Today</button>
       </div>
       <div class="ps-date-row" style="margin-top:4px;">
-        <label for="psShop">Shop</label>
+        <label for="psShop">Party</label>
         <select id="psShop" onchange="calcProductSale()" style="height:38px;padding:0 10px;border:1.5px solid var(--border);border-radius:9px;font-family:inherit;font-size:0.9rem;background:#fff;min-width:160px;">
-          <option value="">All Shops</option>
-          <option value="Kasur">Kasur</option>
-          <option value="Hatchery">Hatchery</option>
-          <option value="Mustafabad">Mustafabad</option>
-          <option value="Gajjumatta">Gajjumatta</option>
-          <option value="Gulshan Ravi">Gulshan Ravi</option>
-          <option value="Murghzar">Murghzar</option>
-          <option value="Link Road">Link Road</option>
+          <option value="">All Parties</option>
         </select>
       </div>
       <div class="ps-summary">
@@ -1819,17 +1935,15 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
       <button class="btn btn-ghost btn-sm" onclick="closeSalesModal()" style="height:32px;padding:0 10px;">✕</button>
     </div>
     <div class="sales-modal-body">
+      <div class="party-seg" id="salePartySeg">
+        <button type="button" data-mode="star" class="on" onclick="setPartyFilter('sale','star')">⭐ Star Chicken</button>
+        <button type="button" data-mode="party" class="party" onclick="setPartyFilter('sale','party')">👥 Party Customer</button>
+        <button type="button" data-mode="all" class="all" onclick="setPartyFilter('sale','all')">🔗 All</button>
+      </div>
       <div class="ps-date-row" style="margin-bottom:14px;">
-        <label for="saleShop">Shop</label>
+        <label for="saleShop">Party</label>
         <select id="saleShop" onchange="calcPeriodSales(); calcCustomSale()" style="height:38px;padding:0 10px;border:1.5px solid var(--border);border-radius:9px;font-family:inherit;font-size:0.9rem;background:#fff;min-width:160px;">
-          <option value="">All Shops</option>
-          <option value="Kasur">Kasur</option>
-          <option value="Hatchery">Hatchery</option>
-          <option value="Mustafabad">Mustafabad</option>
-          <option value="Gajjumatta">Gajjumatta</option>
-          <option value="Gulshan Ravi">Gulshan Ravi</option>
-          <option value="Murghzar">Murghzar</option>
-          <option value="Link Road">Link Road</option>
+          <option value="">All Parties</option>
         </select>
       </div>
       <div class="sales-cards">
@@ -1879,19 +1993,17 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
       <button class="btn btn-ghost btn-sm" onclick="closeAllInvoicesModal()" style="height:32px;padding:0 10px;">✕</button>
     </div>
     <div class="sales-modal-body">
+      <div class="party-seg" id="aiPartySeg">
+        <button type="button" data-mode="star" class="on" onclick="setPartyFilter('ai','star')">⭐ Star Chicken</button>
+        <button type="button" data-mode="party" class="party" onclick="setPartyFilter('ai','party')">👥 Party Customer</button>
+        <button type="button" data-mode="all" class="all" onclick="setPartyFilter('ai','all')">🔗 All</button>
+      </div>
       <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:14px;">
-        <div class="form-group" style="flex:1;min-width:120px;">
-          <label>Shop</label>
-          <select id="aiShop" onchange="renderAllInvoicesReport()" style="height:38px;padding:0 10px;border:1.5px solid var(--border);border-radius:9px;font-family:inherit;font-size:0.9rem;background:#fff;width:100%;">
-            <option value="">All Shops</option>
-            <option value="Kasur">Kasur</option>
-            <option value="Hatchery">Hatchery</option>
-            <option value="Mustafabad">Mustafabad</option>
-            <option value="Gajjumatta">Gajjumatta</option>
-            <option value="Gulshan Ravi">Gulshan Ravi</option>
-            <option value="Murghzar">Murghzar</option>
-            <option value="Link Road">Link Road</option>
+        <div class="form-group" style="flex:1.2;min-width:160px;">
+          <label>Party (multi-select)</label>
+          <select id="aiShop" multiple onchange="renderAllInvoicesReport()" style="height:auto;min-height:100px;padding:6px 10px;border:1.5px solid var(--border);border-radius:9px;font-family:inherit;font-size:0.9rem;background:#fff;width:100%;">
           </select>
+          <div class="multi-hint">Hold Ctrl / Cmd to select multiple parties</div>
         </div>
         <div class="form-group" style="flex:1;min-width:110px;">
           <label>From</label>
@@ -1963,11 +2075,118 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
 </div>
 
 <script>
+/* ══════════ PARTY TYPES (Star Chicken branches vs Party Customers) ══════════ */
+const STAR_BRANCHES = ['Kasur','Hatchery','Mustafabad','Gajjumatta','Gulshan Ravi','Murghzar','Link Road'];
+const PARTY_CUSTOMERS = [
+  'Abdur Rehman Javed',
+  'Adaab Restaurant Gulberg',
+  'Asif Kamran(Shop)',
+  'CP Feedmill Lahore',
+  'Fahad',
+  'Food Story',
+  "Harry's Oven Lahore",
+  'Head Office',
+  'Jawad',
+  'Juicy Chuck',
+  'JUMBO Johar Town',
+  'JUMBO LAKE CITY',
+  'K & K Biryani and Fast Food',
+  'Liaqat Ali',
+  'Moosa Jan Foods',
+  'MUHAMMAD AWAIS KHAN',
+  'Numan Chicken',
+  'Quick Food Industries (Pvt.) Ltd',
+  'Royal Swiss',
+  'Saffron Event Complex',
+  'Shahzaib Ali',
+  'Steak Box',
+  'Waseem Akhtar',
+  'Yum DHA',
+  'YUM Gulberg'
+];
+/** Per-screen party filter: 'star' | 'party' | 'all' */
+const partyFilters = { dash: 'star', ps: 'star', sale: 'star', ai: 'star', hist: 'all' };
+
+function getInvoicePartyType(inv) {
+  if (!inv) return 'star';
+  if (inv.partyType === 'party' || inv.partyType === 'star') return inv.partyType;
+  const name = (inv.shopName || '').trim();
+  if (PARTY_CUSTOMERS.some(p => p.toLowerCase() === name.toLowerCase())) return 'party';
+  return 'star';
+}
+function filterByPartyMode(list, mode) {
+  if (!mode || mode === 'all') return list || [];
+  return (list || []).filter(inv => getInvoicePartyType(inv) === mode);
+}
+function namesForMode(mode) {
+  if (mode === 'party') return PARTY_CUSTOMERS.slice();
+  if (mode === 'star') return STAR_BRANCHES.slice();
+  return STAR_BRANCHES.concat(PARTY_CUSTOMERS);
+}
+function fillSelectOptions(sel, names, blankLabel, multi) {
+  if (!sel) return;
+  const prev = multi
+    ? [...sel.selectedOptions].map(o => o.value)
+    : sel.value;
+  sel.innerHTML = '';
+  if (!multi && blankLabel != null) {
+    const o = document.createElement('option');
+    o.value = '';
+    o.textContent = blankLabel;
+    sel.appendChild(o);
+  }
+  names.forEach(n => {
+    const o = document.createElement('option');
+    o.value = n;
+    o.textContent = n;
+    sel.appendChild(o);
+  });
+  if (multi) {
+    prev.forEach(v => {
+      const opt = [...sel.options].find(x => x.value === v);
+      if (opt) opt.selected = true;
+    });
+  } else if (prev && [...sel.options].some(o => o.value === prev)) {
+    sel.value = prev;
+  } else if (!multi) {
+    sel.value = '';
+  }
+}
+function onPartyTypeChange() {
+  const type = (document.getElementById('partyType') && document.getElementById('partyType').value) || 'star';
+  const names = type === 'party' ? PARTY_CUSTOMERS : STAR_BRANCHES;
+  fillSelectOptions(document.getElementById('shopName'), names, '— Select Party —', false);
+}
+function setPartyFilter(screen, mode) {
+  partyFilters[screen] = mode;
+  const segId = { dash: 'dashPartySeg', ps: 'psPartySeg', sale: 'salePartySeg', ai: 'aiPartySeg', hist: 'histPartySeg' }[screen];
+  const seg = document.getElementById(segId);
+  if (seg) {
+    seg.querySelectorAll('button').forEach(btn => {
+      btn.classList.toggle('on', btn.getAttribute('data-mode') === mode);
+    });
+  }
+  // Refill party dropdowns for that screen
+  if (screen === 'ps') fillSelectOptions(document.getElementById('psShop'), namesForMode(mode), 'All Parties', false);
+  if (screen === 'sale') fillSelectOptions(document.getElementById('saleShop'), namesForMode(mode), 'All Parties', false);
+  if (screen === 'ai') fillSelectOptions(document.getElementById('aiShop'), namesForMode(mode), null, true);
+  if (screen === 'dash') {
+    const br = document.getElementById('dashPCBranch');
+    if (br) fillSelectOptions(br, namesForMode(mode), 'All Parties', false);
+    renderDashboard();
+  }
+  if (screen === 'hist') fillSelectOptions(document.getElementById('historyShopFilter'), namesForMode(mode), 'All Parties', false);
+  if (screen === 'ps') calcProductSale();
+  if (screen === 'sale') { calcPeriodSales(); calcCustomSale(); }
+  if (screen === 'ai') renderAllInvoicesReport();
+  if (screen === 'hist') renderHistory();
+}
+
 /* ══════════ PRODUCTS ══════════ */
 const mainProducts = ["SBB Trimming","SBB Slice","Skinless Breast","Boneless Handi","Boneless Breast","Breast RS","Breast Yum","Premium Mince","Zinger CP S/O","Zinger CP S/L","Zinger S/L JC/RS","Drumstick S/O","Drumstick S/L","Karahi Cut","Whole Bird S/O","Whole Bird S/L"];
 const byPartsProducts = ["Inner Fillet","Thigh Trimming","Trimming Bone","Whole Leg","Drummet A","Drummet B","Niblet A","Niblet B","Wing Tip","3 Joint Wings","2 Joint Wings S/O","2 Joint Wings S/L","D Trimming","Neck","Carcass","Skin","Tail","Heart","Liver","Gizzard","Shanks","MDM Mince"];
 const furtherProducts = ["Marinated ButterFly JC","Marinated ButterFly LC","Marinated Niblet 1kg","Marinated Niblet","Marinated Drummet 1kg","Marinated Drummet","Marinated 5 cut","Injected Chicken Pieces","Marinated Zinger CP","Marinated Zinger SBL","Marinated Zinger S/O","Marinated Zinger S/L","Marinated Drumstick","Marinated Strips","Marinated Strips 2kg","Marinated Crispy"];
-const readyToCookProducts = ["Kebab","Nuggets","Chicken Fries","Burger Patty 12 Pcs","Burger Patty 8 Pcs","Chicken Samosa 12 pcs","Chicken Samosa 24 pcs","Fried Samosa","Fried Spring Roll","Chicken Roll 12 pcs","Chicken Roll 24 pcs","Breading Flour","Chapli Kabab","Chicken Kofta"];
+const readyToCookProducts = ["Kebab","Nuggets","Chicken Fries","Burger Patty 12 Pcs","Burger Patty 8 Pcs","Chicken Samosa 12 pcs","Chicken Samosa 24 pcs","Fried Samosa","Fried Spring Roll","Chicken Roll 12 pcs","Chicken Roll 24 pcs","Breading Flour","Chapli Kabab","Chicken Kofta","Pizza Topping Tikka","Pizza Topping Fajita"];
 const chickenProducts = mainProducts.concat(byPartsProducts, furtherProducts, readyToCookProducts);
 const masalaProducts = ["ACHAR GOSHT 22G","BIRYANI 39G","BLACK PEPPER 25G","BOMBAY BIRYANI 35G","BOMBAY BIRYANI 70G","BROAST 97G","CHAAT MASALA 45G","CHATPATA CHAAT MASALA 15G","CHICKEN JALFREZI 50G","CHICKEN TANDOORI 20G","CHICKEN TANDOORI 40G","CHICKEN TIKKA 20G","CHICKEN TIKKA 40G","CHILLI POWDER 50G","DAIGHI DANEDAR HALEEM 293G","GARAM MASALA POWDER 25G","KARAHI 24G","KARAHI 47G","KOFTA 43G","MURGHI 21G","MURGHI MASALA 43G","NIHARI 28G","NIHARI 56G","PAYA MASALA 39G","PULAO 35G","PULAO BIRYANI 25G","PULAO BIRYANI 50G","Quick Cook HALEEM (POFF) 300G","QUICK COOK HALEEM 300G","QUORMA 100G","QUORMA 21G","SHAMI KABAB 22G","SINDHI BIRYANI 41G","TIKKA BOTI 22G","TURMERIC POWDER 50G"];
 const groceryProducts = ["Chocobliss Crave-Coco Powder 50gm ","Chocobliss Crave-Dark Bar 200gm","Chocobliss Crave-Milky Bar 200gm ","Chocobliss Double Chocolate GB 180gm ","Chocobliss Hazelnut Spread GB 180gm ","Chocobliss Hazelnut Spread GB 350gm ","Chocobliss Milky Spread GB 180gm x 24","Chocobliss Milky Spread GB 350gm x24","Chocobliss Peanut Chocolate GB 180gm x24","DI Butter Salted 100gm x36","DI Butter Salted 200gm x24","DI Cheddar Shred 200gm 48Pcs","DI Desi Ghee TP 1000gm X 6","DI Desi Ghee TP 500gm X12","DI Mozzarella Shred 200gm x48","DI Pizza Cheese Shred 200gm x48","Youngs BeeHives Squeeze PB 170gm x48","Youngs BeeHives Squeeze PB 250gm x48","Youngs BeeHives Squeeze PB 450gm x24","Youngs Chicken Spread PH 1000ml x12","Youngs Chicken Spread PH 100ml 3x36","Youngs Chicken Spread PH 200ml x48","Youngs Chicken Spread PH 500ml x24","Youngs Chicken Spread SC 25gm 10x24","Youngs Chkn Spr Black Pepper 200ml PHx4","Youngs Chkn Spr Black Pepper 500ml PH x 24","Youngs Chocolate Spread GB 170gm x24","Youngs Chocolate Spread GB 360gm x24","Youngs Creamy Mayonnaise PH 200ml x48","Youngs Mayo Chup PH 200ml x48","Youngs Mayo Garlic PH 200ml x48","Youngs Mayo Red Chilli PH 200ml x48","Youngs Mayonnaise PH 1000ml x12","Youngs Mayonnaise PH 100ml 3x36","Youngs Mayonnaise PH 200ml x48","Youngs Mayonnaise PH 40ml 12X12","Youngs Mayonnaise PH 500ml x24","Youngs Natural Honey GB 125gm x48","Youngs Natural Honey GB 500gm x12","Youngs Orla Canola Oil Bottle 3 Ltr x 6","Youngs Orla Canola Oil PLW PH 1 Ltr x 5","Youngs Orla Canola Oil SAP 1 Ltr x 5","Youngs Orla Cooking Oil Bottle 3 Ltr x6","Youngs Orla Cooking Oil PLW PH 1 Ltr x 5","Coke 1.5 Ltr","Sprite 1.5 Ltr"];
@@ -2298,6 +2517,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (histDate) histDate.value = getPakistanDateISO();
   if (typeof updateHistoryDateBtns === 'function') updateHistoryDateBtns();
   await refreshHistory();
+  // Init Party dropdowns (Star Chicken branches by default)
+  try {
+    onPartyTypeChange();
+    fillSelectOptions(document.getElementById('psShop'), namesForMode(partyFilters.ps), 'All Parties', false);
+    fillSelectOptions(document.getElementById('saleShop'), namesForMode(partyFilters.sale), 'All Parties', false);
+    fillSelectOptions(document.getElementById('aiShop'), namesForMode(partyFilters.ai), null, true);
+    fillSelectOptions(document.getElementById('historyShopFilter'), namesForMode(partyFilters.hist), 'All Parties', false);
+    const dashBr = document.getElementById('dashPCBranch');
+    if (dashBr) fillSelectOptions(dashBr, namesForMode(partyFilters.dash), 'All Parties', false);
+  } catch (e) { console.warn(e); }
+  // Fill inventory Sale columns from existing invoices (same date + branch)
+  try { syncPosSalesToInventory(); } catch (e) { console.warn(e); }
   updatePrintMeta();
   updateStatus();
   document.getElementById('storageInfo').textContent = cloudOnline
@@ -2344,7 +2575,7 @@ function renderHistory() {
   const q = (document.getElementById('historySearch').value || '').toLowerCase().trim();
   const shopFilter = (document.getElementById('historyShopFilter') && document.getElementById('historyShopFilter').value) || '';
   const dateFilter = (document.getElementById('historyDateFilter') && document.getElementById('historyDateFilter').value) || '';
-  let list = allHistory;
+  let list = filterByPartyMode(allHistory || [], partyFilters.hist || 'all');
   // Date filter uses the invoice's own date field (not last-edit time)
   if (dateFilter) {
     list = list.filter(inv => {
@@ -2424,6 +2655,7 @@ function collectInvoice() {
     date: dateVal || (prev && prev.date) || getPakistanDateISO(),
     time: timeVal || (prev && prev.time) || '',
     customerName: document.getElementById('customerName').value.trim(),
+    partyType: (document.getElementById('partyType') && document.getElementById('partyType').value) || 'star',
     shopName: document.getElementById('shopName').value.trim(),
     billMaker: document.getElementById('billMaker').value.trim(),
     customerPhone: document.getElementById('customerPhone').value.trim(),
@@ -2446,7 +2678,7 @@ async function saveInvoice() {
   }
   const shopVal = (document.getElementById('shopName').value || '').trim();
   if (!shopVal) {
-    toast('Please select a Shop Name before saving.', 'error');
+    toast('Please select a Party before saving.', 'error');
     document.getElementById('shopName').focus();
     return;
   }
@@ -2482,6 +2714,8 @@ async function saveInvoice() {
     }
     updateStatus();
     await refreshHistory();
+    // Push product sale qty into Inventory stock sheets (same date + branch)
+    try { syncPosSalesToInventory(); } catch (syncErr) { console.warn('Inventory sync failed', syncErr); }
     toast('Invoice ' + (saved.invoiceNo || inv.invoiceNo) + ' saved!', 'success');
     if (window.innerWidth <= 768) toggleSidebar();
   } catch (e) {
@@ -2508,17 +2742,21 @@ async function loadInvoice(id) {
     document.getElementById('invoiceTime').value = inv.time || (inv.savedAt ? getPakistanTime(inv.savedAt) : '');
   }
   document.getElementById('customerName').value = inv.customerName || '';
-  (function setShopSelect(val) {
+  (function setPartySelect(invObj) {
+    const typeEl = document.getElementById('partyType');
+    const type = getInvoicePartyType(invObj);
+    if (typeEl) typeEl.value = type;
+    onPartyTypeChange();
     const sel = document.getElementById('shopName');
-    const v = (val || '').trim();
-    if (v && ![...sel.options].some(o => o.value === v)) {
+    const v = (invObj.shopName || '').trim();
+    if (v && sel && ![...sel.options].some(o => o.value === v)) {
       const opt = document.createElement('option');
       opt.value = v;
       opt.textContent = v;
       sel.appendChild(opt);
     }
-    sel.value = v;
-  })(inv.shopName || '');
+    if (sel) sel.value = v;
+  })(inv);
   document.getElementById('billMaker').value = inv.billMaker || '';
   document.getElementById('customerPhone').value = inv.customerPhone || '';
   document.getElementById('discount').value = inv.discount || 0;
@@ -2555,6 +2793,7 @@ async function deleteCurrentInvoice() {
   toast('Invoice deleted.', 'success');
   newInvoice(true);
   await refreshHistory();
+  try { syncPosSalesToInventory(); } catch (e) { console.warn(e); }
 }
 
 async function deleteInvoiceById(id, invNo) {
@@ -2566,6 +2805,7 @@ async function deleteInvoiceById(id, invNo) {
   }
   toast('Invoice ' + (invNo || '') + ' deleted.', 'success');
   await refreshHistory();
+  try { syncPosSalesToInventory(); } catch (e) { console.warn(e); }
 }
 
 function newInvoice(skipConfirm) {
@@ -2577,7 +2817,10 @@ function newInvoice(skipConfirm) {
   refreshInvoiceNoDisplay();
   setInvoiceDateTimeNow();
   startPktLiveClock();
-  ['customerName','shopName','billMaker','customerPhone'].forEach(id => document.getElementById(id).value = '');
+  ['customerName','billMaker','customerPhone'].forEach(id => document.getElementById(id).value = '');
+  const pt = document.getElementById('partyType');
+  if (pt) pt.value = 'star';
+  onPartyTypeChange();
   document.getElementById('discount').value = '0';
   document.getElementById('amountPaid').value = '0';
   clearForm();
@@ -3137,7 +3380,8 @@ document.addEventListener('keydown', function(e) {
 });
 
 function renderDashboard() {
-  const list = (typeof allHistory !== 'undefined' && allHistory) ? allHistory : [];
+  const raw = (typeof allHistory !== 'undefined' && allHistory) ? allHistory : [];
+  const list = filterByPartyMode(raw, partyFilters.dash || 'all');
   // Use Pakistan business date so "Today" matches the date printed on bills
   const todayISO = getPakistanDateISO();
   const todayParts = todayISO.split('-').map(Number);
@@ -3199,6 +3443,110 @@ function renderDashboard() {
 
   renderDashboardBranch();
   renderDashboardTopLists();
+  renderDashboardCategory();
+}
+
+/* Category contribution donut — linked to Branch date filters */
+const CAT_COLORS = {
+  'Main Products': '#E53935',       /* red */
+  'By Parts Products': '#1E88E5',   /* blue */
+  'Marinated Products': '#43A047',  /* green */
+  'Further Products': '#F9A825',    /* yellow / gold */
+  'Youngs & National': '#FB8C00',   /* orange */
+  'Grocery': '#212121',             /* black */
+  'Other': '#8E24AA'                /* purple */
+};
+const CAT_ORDER = ['Main Products', 'By Parts Products', 'Marinated Products', 'Further Products', 'Youngs & National', 'Grocery', 'Other'];
+
+function renderDashboardCategory() {
+  const el = document.getElementById('dashCatChart');
+  const noteEl = document.getElementById('dashCatNote');
+  if (!el) return;
+
+  // Same date range as Branch-wise Sales (From / To above)
+  const { list, fromStr, toStr } = filterListByDateInputs('dashBranchFrom', 'dashBranchTo');
+
+  const catMap = {};
+  CAT_ORDER.forEach(c => { catMap[c] = 0; });
+
+  list.forEach(inv => {
+    (inv.items || []).forEach(it => {
+      let cat = getProductCategory(it.name);
+      if (!CAT_COLORS[cat]) cat = 'Other';
+      const amt = Number(it.amount) || 0;
+      catMap[cat] = (catMap[cat] || 0) + amt;
+    });
+  });
+
+  const rows = CAT_ORDER
+    .map(name => ({ name, amount: catMap[name] || 0 }))
+    .filter(r => r.amount > 0)
+    .sort((a, b) => b.amount - a.amount);
+
+  const total = rows.reduce((s, r) => s + r.amount, 0);
+  const fmtD = (n) => 'Rs. ' + Math.round(Number(n) || 0).toLocaleString('en-PK');
+  const shortFmt = (n) => {
+    const v = Math.round(Number(n) || 0);
+    if (v >= 100000) return 'Rs. ' + (v / 1000).toFixed(0) + 'k';
+    if (v >= 1000) return 'Rs. ' + (v / 1000).toFixed(1) + 'k';
+    return 'Rs. ' + v;
+  };
+
+  const dateNote = dashFmtDateNote(fromStr, toStr, 'All dates');
+  if (noteEl) {
+    noteEl.textContent = total > 0
+      ? 'Based on product line items · ' + dateNote + ' · Total Rs. ' + Math.round(total).toLocaleString('en-PK')
+      : 'No product sales for selected dates';
+  }
+
+  if (!rows.length || total <= 0) {
+    el.innerHTML = '<div class="dash-empty">No category sales for selected dates</div>';
+    return;
+  }
+
+  // SVG donut — circumference of r=42 is ~263.89
+  const R = 42;
+  const C = 2 * Math.PI * R;
+  let offset = 0;
+  const arcs = rows.map(r => {
+    const frac = r.amount / total;
+    const len = frac * C;
+    const color = CAT_COLORS[r.name] || CAT_COLORS['Other'];
+    const dash = len + ' ' + (C - len);
+    const arc = { color, dash, offset, pct: Math.round(frac * 1000) / 10, name: r.name, amount: r.amount };
+    offset += len;
+    return arc;
+  });
+
+  const svgArcs = arcs.map(a =>
+    '<circle cx="50" cy="50" r="' + R + '" fill="none" stroke="' + a.color +
+    '" stroke-width="16" stroke-dasharray="' + a.dash +
+    '" stroke-dashoffset="' + (-a.offset) + '"></circle>'
+  ).join('');
+
+  const legend = rows.map(r => {
+    const pct = total > 0 ? Math.round((r.amount / total) * 1000) / 10 : 0;
+    const color = CAT_COLORS[r.name] || CAT_COLORS['Other'];
+    return '<div class="dash-cat-leg-row">' +
+      '<span class="dash-cat-swatch" style="background:' + color + '"></span>' +
+      '<span class="dash-cat-leg-name" style="color:' + color + '">' + esc(r.name) + '</span>' +
+      '<span class="dash-cat-leg-pct" style="color:' + color + '">' + pct + '%</span>' +
+      '<span class="dash-cat-leg-amt" style="color:' + color + '">' + fmtD(r.amount) + '</span></div>';
+  }).join('');
+
+  const centerLabel = (!fromStr && !toStr) ? 'All Dates' : 'Selected';
+
+  el.innerHTML =
+    '<div class="dash-cat-wrap">' +
+      '<div class="dash-cat-donut">' +
+        '<svg viewBox="0 0 100 100">' + svgArcs + '</svg>' +
+        '<div class="dash-cat-center">' +
+          '<div class="dc-total">' + shortFmt(total) + '</div>' +
+          '<div class="dc-label">' + centerLabel + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="dash-cat-legend">' + legend + '</div>' +
+    '</div>';
 }
 
 function dashFmtDateNote(fromStr, toStr, allLabel) {
@@ -3209,7 +3557,8 @@ function dashFmtDateNote(fromStr, toStr, allLabel) {
 }
 
 function filterListByDateInputs(fromId, toId) {
-  const list = (typeof allHistory !== 'undefined' && allHistory) ? allHistory : [];
+  const raw = (typeof allHistory !== 'undefined' && allHistory) ? allHistory : [];
+  const list = filterByPartyMode(raw, partyFilters.dash || 'all');
   const fromStr = (document.getElementById(fromId) && document.getElementById(fromId).value) || '';
   const toStr = (document.getElementById(toId) && document.getElementById(toId).value) || '';
   if (!fromStr && !toStr) return { list: list.slice(), fromStr, toStr };
@@ -3288,6 +3637,7 @@ function syncDashDates(sourceId) {
   });
   renderDashboardBranch();
   renderDashboardTopLists();
+  renderDashboardCategory();
 }
 
 function clearAllDashDates() {
@@ -3297,6 +3647,7 @@ function clearAllDashDates() {
   });
   renderDashboardBranch();
   renderDashboardTopLists();
+  renderDashboardCategory();
 }
 
 function clearDashBranchDates() { clearAllDashDates(); }
@@ -3405,6 +3756,15 @@ function renderDashboardTopLists() {
     if (prodBtn) prodBtn.style.display = 'none';
   } else {
     const displayRows = _dashFullProducts.slice(0, showLimit);
+    // Totals across all filtered products (not just the visible top rows)
+    let totQty = 0, totWgt = 0, totAmt = 0;
+    _dashFullProducts.forEach(r => {
+      totQty += Number(r.qty) || 0;
+      totWgt += Number(r.weight) || 0;
+      totAmt += Number(r.amount) || 0;
+    });
+    const totMeta = (Math.round(totQty * 100) / 100) + ' qty · ' +
+      (Math.round(totWgt * 100) / 100) + ' kg';
     prodEl.innerHTML = displayRows.map((row, i) => {
       const rankCls = i === 0 ? 'r1' : (i === 1 ? 'r2' : (i === 2 ? 'r3' : ''));
       return '<div class="dash-list-item">' +
@@ -3412,7 +3772,12 @@ function renderDashboardTopLists() {
         '<div style="flex:1;min-width:0"><div class="dash-li-name">' + esc(row.name) + '</div>' +
         '<div class="dash-li-meta">' + esc(row.meta) + '</div></div>' +
         '<div class="dash-li-amt">' + fmtD(row.amount) + '</div></div>';
-    }).join('');
+    }).join('') +
+      '<div class="dash-list-total">' +
+        '<div class="dash-total-label">Total</div>' +
+        '<div class="dash-total-meta">' + totMeta + '</div>' +
+        '<div class="dash-total-amt">' + fmtD(totAmt) + '</div>' +
+      '</div>';
     if (prodBtn) {
       if (_dashFullProducts.length > showLimit) {
         prodBtn.style.display = 'block';
@@ -3484,7 +3849,7 @@ function openDashFullList(type) {
   if (!rows.length) {
     bodyEl.innerHTML = '<div class="dash-empty">' + (isProd ? 'No products sold yet' : 'No named customers yet') + '</div>';
   } else {
-    bodyEl.innerHTML = rows.map((row, i) => {
+    let html = rows.map((row, i) => {
       const rankCls = i === 0 ? 'r1' : (i === 1 ? 'r2' : (i === 2 ? 'r3' : ''));
       const amt = isProd ? row.amount : row.total;
       return '<div class="dash-list-item">' +
@@ -3493,6 +3858,22 @@ function openDashFullList(type) {
         '<div class="dash-li-meta">' + esc(row.meta || '') + '</div></div>' +
         '<div class="dash-li-amt">' + fmtD(amt) + '</div></div>';
     }).join('');
+    if (isProd) {
+      let totQty = 0, totWgt = 0, totAmt = 0;
+      rows.forEach(r => {
+        totQty += Number(r.qty) || 0;
+        totWgt += Number(r.weight) || 0;
+        totAmt += Number(r.amount) || 0;
+      });
+      const totMeta = (Math.round(totQty * 100) / 100) + ' qty · ' +
+        (Math.round(totWgt * 100) / 100) + ' kg';
+      html += '<div class="dash-list-total">' +
+        '<div class="dash-total-label">Total</div>' +
+        '<div class="dash-total-meta">' + totMeta + '</div>' +
+        '<div class="dash-total-amt">' + fmtD(totAmt) + '</div>' +
+      '</div>';
+    }
+    bodyEl.innerHTML = html;
   }
   overlay.classList.add('show');
 }
@@ -3737,8 +4118,290 @@ function exportDashProductsPDF() {
 
 
 /* ══════════ ORDER SYSTEM ══════════ */
+/* ══════════ POS → INVENTORY SALE SYNC ══════════
+   Product Sale qty from invoices is written into each branch's
+   stock sheet "Sale" column for the same invoice date.
+   Stock storage key matches star-chicken-stock-management.html
+*/
+const STOCK_DB_KEY = 'starChickenStockV1';
+const POS_SALES_KEY = 'starChickenPosSalesV1';
+const STOCK_ITEMS = [
+  "B Trimming","SBB Slice","Skinless Breast","Boneless Handi","Boneless Breast","Breast RS","Breast Yum",
+  "Inner Fillet","Premium Mince","Zinger CP S/O","Zinger CP S/L","Zinger S/L JC/RS","Thigh Trimming","Trimming Bone",
+  "Drumstick S/O","Drumstick S/L","Whole Leg","Drummet A","Drummet B","Niblet A","Niblet B","Wing Tip",
+  "3 Joint Wings","2 Joint Wings S/O","2 Joint Wings S/L","Karahi Cut","Whole Bird S/O","Whole Bird S/L",
+  "D Trimming","Neck","Carcass","Skin","Tail","Heart","Liver","Gizzard","Shanks","MDM Mince",
+  "Marinated ButterFly JC","Marinated ButterFly LC","Marinated Niblet 1kg","Marinated Niblet",
+  "Marinated Drummet 1kg","Marinated Drummet","Marinated 5 cut","Injected Chicken Pieces",
+  "Marinated Zinger CP","Marinated Zinger JC","Marinated Zinger S/o","Marinated Zinger S/L",
+  "Marinated Drumstick","Marinated Strips","Marinated Strips 2kg","Marinated Crispy",
+  "Kebab","Nuggets","Chicken Fries","Burger Patty 12 Pcs","Burger Patty 8 Pcs",
+  "Chicken Samosa 12 pcs","Chicken Samosa 24 pcs","Fried Samosa","Fried Spring Roll",
+  "Chicken Roll 12 pcs","Chicken Roll 24 pcs","Breading Flour","Chapli Kabab","Chicken Kofta",
+  "Pizza Topping Tikka","Pizza Topping Fajita","Coke 1.5 Ltr","Sprite 1.5 Ltr"
+];
+const STOCK_BRANCHES = ["Hatchery","Kasur","Gajjumata","Mustafabad","Gulshan Ravi","Murghzar"];
+/** POS shop name → stock branch name */
+const SHOP_TO_STOCK_BRANCH = {
+  'hatchery': 'Hatchery',
+  'kasur': 'Kasur',
+  'gajjumata': 'Gajjumata',
+  'gajjumatta': 'Gajjumata',
+  'mustafabad': 'Mustafabad',
+  'gulshan ravi': 'Gulshan Ravi',
+  'murghzar': 'Murghzar'
+  // Link Road has no stock branch — skipped
+};
+/** Explicit POS product name → stock item name (aliases; names mostly match now) */
+const POS_TO_STOCK_PRODUCT = {
+  'sbb trimming': 'B Trimming',
+  'b trimming': 'B Trimming',
+  'sbb (b grade trimming)': 'B Trimming',
+  'sbb slice': 'SBB Slice',
+  'skinless breast': 'Skinless Breast',
+  'boneless handi': 'Boneless Handi',
+  'boneless breast': 'Boneless Breast',
+  'boneless breast whole': 'Boneless Breast',
+  'breast rs': 'Breast RS',
+  'boneless breast rs': 'Breast RS',
+  'breast yum': 'Breast Yum',
+  'boneless breast yum': 'Breast Yum',
+  'premium mince': 'Premium Mince',
+  'mince premium': 'Premium Mince',
+  'zinger cp s/o': 'Zinger CP S/O',
+  'zinger cp s/l': 'Zinger CP S/L',
+  'zinger s/l jc/rs': 'Zinger S/L JC/RS',
+  'inner fillet': 'Inner Fillet',
+  'innerfillet': 'Inner Fillet',
+  'thigh trimming': 'Thigh Trimming',
+  'thigh triming': 'Thigh Trimming',
+  'trimming bone': 'Trimming Bone',
+  'trimming+bone': 'Trimming Bone',
+  'drumstick s/o': 'Drumstick S/O',
+  'drumstick sc': 'Drumstick S/O',
+  'drumstick s/l': 'Drumstick S/L',
+  'drumstick skinless': 'Drumstick S/L',
+  'whole leg': 'Whole Leg',
+  'drummet a': 'Drummet A',
+  'drummet b': 'Drummet B',
+  'niblet a': 'Niblet A',
+  'niblet b': 'Niblet B',
+  'wing tip': 'Wing Tip',
+  '3 joint wings': '3 Joint Wings',
+  '3 joined wings': '3 Joint Wings',
+  '2 joint wings s/o': '2 Joint Wings S/O',
+  '2 joined wings so': '2 Joint Wings S/O',
+  '2 joint wings s/l': '2 Joint Wings S/L',
+  '2 joined wings sl': '2 Joint Wings S/L',
+  'karahi cut': 'Karahi Cut',
+  'whole bird s/o': 'Whole Bird S/O',
+  'whole bird s/l': 'Whole Bird S/L',
+  'd trimming': 'D Trimming',
+  'd-triming': 'D Trimming',
+  'neck': 'Neck',
+  'carcass': 'Carcass',
+  'skin': 'Skin',
+  'tail': 'Tail',
+  'tail (kg)': 'Tail',
+  'heart': 'Heart',
+  'heart (kg)': 'Heart',
+  'liver': 'Liver',
+  'liver (kg)': 'Liver',
+  'gizzard': 'Gizzard',
+  'gizzard (kg)': 'Gizzard',
+  'shanks': 'Shanks',
+  'shanks (kg)': 'Shanks',
+  'mdm mince': 'MDM Mince',
+  'marinated butterfly jc': 'Marinated ButterFly JC',
+  'marinated butterfly lc': 'Marinated ButterFly LC',
+  'marinated niblet 1kg': 'Marinated Niblet 1kg',
+  'marinated niblet': 'Marinated Niblet',
+  'marinated niblit cp': 'Marinated Niblet 1kg',
+  'marinated niblit (2 kg)': 'Marinated Niblet',
+  'marinated drummet 1kg': 'Marinated Drummet 1kg',
+  'marinated drummet': 'Marinated Drummet',
+  'marinated drummet cp': 'Marinated Drummet 1kg',
+  'marinated drummet (2 kg)': 'Marinated Drummet',
+  'marinated 5 cut': 'Marinated 5 cut',
+  'marinated 5-cut': 'Marinated 5 cut',
+  'injected chicken pieces': 'Injected Chicken Pieces',
+  'mari injected broast': 'Injected Chicken Pieces',
+  'marinated zinger cp': 'Marinated Zinger CP',
+  'marinated zinger sbl': 'Marinated Zinger JC',
+  'marinated zinger jc': 'Marinated Zinger JC',
+  'marinated zinger s/o': 'Marinated Zinger S/o',
+  'marinated zinger (2 kg)': 'Marinated Zinger S/o',
+  'marinated zinger s/l': 'Marinated Zinger S/L',
+  'marinated zinger sl': 'Marinated Zinger S/L',
+  'marinated drumstick': 'Marinated Drumstick',
+  'marinated strips': 'Marinated Strips',
+  'marinated strips 2kg': 'Marinated Strips 2kg',
+  'marinated strips cp': 'Marinated Strips',
+  'marinated strips (2 kg)': 'Marinated Strips 2kg',
+  'marinated crispy': 'Marinated Crispy',
+  'marinated crispy cp': 'Marinated Crispy',
+  'kebab': 'Kebab',
+  'nuggets': 'Nuggets',
+  'chicken fries': 'Chicken Fries',
+  'burger patty 12 pcs': 'Burger Patty 12 Pcs',
+  'burger patty 12 pc': 'Burger Patty 12 Pcs',
+  'burger patty 8 pcs': 'Burger Patty 8 Pcs',
+  'burger patty 8 pc': 'Burger Patty 8 Pcs',
+  'chicken samosa 12 pcs': 'Chicken Samosa 12 pcs',
+  'chicken samosa 24 pcs': 'Chicken Samosa 24 pcs',
+  'fried samosa': 'Fried Samosa',
+  'fried spring roll': 'Fried Spring Roll',
+  'chicken roll 12 pcs': 'Chicken Roll 12 pcs',
+  'chicken roll 24 pcs': 'Chicken Roll 24 pcs',
+  'spring roll 12 pcs': 'Chicken Roll 12 pcs',
+  'spring roll 24 pcs': 'Chicken Roll 24 pcs',
+  'breading flour': 'Breading Flour',
+  'chapli kabab': 'Chapli Kabab',
+  'chicken kofta': 'Chicken Kofta',
+  'pizza topping tikka': 'Pizza Topping Tikka',
+  'pizza topping fajita': 'Pizza Topping Fajita',
+  'coke 1.5 ltr': 'Coke 1.5 Ltr',
+  'coke 1.5l': 'Coke 1.5 Ltr',
+  'sprite 1.5 ltr': 'Sprite 1.5 Ltr',
+  'sprite 1.5l': 'Sprite 1.5 Ltr'
+};
+const STOCK_ITEM_INDEX = {};
+STOCK_ITEMS.forEach((name, i) => {
+  STOCK_ITEM_INDEX[name] = i;
+  STOCK_ITEM_INDEX[name.toLowerCase().replace(/\s+/g, ' ').trim()] = i;
+});
+function normalizeProductKey(s) {
+  return String(s || '')
+    .toLowerCase()
+    .replace(/[\/\-\+_(),]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+function mapShopToStockBranch(shopName) {
+  const k = String(shopName || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  return SHOP_TO_STOCK_BRANCH[k] || null;
+}
+function mapPosProductToStockIndex(posName) {
+  if (!posName) return -1;
+  const raw = String(posName).trim();
+  const low = raw.toLowerCase().replace(/\s+/g, ' ').trim();
+  const key = normalizeProductKey(raw);
+  // 1) explicit alias
+  if (POS_TO_STOCK_PRODUCT[low]) {
+    const sn = POS_TO_STOCK_PRODUCT[low];
+    if (STOCK_ITEM_INDEX[sn] != null) return STOCK_ITEM_INDEX[sn];
+    if (STOCK_ITEM_INDEX[sn.toLowerCase().replace(/\s+/g, ' ')] != null)
+      return STOCK_ITEM_INDEX[sn.toLowerCase().replace(/\s+/g, ' ')];
+  }
+  if (POS_TO_STOCK_PRODUCT[key]) {
+    const sn = POS_TO_STOCK_PRODUCT[key];
+    if (STOCK_ITEM_INDEX[sn] != null) return STOCK_ITEM_INDEX[sn];
+  }
+  // 2) exact stock name
+  if (STOCK_ITEM_INDEX[raw] != null) return STOCK_ITEM_INDEX[raw];
+  if (STOCK_ITEM_INDEX[low] != null) return STOCK_ITEM_INDEX[low];
+  // 3) fuzzy: stock name contains key or vice-versa
+  for (let i = 0; i < STOCK_ITEMS.length; i++) {
+    const sk = normalizeProductKey(STOCK_ITEMS[i]);
+    if (sk === key) return i;
+  }
+  for (let i = 0; i < STOCK_ITEMS.length; i++) {
+    const sk = normalizeProductKey(STOCK_ITEMS[i]);
+    if (sk.includes(key) || key.includes(sk)) return i;
+  }
+  return -1;
+}
+function invDateKey(inv) {
+  if (inv && inv.date && /^\d{4}-\d{2}-\d{2}/.test(String(inv.date))) {
+    return String(inv.date).slice(0, 10);
+  }
+  return null;
+}
+/**
+ * Rebuild Sale qty for every branch+date from all POS invoices.
+ * Writes POS_SALES_KEY and merges into STOCK_DB_KEY (Sale column only).
+ */
+async function syncPosSalesToInventory() {
+  const list = (typeof allHistory !== 'undefined' && allHistory) ? allHistory : [];
+  // sales[branch][date][itemIndex] = qty
+  const sales = {};
+  STOCK_BRANCHES.forEach(b => { sales[b] = {}; });
+
+  list.forEach(inv => {
+    const branch = mapShopToStockBranch(inv.shopName);
+    if (!branch) return;
+    const d = invDateKey(inv);
+    if (!d) return;
+    if (!sales[branch][d]) sales[branch][d] = new Array(STOCK_ITEMS.length).fill(0);
+    (inv.items || []).forEach(it => {
+      const idx = mapPosProductToStockIndex(it.name);
+      if (idx < 0) return;
+      // Prefer qty (packets). If qty missing/0 but weight present, use weight as qty fallback.
+      let q = Number(it.qty);
+      if (!q || q <= 0) q = Number(it.weight) || 0;
+      if (q) sales[branch][d][idx] += q;
+    });
+  });
+
+  // Read the shared inventory state from Supabase; no browser-local inventory database.
+  const compact = {};
+  Object.keys(sales).forEach(b => { const out = {}; Object.keys(sales[b]).forEach(d => { out[d] = sales[b][d].map(v => Math.round(v * 100) / 100); }); compact[b] = out; });
+  let cloudState = {};
+  try {
+    const getRes = await fetch('/api/stock/state', {credentials:'same-origin'});
+    if (getRes.status === 401) { window.location.href='/login'; return sales; }
+    if (!getRes.ok) throw new Error('Could not load shared stock state');
+    const payload = await getRes.json(); cloudState = payload.state || {};
+  } catch(e) { console.warn('Cloud inventory read failed; POS sale sync skipped', e); return sales; }
+  let stockDB = cloudState.stockDB || {};
+
+
+  function prevBal(branch, dateStr) {
+    const ds = Object.keys(stockDB[branch] || {}).filter(x => x < dateStr).sort();
+    if (!ds.length) return null;
+    const last = stockDB[branch][ds[ds.length - 1]];
+    if (!last || !last.r) return null;
+    return last.r.map(row => {
+      const a = row || [];
+      return (Number(a[0]) || 0) + (Number(a[1]) || 0) - (Number(a[2]) || 0) - (Number(a[3]) || 0);
+    });
+  }
+
+  Object.keys(sales).forEach(branch => {
+    Object.keys(sales[branch]).forEach(dateStr => {
+      const qtyArr = sales[branch][dateStr];
+      if (!stockDB[branch]) stockDB[branch] = {};
+      let row = stockDB[branch][dateStr];
+      if (!row || !Array.isArray(row.r) || row.r.length !== STOCK_ITEMS.length) {
+        const p = prevBal(branch, dateStr);
+        row = {
+          r: STOCK_ITEMS.map((_, i) => [p ? p[i] : '', '', '', ''])
+        };
+      }
+      // set Sale column from POS; keep Bal / Receive / Return as-is
+      row.r = row.r.map((a, i) => {
+        const cell = Array.isArray(a) ? a.slice(0, 4) : ['', '', '', ''];
+        while (cell.length < 4) cell.push('');
+        const q = qtyArr[i] || 0;
+        cell[2] = q ? (Math.round(q * 100) / 100) : '';
+        return cell;
+      });
+      stockDB[branch][dateStr] = row;
+    });
+  });
+
+  // Save both POS sales and stock balances in one Supabase state document.
+  try {
+    const putRes = await fetch('/api/stock/state', {method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:{stockDB, posSales:compact}})});
+    if (!putRes.ok) throw new Error('Cloud inventory save failed ('+putRes.status+')');
+  } catch(e) { console.warn('Cloud inventory write failed', e); }
+  return sales;
+}
+
 /* Loads the external star-chicken-orders.html (new system with Stock Transfer) */
 const ORDER_SYSTEM_URL = 'star-chicken-orders.html';
+/* Loads the stock / inventory management app */
+const INVENTORY_SYSTEM_URL = 'star-chicken-stock-management.html';
 
 function openOrderSystem() {
   const overlay = document.getElementById('orderOverlay');
@@ -3761,8 +4424,35 @@ function closeOrderSystem() {
   document.body.style.overflow = '';
 }
 
+function openInventorySystem() {
+  const overlay = document.getElementById('inventoryOverlay');
+  const frame = document.getElementById('inventoryFrame');
+  if (!overlay || !frame) {
+    toast('Inventory system not available.', 'error');
+    return;
+  }
+  // Sync latest Product Sale qty into stock sheets before opening
+  try { syncPosSalesToInventory(); } catch (e) { console.warn(e); }
+  frame.src = INVENTORY_SYSTEM_URL;
+  overlay.classList.add('show');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeInventorySystem() {
+  const overlay = document.getElementById('inventoryOverlay');
+  const frame = document.getElementById('inventoryFrame');
+  if (overlay) overlay.classList.remove('show');
+  if (frame) frame.src = 'about:blank';
+  document.body.style.overflow = '';
+}
+
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
+    const inv = document.getElementById('inventoryOverlay');
+    if (inv && inv.classList.contains('show')) {
+      closeInventorySystem();
+      return;
+    }
     const o = document.getElementById('orderOverlay');
     if (o && o.classList.contains('show')) closeOrderSystem();
   }
@@ -4228,17 +4918,21 @@ function importInvoice(ev) {
       if (data.date) document.getElementById('invoiceDate').value = data.date;
       if (document.getElementById('invoiceTime')) document.getElementById('invoiceTime').value = data.time || '';
       document.getElementById('customerName').value = data.customerName || '';
-      (function setShopSelect(val) {
+      (function setPartyFromData(d) {
+        const typeEl = document.getElementById('partyType');
+        const type = getInvoicePartyType(d);
+        if (typeEl) typeEl.value = type;
+        onPartyTypeChange();
         const sel = document.getElementById('shopName');
-        const v = (val || '').trim();
-        if (v && ![...sel.options].some(o => o.value === v)) {
+        const v = (d.shopName || '').trim();
+        if (v && sel && ![...sel.options].some(o => o.value === v)) {
           const opt = document.createElement('option');
           opt.value = v;
           opt.textContent = v;
           sel.appendChild(opt);
         }
-        sel.value = v;
-      })(data.shopName || '');
+        if (sel) sel.value = v;
+      })(data);
       document.getElementById('billMaker').value = data.billMaker || '';
       document.getElementById('customerPhone').value = data.customerPhone || '';
       document.getElementById('discount').value = data.discount != null ? data.discount : 0;
@@ -4323,9 +5017,12 @@ function calcProductSale() {
   if (!dateStr) { setPsToday(); return calcProductSale(); }
   const shopFilter = (document.getElementById('psShop') && document.getElementById('psShop').value) || '';
 
-  // Aggregate items from invoices on this date (optionally filtered by shop)
+  // Aggregate items from invoices on this date (optionally filtered by shop / party type)
   const map = {}; // name -> { qty, weight, amount, count }
-  const list = (typeof allHistory !== 'undefined' && allHistory) ? allHistory : [];
+  const list = filterByPartyMode(
+    (typeof allHistory !== 'undefined' && allHistory) ? allHistory : [],
+    partyFilters.ps || 'all'
+  );
   list.forEach(inv => {
     if (shopFilter && (inv.shopName || '').trim() !== shopFilter) return;
     const d = parseInvDate(inv);
@@ -4434,7 +5131,8 @@ function filterByRange(fromDate, toDate) {
   const from = startOfDay(fromDate).getTime();
   const to = startOfDay(toDate).getTime() + 86400000 - 1; // end of toDate
   const shopFilter = (document.getElementById('saleShop') && document.getElementById('saleShop').value) || '';
-  return allHistory.filter(inv => {
+  const base = filterByPartyMode(allHistory || [], partyFilters.sale || 'all');
+  return base.filter(inv => {
     if (shopFilter && (inv.shopName || '').trim() !== shopFilter) return false;
     const d = parseInvDate(inv);
     if (!d) return false;
@@ -4452,7 +5150,8 @@ function calcPeriodSales() {
   const todayStart = startOfDay(todayNoon);
 
   // Today — exact calendar match on bill date
-  const todayList = allHistory.filter(inv => {
+  const saleBase = filterByPartyMode(allHistory || [], partyFilters.sale || 'all');
+  const todayList = saleBase.filter(inv => {
     const shopFilter = (document.getElementById('saleShop') && document.getElementById('saleShop').value) || '';
     if (shopFilter && (inv.shopName || '').trim() !== shopFilter) return false;
     return invDateISO(inv) === todayISO;
@@ -4540,12 +5239,19 @@ function setAiAllDates() {
 }
 
 function getAllInvoicesFiltered() {
-  const shop = (document.getElementById('aiShop') && document.getElementById('aiShop').value) || '';
+  const aiSel = document.getElementById('aiShop');
+  const selectedShops = aiSel
+    ? [...aiSel.selectedOptions].map(o => o.value).filter(Boolean)
+    : [];
   const fromStr = (document.getElementById('aiFrom') && document.getElementById('aiFrom').value) || '';
   const toStr = (document.getElementById('aiTo') && document.getElementById('aiTo').value) || '';
-  let list = (typeof allHistory !== 'undefined' && allHistory) ? allHistory.slice() : [];
-  if (shop) {
-    list = list.filter(inv => (inv.shopName || '').trim() === shop);
+  let list = filterByPartyMode(
+    (typeof allHistory !== 'undefined' && allHistory) ? allHistory.slice() : [],
+    partyFilters.ai || 'all'
+  );
+  if (selectedShops.length) {
+    const set = new Set(selectedShops);
+    list = list.filter(inv => set.has((inv.shopName || '').trim()));
   }
   if (fromStr || toStr) {
     const fromT = fromStr ? startOfDay(new Date(fromStr + 'T12:00:00')).getTime() : 0;
@@ -4635,7 +5341,9 @@ function exportAllInvoicesExcel() {
     return;
   }
 
-  const shopFilter = (document.getElementById('aiShop') && document.getElementById('aiShop').value) || 'All Shops';
+  const aiSelX = document.getElementById('aiShop');
+  const selNames = aiSelX ? [...aiSelX.selectedOptions].map(o => o.value).filter(Boolean) : [];
+  const shopFilter = selNames.length ? selNames.join(', ') : ('All ' + (partyFilters.ai === 'party' ? 'Party Customers' : partyFilters.ai === 'star' ? 'Star Chicken' : 'Parties'));
   const fromStr = document.getElementById('aiFrom').value || 'All';
   const toStr = document.getElementById('aiTo').value || 'All';
   const grandAll = list.reduce((s, inv) => s + (Number(inv.grandTotal) || 0), 0);
@@ -5039,7 +5747,9 @@ function exportAllInvoicesPDF() {
     toast('No invoices to export.', 'error');
     return;
   }
-  const shopFilter = (document.getElementById('aiShop') && document.getElementById('aiShop').value) || 'All Shops';
+  const aiSelP = document.getElementById('aiShop');
+  const selNamesP = aiSelP ? [...aiSelP.selectedOptions].map(o => o.value).filter(Boolean) : [];
+  const shopFilter = selNamesP.length ? selNamesP.join(', ') : ('All ' + (partyFilters.ai === 'party' ? 'Party Customers' : partyFilters.ai === 'star' ? 'Star Chicken' : 'Parties'));
   const fromStr = document.getElementById('aiFrom').value || 'All';
   const toStr = document.getElementById('aiTo').value || 'All';
   const total = list.reduce((s, inv) => s + (Number(inv.grandTotal) || 0), 0);
