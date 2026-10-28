@@ -188,7 +188,57 @@ async function initializeCloudStock(){
       try{POS_SALES=JSON.parse(localStorage.getItem('starChickenPosSalesV1')||'{}')||{};}catch(_){POS_SALES={};}
       if(Object.keys(DB).length||Object.keys(POS_SALES).length){const m=await fetch('/api/stock/state',{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:{stockDB:DB,posSales:POS_SALES}})});if(!m.ok)throw new Error('Could not migrate existing browser stock data to Supabase');}
     }
-    cloudReady=true;render();const note=document.createElement('div');note.className='note';note.style.cssText='padding:6px 16px;color:#17653a;font-weight:700';note.textContent='Connected · stock records are stored in Supabase';document.querySelector('header')?.after(note);
+    await refreshPosSalesFromInvoices();cloudReady=true;render();const note=document.createElement('div');note.className='note';note.style.cssText='padding:6px 16px;color:#17653a;font-weight:700';note.textContent='Connected · stock records are stored in Supabase';document.querySelector('header')?.after(note);
   }catch(e){console.error(e);toast('Cannot connect to Supabase. Stock editing is disabled.');}}
+/* STAR_CHICKEN_INVOICE_DERIVED_SALES_V2
+   Cloud invoices are the authoritative sales source. Stock entries remain unchanged. */
+async function refreshPosSalesFromInvoices() {
+  const response = await fetch('/api/invoices', { credentials: 'same-origin', cache: 'no-store' });
+  if (response.status === 401) { window.location.href = '/login'; throw new Error('Session expired'); }
+  if (!response.ok) throw new Error('Could not retrieve invoices (' + response.status + ')');
+  const payload = await response.json();
+  const invoices = Array.isArray(payload) ? payload :
+    (Array.isArray(payload.invoices) ? payload.invoices :
+     (Array.isArray(payload.data) ? payload.data : null));
+  if (!invoices) throw new Error('Invoice API returned an unexpected format; sales not refreshed.');
+  const clean = value => String(value == null ? '' : value).toLowerCase().replace(/[^a-z0-9]/g, '');
+  const itemIndex = new Map(ITEMS.map((entry, index) => [clean(entry[0]), index]));
+  const branchLookup = new Map(BR.map(branch => [clean(branch), branch]));
+  const dateKey = value => {
+    if (!value) return '';
+    if (typeof value === 'number') return ymd(new Date(value));
+    const raw = String(value);
+    const iso = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (iso) return iso[1];
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.valueOf()) ? '' : ymd(parsed);
+  };
+  const fresh = Object.fromEntries(BR.map(branch => [branch, {}]));
+  let matched = 0, ignored = 0;
+  for (const entry of invoices) {
+    const invoice = entry && (entry.data || entry.invoice || entry.payload || entry);
+    if (!invoice || typeof invoice !== 'object') continue;
+    const branch = branchLookup.get(clean(invoice.shopName || invoice.shop || invoice.branch || invoice.branchName));
+    const day = dateKey(invoice.date || invoice.invoiceDate || invoice.billDate || invoice.createdAt || invoice.created_at);
+    if (!branch || !day) { ignored++; continue; }
+    const lines = Array.isArray(invoice.items) ? invoice.items : [];
+    for (const line of lines) {
+      const ix = itemIndex.get(clean(line && (line.name || line.productName || line.product || line.detail)));
+      if (ix === undefined) { ignored++; continue; }
+      const qty = Number(line.qty ?? line.quantity ?? 0);
+      if (!Number.isFinite(qty) || qty < 0) { ignored++; continue; }
+      if (!fresh[branch][day]) fresh[branch][day] = new Array(ITEMS.length).fill(0);
+      fresh[branch][day][ix] += qty;
+      matched++;
+    }
+  }
+  POS_SALES = fresh;
+  console.info('[Inventory sync] Invoice-derived sales loaded:', matched, 'lines;', ignored, 'unmatched records/lines.');
+  const status = document.getElementById('invoiceSalesStatus') || document.createElement('div');
+  status.id = 'invoiceSalesStatus';
+  status.style.cssText = 'padding:6px 16px;font-size:12px;color:#17653a;font-weight:600';
+  status.textContent = 'POS sales synced from ' + invoices.length + ' cloud invoices';
+  if (!status.parentNode) document.querySelector('header')?.after(status);
+}
 initializeCloudStock();
 </script></body></html>
