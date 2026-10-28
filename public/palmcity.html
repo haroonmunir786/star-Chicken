@@ -2528,7 +2528,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (dashBr) fillSelectOptions(dashBr, namesForMode(partyFilters.dash), 'All Parties', false);
   } catch (e) { console.warn(e); }
   // Fill inventory Sale columns from existing invoices (same date + branch)
-  try { syncPosSalesToInventory(); } catch (e) { console.warn(e); }
+  try { await syncPosSalesToInventory(); } catch (e) { console.warn('Initial inventory sync failed', e); }
   updatePrintMeta();
   updateStatus();
   document.getElementById('storageInfo').textContent = cloudOnline
@@ -2715,8 +2715,13 @@ async function saveInvoice() {
     updateStatus();
     await refreshHistory();
     // Push product sale qty into Inventory stock sheets (same date + branch)
-    try { syncPosSalesToInventory(); } catch (syncErr) { console.warn('Inventory sync failed', syncErr); }
-    toast('Invoice ' + (saved.invoiceNo || inv.invoiceNo) + ' saved!', 'success');
+    const inventorySync = await syncPosSalesToInventory();
+    if (inventorySync === null) {
+      console.warn('Invoice saved, but inventory sale sync failed. Check /api/stock/state in the browser Network tab and Render logs.');
+      toast('Invoice saved, but inventory sale sync failed. Please reopen Inventory and check connection.', 'error');
+    } else {
+      toast('Invoice ' + (saved.invoiceNo || inv.invoiceNo) + ' saved!', 'success');
+    }
     if (window.innerWidth <= 768) toggleSidebar();
   } catch (e) {
     toast('Could not save. Try again.', 'error');
@@ -2793,7 +2798,7 @@ async function deleteCurrentInvoice() {
   toast('Invoice deleted.', 'success');
   newInvoice(true);
   await refreshHistory();
-  try { syncPosSalesToInventory(); } catch (e) { console.warn(e); }
+  try { await syncPosSalesToInventory(); } catch (e) { console.warn('Inventory sync failed after invoice deletion', e); }
 }
 
 async function deleteInvoiceById(id, invNo) {
@@ -2805,7 +2810,7 @@ async function deleteInvoiceById(id, invNo) {
   }
   toast('Invoice ' + (invNo || '') + ' deleted.', 'success');
   await refreshHistory();
-  try { syncPosSalesToInventory(); } catch (e) { console.warn(e); }
+  try { await syncPosSalesToInventory(); } catch (e) { console.warn('Inventory sync failed after invoice deletion', e); }
 }
 
 function newInvoice(skipConfirm) {
@@ -4352,7 +4357,7 @@ async function syncPosSalesToInventory() {
     if (getRes.status === 401) { window.location.href='/login'; return sales; }
     if (!getRes.ok) throw new Error('Could not load shared stock state');
     const payload = await getRes.json(); cloudState = payload.state || {};
-  } catch(e) { console.warn('Cloud inventory read failed; POS sale sync skipped', e); return sales; }
+  } catch(e) { console.warn('Cloud inventory read failed; POS sale sync skipped', e); return null; }
   let stockDB = cloudState.stockDB || {};
 
 
@@ -4394,7 +4399,7 @@ async function syncPosSalesToInventory() {
   try {
     const putRes = await fetch('/api/stock/state', {method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:{stockDB, posSales:compact}})});
     if (!putRes.ok) throw new Error('Cloud inventory save failed ('+putRes.status+')');
-  } catch(e) { console.warn('Cloud inventory write failed', e); }
+  } catch(e) { console.warn('Cloud inventory write failed', e); return null; }
   return sales;
 }
 
@@ -4424,15 +4429,16 @@ function closeOrderSystem() {
   document.body.style.overflow = '';
 }
 
-function openInventorySystem() {
+async function openInventorySystem() {
   const overlay = document.getElementById('inventoryOverlay');
   const frame = document.getElementById('inventoryFrame');
   if (!overlay || !frame) {
     toast('Inventory system not available.', 'error');
     return;
   }
-  // Sync latest Product Sale qty into stock sheets before opening
-  try { syncPosSalesToInventory(); } catch (e) { console.warn(e); }
+  // Complete the cloud sync before the inventory page loads its state.
+  const inventorySync = await syncPosSalesToInventory();
+  if (inventorySync === null) toast('Could not sync POS sales to inventory. Check your connection and try refreshing.', 'error');
   frame.src = INVENTORY_SYSTEM_URL;
   overlay.classList.add('show');
   document.body.style.overflow = 'hidden';
