@@ -467,7 +467,6 @@ dialog.modal::backdrop{background:rgba(25,18,18,.55)}
 </section>
 </main>
 
-<div id="cloudStatus" role="status" style="position:sticky;top:0;z-index:20;background:#e8f6ee;color:#17653a;padding:7px 12px;font-size:12px;font-weight:700">Connecting to Supabase…</div>
 <div id="toast" aria-live="polite"></div>
 
 <script>
@@ -565,12 +564,15 @@ function normalize(d){
   }
   return out;
 }
-let S=defaults(), saveT=null, cloudReady=false, saveChain=Promise.resolve();
-function setCloudStatus(msg){const el=$('#cloudStatus');if(el)el.textContent=msg}
-async function saveCloud(){if(!cloudReady)return;const snapshot=JSON.stringify(S);saveChain=saveChain.then(async()=>{const r=await fetch('/api/ordering/state',{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:JSON.parse(snapshot)})});if(r.status===401){location.href='/login';throw new Error('Login required')}if(!r.ok)throw new Error('Cloud save failed ('+r.status+')');setCloudStatus('Connected · saved to Supabase')}).catch(e=>{console.error(e);setCloudStatus('Cloud save failed — check connection before continuing')});return saveChain}
-function save(now){clearTimeout(saveT);now?saveCloud():(saveT=setTimeout(saveCloud,350))}
-window.addEventListener('pagehide',()=>{if(cloudReady)fetch('/api/ordering/state',{method:'PUT',keepalive:true,credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:S})}).catch(()=>{})});
-async function initCloudState(){setCloudStatus('Connecting to Supabase…');try{const r=await fetch('/api/ordering/state',{credentials:'same-origin'});if(r.status===401){location.href='/login';return}if(!r.ok)throw new Error('Unable to load cloud ordering data');const data=await r.json();if(data.state)S=normalize(data.state);else{let legacy=null;try{const raw=store.get(KEY);if(raw)legacy=normalize(JSON.parse(raw))}catch(e){}S=legacy||defaults();const w=await fetch('/api/ordering/state',{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:S})});if(!w.ok)throw new Error('Initial cloud save failed')}cloudReady=true;setCloudStatus('Connected · data stored in Supabase');if(!S.branches.some(b=>b.id===ui.branch))ui.branch=S.branches[0].id;const snaps=loadSnaps();if(orderCount(S)>0&&(!snaps.length||Date.now()-snaps[0].ts>12*36e5))snapshot('Daily safety copy');renderAll()}catch(e){console.error(e);setCloudStatus('Cannot connect to Supabase. Editing is paused to protect your data.');alert('Could not connect to the server. Please refresh or sign in again. No changes were saved.')}}
+let S=(()=>{try{const raw=store.get(KEY);return raw?normalize(JSON.parse(raw)):defaults()}catch(e){return defaults()}})();
+let saveT=null;
+function save(now){
+  clearTimeout(saveT);
+  const run=()=>{store.set(KEY,JSON.stringify(S))};
+  now?run():(saveT=setTimeout(run,250));
+}
+window.addEventListener('pagehide',()=>save(true));
+document.addEventListener('visibilitychange',()=>{if(document.hidden)save(true)});
 
 const getLogo=()=>store.get(LOGO_KEY)||DEFAULT_LOGO;
 
@@ -2038,7 +2040,12 @@ function renderAll(){renderHeader();setTab(ui.tab==='setup'||ui.tab==='backup'?'
    START
    ===================================================================== */
 $('#todayLbl').textContent=fmtDate(today());
-initCloudState();
+if(!S.branches.some(b=>b.id===ui.branch))ui.branch=S.branches[0].id;
+{ // daily automatic safety copy
+  const snaps=loadSnaps();
+  if(orderCount(S)>0&&(!snaps.length||Date.now()-snaps[0].ts>12*36e5))snapshot('Daily safety copy');
+}
+renderAll();
 })();
 </script>
 </body>
