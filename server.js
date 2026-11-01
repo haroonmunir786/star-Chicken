@@ -310,6 +310,43 @@ app.get('/api/activity',auth,requireManagedAdmin,async(req,res)=>{
   } catch(e) {console.error('Activity log read failed',e);res.status(503).json({error:'Activity Log unavailable. Run phase2_activity_log.sql first.'});}
 });
 
+
+/* Phase 3: read-only employee sales summary. Attribution comes from the FIRST
+ * server-recorded invoice.created event, never editable bill_maker text.
+ * Only invoices still present are counted; deleted invoices are excluded.
+ * Legacy invoices without a creation audit are intentionally omitted.
+ */
+app.get('/api/reports/staff-sales', auth, requireManagedAdmin, async (req,res)=>{
+  const from=String(req.query.from||'');
+  const to=String(req.query.to||'');
+  const validDate=(d)=>/^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(d+'T00:00:00Z')) && new Date(d+'T00:00:00Z').toISOString().slice(0,10)===d;
+  if(!validDate(from)||!validDate(to)||from>to) return res.status(400).json({error:'Choose a valid From/To date range'});
+  try {
+    const result=await pool.query(`
+      with first_creator as (
+        select distinct on (invoice_id) invoice_id, actor_id, actor_name
+        from public.pos_activity_log
+        where action='invoice.created' and invoice_id is not null
+        order by invoice_id, id asc
+      ), totals as (
+        select c.actor_id, count(*)::int as invoice_count,
+               coalesce(sum(i.grand_total),0)::numeric as total_sales
+        from public.invoices i
+        join first_creator c on c.invoice_id=i.id
+        where i.invoice_date >= $1::date and i.invoice_date <= $2::date
+        group by c.actor_id
+      )
+      select t.actor_id as "staffId",
+             coalesce(u.full_name, case when t.actor_id='ADMIN' then 'Admin' when t.actor_id='SHARED_STAFF' then 'Shared Staff code' else t.actor_id end) as "staffName",
+             t.invoice_count as "invoiceCount", t.total_sales as "totalSales"
+      from totals t
+      left join public.pos_staff_users u on u.staff_id=t.actor_id
+      order by t.total_sales desc, t.actor_id`,[from,to]);
+    res.setHeader('Cache-Control','no-store');
+    res.json({from,to,rows:result.rows,scope:'Only existing invoices with a Phase 2 creation audit; filtered by invoice date. Current invoice totals reflect any edits.'});
+  }catch(e){console.error('Staff sales report failed',e);res.status(503).json({error:'Could not load staff sales report. Verify Phase 2 activity log is available.'});}
+});
+
 /* ---------- Health ---------- */
 app.get('/api/health', async (req, res) => {
   try {

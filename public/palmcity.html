@@ -1764,6 +1764,9 @@ select[multiple] {
         <span class="mn-icon">👥</span><span class="mn-text"><strong>Staff Management</strong><small>Add, rename, reset PIN, disable employees</small></span>
       </button>
 
+      <button type="button" class="menu-nav-item admin-only" data-admin-only="1" onclick="closeReportsMenu(); openStaffSalesReport()">
+        <span class="mn-icon">📊</span><span class="mn-text"><strong>Staff Sales Report</strong><small>Employee totals, date filter &amp; Excel</small></span>
+      </button>
       <button type="button" class="menu-nav-item admin-only" data-admin-only="1" onclick="closeReportsMenu(); openActivityLog()">
         <span class="mn-icon">📜</span><span class="mn-text"><strong>Activity Log</strong><small>Invoice creation, edits and deletions</small></span>
       </button>
@@ -2547,6 +2550,26 @@ select[multiple] {
   </div>
 </div>
 
+<!-- Phase 3: Read-only staff sales report -->
+<div class="hist-overlay no-print" id="staffSalesOverlay" style="z-index:8200">
+ <div class="hist-modal" role="dialog" aria-modal="true" aria-label="Staff Sales Report">
+  <div class="hist-header"><h3>📊 Staff Sales Report</h3><button class="btn btn-ghost" onclick="closeStaffSalesReport()">Close ✕</button></div>
+  <div class="hist-body">
+   <div class="card" style="padding:14px;margin-bottom:12px">
+    <div class="form-grid">
+     <div class="form-group"><label for="staffSalesFrom">From (invoice date)</label><input id="staffSalesFrom" type="date"></div>
+     <div class="form-group"><label for="staffSalesTo">To (invoice date)</label><input id="staffSalesTo" type="date"></div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+     <button class="btn btn-primary" type="button" onclick="loadStaffSalesReport()">Show Report</button>
+     <button class="btn btn-ghost" type="button" id="staffSalesExport" onclick="exportStaffSalesReport()" disabled>Export Excel</button>
+    </div>
+   </div>
+   <p style="font-size:.76rem;color:#666;margin-bottom:12px">Counts existing invoices with a Phase 2 creation log, attributed to the original creator. Deleted or older untracked invoices are excluded. Totals reflect the latest saved invoice value and are filtered by invoice date.</p>
+   <div id="staffSalesResults" aria-live="polite">Choose dates and select Show Report.</div>
+  </div>
+ </div>
+</div>
 <!-- Admin-only Phase 2 activity history -->
 <div class="hist-overlay no-print" id="activityLogOverlay" style="z-index:8100">
  <div class="hist-modal" role="dialog" aria-modal="true" aria-label="Activity Log">
@@ -2574,6 +2597,55 @@ select[multiple] {
 
 <script>
 
+
+
+/* Phase 3: all calculations on the backend; the interface only displays results. */
+let lastStaffSalesReport=null;
+function staffSalesLocalDate(d){const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return y+'-'+m+'-'+day;}
+function staffSalesAmount(n){return Number(n||0).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function openStaffSalesReport(){
+  if(!requireAdmin('Staff Sales Report'))return;
+  const today=new Date(),first=new Date(today.getFullYear(),today.getMonth(),1);
+  document.getElementById('staffSalesFrom').value=staffSalesLocalDate(first);
+  document.getElementById('staffSalesTo').value=staffSalesLocalDate(today);
+  document.getElementById('staffSalesOverlay').classList.add('show');
+  loadStaffSalesReport();
+}
+function closeStaffSalesReport(){document.getElementById('staffSalesOverlay').classList.remove('show');}
+async function loadStaffSalesReport(){
+  if(!requireAdmin('Staff Sales Report'))return;
+  const from=document.getElementById('staffSalesFrom').value,to=document.getElementById('staffSalesTo').value;
+  const out=document.getElementById('staffSalesResults'),download=document.getElementById('staffSalesExport');
+  lastStaffSalesReport=null;download.disabled=true;
+  if(!from||!to||from>to){out.textContent='Select valid dates (From must be on or before To).';return;}
+  out.textContent='Loading report...';
+  try{
+    const r=await fetch('/api/reports/staff-sales?from='+encodeURIComponent(from)+'&to='+encodeURIComponent(to),{credentials:'same-origin',cache:'no-store'});
+    const report=await r.json();if(!r.ok)throw Error(report.error||'Could not load report');
+    lastStaffSalesReport=report;download.disabled=false;out.replaceChildren();
+    const data=report.rows||[],count=data.reduce((n,x)=>n+Number(x.invoiceCount||0),0),sales=data.reduce((n,x)=>n+Number(x.totalSales||0),0);
+    const summary=document.createElement('div');summary.className='card';summary.style.cssText='padding:14px;margin-bottom:12px';
+    summary.textContent='Tracked invoices: '+count+'  |  Total sales: Rs. '+staffSalesAmount(sales);out.appendChild(summary);
+    if(!data.length){const msg=document.createElement('p');msg.textContent='No tracked invoices found in this date range.';out.appendChild(msg);return;}
+    const wrap=document.createElement('div');wrap.className='table-wrap card';
+    const table=document.createElement('table');table.style.minWidth='440px';
+    const thead=document.createElement('thead'),tr=document.createElement('tr');
+    for(const name of ['Staff ID','Employee','Invoices','Sales (Rs.)']){const th=document.createElement('th');th.textContent=name;tr.appendChild(th);}thead.appendChild(tr);table.appendChild(thead);
+    const tbody=document.createElement('tbody');
+    for(const row of data){const tr=document.createElement('tr');for(const value of [row.staffId,row.staffName,String(row.invoiceCount),staffSalesAmount(row.totalSales)]){const td=document.createElement('td');td.textContent=value??'';tr.appendChild(td);}tbody.appendChild(tr);}
+    table.appendChild(tbody);wrap.appendChild(table);out.appendChild(wrap);
+  }catch(e){out.textContent=e.message||'Unable to load report';}
+}
+function exportStaffSalesReport(){
+  if(!requireAdmin('Staff Sales Report')||!lastStaffSalesReport)return;
+  if(typeof XLSX==='undefined'){toast('Excel library not loaded. Check internet connection.','error');return;}
+  const report=lastStaffSalesReport,rows=[['Staff ID','Employee','Invoice Count','Total Sales (PKR)']];
+  for(const r of report.rows||[])rows.push([String(r.staffId||''),String(r.staffName||''),Number(r.invoiceCount||0),Number(r.totalSales||0)]);
+  rows.push(['TOTAL','',rows.slice(1).reduce((n,r)=>n+r[2],0),rows.slice(1).reduce((n,r)=>n+r[3],0)]);
+  const wb=XLSX.utils.book_new(),ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=[{wch:16},{wch:27},{wch:17},{wch:22}];
+  XLSX.utils.book_append_sheet(wb,ws,'Staff Sales');
+  XLSX.writeFile(wb,'Star-Chicken-Staff-Sales-'+report.from+'-to-'+report.to+'.xlsx');
+}
 
 async function openActivityLog(){
   if(!requireAdmin('Activity Log'))return;
