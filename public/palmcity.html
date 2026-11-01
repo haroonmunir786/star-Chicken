@@ -2541,7 +2541,7 @@ select[multiple] {
 <script>
 
 /* ══════════ ROLE / LOGIN ══════════ */
-const AUTH_CODES = { '8627': 'admin', '0001': 'staff' };
+// Role codes are verified by the server; no access codes are embedded in HTML.
 const AUTH_STORAGE_KEY = 'starChickenPosRole';
 let currentRole = null; // 'admin' | 'staff'
 
@@ -2604,50 +2604,38 @@ function hideLogin() {
   document.body.style.overflow = '';
 }
 
-function attemptLogin() {
-  const pinEl = document.getElementById('loginPin');
-  const err = document.getElementById('loginError');
-  const code = (pinEl && pinEl.value || '').trim();
-  const role = AUTH_CODES[code];
-  if (!role) {
-    if (err) err.classList.add('show');
-    if (pinEl) { pinEl.value = ''; pinEl.focus(); }
-    return;
-  }
-  currentRole = role;
-  setStoredRole(role);
-  if (err) err.classList.remove('show');
-  hideLogin();
-  applyRoleUI();
-  toast(role === 'admin' ? 'Welcome, Admin' : 'Welcome, Sale Staff', 'success');
+async function attemptLogin() {
+  const pinEl=document.getElementById('loginPin');
+  const err=document.getElementById('loginError');
+  const code=(pinEl&&pinEl.value||'').trim();
+  if(!code)return;
+  try {
+    const r=await fetch('/api/role/login',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
+    if(!r.ok)throw new Error((await r.json().catch(()=>({}))).error||'Access denied');
+    const result=await r.json();
+    currentRole=result.role; setStoredRole(null);
+    if(err)err.classList.remove('show');
+    if(pinEl)pinEl.value='';
+    hideLogin(); applyRoleUI();
+    toast(currentRole==='admin'?'Welcome, Admin':'Welcome, Sale Staff','success');
+  } catch(e){console.warn('Role login failed:',e.message);if(err)err.classList.add('show');if(pinEl){pinEl.value='';pinEl.focus();} toast(e.message,'error');}
 }
-
-function logoutUser() {
-  setStoredRole(null);
-  currentRole = null;
-  applyRoleUI();
-  // close any open overlays that staff shouldn't keep
-  try { closeDashboard(); } catch(e) {}
-  try { closeAllInvoicesModal(); } catch(e) {}
-  try { closeHistoryModal(); } catch(e) {}
+async function logoutUser() {
+  try{await fetch('/api/role/logout',{method:'POST',credentials:'same-origin'});}catch(e){console.warn(e)}
+  setStoredRole(null);currentRole=null;applyRoleUI();
+  try{closeDashboard()}catch(e){}
+  try{closeAllInvoicesModal()}catch(e){}
+  try{closeHistoryModal()}catch(e){}
   showLogin();
 }
-
-function initAuth() {
-  const stored = getStoredRole();
-  if (stored === 'admin' || stored === 'staff') {
-    currentRole = stored;
-    hideLogin();
-    applyRoleUI();
-  } else {
-    showLogin();
-  }
-  const pin = document.getElementById('loginPin');
-  if (pin) {
-    pin.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter') { e.preventDefault(); attemptLogin(); }
-    });
-  }
+async function initAuth() {
+  showLogin(); // Never trust sessionStorage to grant a role.
+  try {
+    const r=await fetch('/api/role/me',{credentials:'same-origin'});
+    if(r.ok){const data=await r.json();if(data.role==='admin'||data.role==='staff'){currentRole=data.role;hideLogin();applyRoleUI();}}
+  }catch(e){console.warn('Role check failed',e)}
+  const pin=document.getElementById('loginPin');
+  if(pin)pin.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();attemptLogin();}});
 }
 
 // Guard admin-only openers (defined later — wrap after DOM ready via assignment override below)
@@ -3374,19 +3362,12 @@ async function loadInvoice(id) {
   toast('Loaded ' + inv.invoiceNo, 'success');
 }
 
-/* Security PIN (4-digit) — required for Open & Delete */
-const APP_PIN = '2626';
+/* Destructive operations require Admin role on the backend. */
 function askAppPin(actionLabel) {
-  const msg = (actionLabel || 'Confirm') + '\n\nEnter 4-digit PIN:';
-  const pin = prompt(msg);
-  if (pin === null) return false; // cancelled
-  if (String(pin).trim() !== APP_PIN) {
-    toast('Wrong PIN. Action cancelled.', 'error');
-    return false;
-  }
-  return true;
+  if(!requireAdmin(actionLabel||'Restricted action'))return false;
+  return confirm((actionLabel||'Continue')+'\n\nThis action requires your Admin session. Continue?');
 }
-function askDeletePin(label) { return askAppPin(label || 'Delete'); }
+function askDeletePin(label) {return askAppPin(label||'Delete');}
 
 async function deleteCurrentInvoice() {
   if (!currentId) { toast('No saved invoice selected.', 'error'); return; }

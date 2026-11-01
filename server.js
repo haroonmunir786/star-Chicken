@@ -1,6 +1,7 @@
 require('dotenv').config();
 
 const path = require('path');
+const crypto = require('crypto');
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
@@ -29,6 +30,47 @@ const pool = new Pool({
 
 app.use(express.json({ limit: '2mb' }));
 app.use(cookieParser());
+// This upgrade does not modify invoice, stock, customer or ordering SQL.
+// A separate signed role cookie complements the existing outer sc_session login.
+const roleSecret = process.env.JWT_SECRET;
+const loginAttempts = new Map();
+function checkRateLimit(req, res, next) {
+  const key = `${req.path}:${req.ip}`;
+  const now = Date.now();
+  let entry = loginAttempts.get(key);
+  if (!entry || now - entry.since > 15 * 60 * 1000) entry = {since:now,count:0};
+  entry.count += 1;
+  loginAttempts.set(key, entry);
+  if (entry.count > 20) return res.status(429).json({error:'Too many login attempts. Try again later.'});
+  if (loginAttempts.size > 5000) for (const [k,v] of loginAttempts) if (now-v.since>15*60*1000) loginAttempts.delete(k);
+  next();
+}
+function clearLoginAttempts(req) { loginAttempts.delete(`${req.path}:${req.ip}`); }
+function verifyCode(input, expected) {
+  if (!expected || typeof input !== 'string') return false;
+  const x = crypto.createHash('sha256').update(input).digest();
+  const y = crypto.createHash('sha256').update(expected).digest();
+  return crypto.timingSafeEqual(x,y);
+}
+function roleFromCookie(req) {
+  try {
+    const data = jwt.verify(req.cookies.sc_role_session || '', roleSecret, {algorithms:['HS256']});
+    return data && (data.role==='admin' || data.role==='staff') ? data.role : null;
+  } catch (_) { return null; }
+}
+function adminOnly(req,res,next) {
+  if (roleFromCookie(req) !== 'admin') return res.status(403).json({error:'Admin access required'});
+  next();
+}
+const roleCookieOptions = {httpOnly:true,sameSite:'lax',secure:process.env.NODE_ENV==='production',path:'/'};
+app.disable('x-powered-by');
+app.use((req,res,next)=>{
+  res.setHeader('X-Content-Type-Options','nosniff');
+  res.setHeader('Referrer-Policy','strict-origin-when-cross-origin');
+  res.setHeader('X-Frame-Options','SAMEORIGIN');
+  next();
+});
+
 
 function signSession() {
   return jwt.sign({ role: 'invoice-user' }, process.env.JWT_SECRET, {
@@ -109,12 +151,13 @@ app.get('/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'login.html'));
 });
 
-app.post('/login', (req, res) => {
+app.post('/login', checkRateLimit, (req, res) => {
   const password = String(req.body?.password || '');
   if (password !== process.env.APP_PASSWORD) {
     return res.status(401).json({ error: 'Incorrect password' });
   }
 
+  clearLoginAttempts(req);
   const token = signSession();
   res.cookie('sc_session', token, {
     httpOnly: true,
@@ -128,8 +171,26 @@ app.post('/login', (req, res) => {
 
 app.post('/logout', (req, res) => {
   res.clearCookie('sc_session');
+  res.clearCookie('sc_role_session',roleCookieOptions);
   res.json({ ok: true });
 });
+
+
+/* ---------- Server-verified POS Admin/Staff roles ---------- */
+app.get('/api/role/me', auth, (req,res)=>res.json({role:roleFromCookie(req)}));
+app.post('/api/role/login', auth, checkRateLimit, (req,res)=>{
+  const adminCode=process.env.POS_ADMIN_CODE;
+  const staffCode=process.env.POS_STAFF_CODE;
+  if(!adminCode || !staffCode || adminCode===staffCode) return res.status(503).json({error:'POS role credentials not configured on server'});
+  const submitted=String(req.body?.code||'');
+  const role=verifyCode(submitted,adminCode)?'admin':verifyCode(submitted,staffCode)?'staff':null;
+  if(!role)return res.status(401).json({error:'Incorrect access code'});
+  clearLoginAttempts(req);
+  const token=jwt.sign({role},roleSecret,{expiresIn:'8h',algorithm:'HS256'});
+  res.cookie('sc_role_session',token,{...roleCookieOptions,maxAge:8*60*60*1000});
+  res.json({ok:true,role});
+});
+app.post('/api/role/logout', auth, (req,res)=>{res.clearCookie('sc_role_session',roleCookieOptions);res.json({ok:true})});
 
 /* ---------- Health ---------- */
 app.get('/api/health', async (req, res) => {
@@ -218,7 +279,7 @@ app.put('/api/customers/:id', auth, async (req,res)=>{
   try{const r=await pool.query(`update public.customers set name=$2,phone=$3,address=$4,remarks=$5,updated_at=now() where id=$1 returning id,name,phone,address,remarks,created_at,updated_at`,[req.params.id,name,String(x.phone||''),String(x.address||''),String(x.remarks||'')]);if(!r.rowCount)return res.status(404).json({error:'Customer not found'});res.json(r.rows[0]);}
   catch(e){console.error('Could not update customer:',e);res.status(500).json({error:'Could not update customer'});}
 });
-app.delete('/api/customers/:id', auth, async (req,res)=>{try{const r=await pool.query('delete from public.customers where id=$1',[req.params.id]);if(!r.rowCount)return res.status(404).json({error:'Customer not found'});res.json({ok:true});}catch(e){console.error('Could not delete customer:',e);res.status(500).json({error:'Could not delete customer'});}});
+app.delete('/api/customers/:id', auth, adminOnly, async (req,res)=>{try{const r=await pool.query('delete from public.customers where id=$1',[req.params.id]);if(!r.rowCount)return res.status(404).json({error:'Customer not found'});res.json({ok:true});}catch(e){console.error('Could not delete customer:',e);res.status(500).json({error:'Could not delete customer'});}});
 
 /* ---------- Invoice numbering ---------- */
 // Preview-only: shows what the NEXT number would be, without consuming it.
@@ -352,7 +413,7 @@ app.post('/api/invoices', auth, async (req, res) => {
   }
 });
 
-app.delete('/api/invoices/:id', auth, async (req, res) => {
+app.delete('/api/invoices/:id', auth, adminOnly, async (req, res) => {
   try {
     const result = await pool.query(
       'delete from public.invoices where id = $1',
@@ -367,7 +428,7 @@ app.delete('/api/invoices/:id', auth, async (req, res) => {
 });
 
 /* ---------- One-time migration endpoint ---------- */
-app.post('/api/invoices/bulk', auth, async (req, res) => {
+app.post('/api/invoices/bulk', auth, adminOnly, async (req, res) => {
   const invoices = Array.isArray(req.body?.invoices) ? req.body.invoices : [];
   if (!invoices.length) return res.json({ uploaded: 0 });
 
