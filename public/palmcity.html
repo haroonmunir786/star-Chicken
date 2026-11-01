@@ -1664,13 +1664,15 @@ select[multiple] {
       <p>Enter your access code to continue</p>
     </div>
     <div class="login-card-body">
-      <label for="loginPin">Access Code</label>
+      <label for="staffLoginId">Staff ID (leave blank for Admin or shared Staff code)</label>
+      <div class="login-pin-wrap"><input type="text" id="staffLoginId" maxlength="16" autocomplete="off" autocapitalize="characters" placeholder="e.g. S01" style="font-size:1rem;letter-spacing:1px;text-transform:uppercase"></div>
+      <label for="loginPin">Access Code / Personal PIN</label>
       <div class="login-pin-wrap">
         <input type="password" id="loginPin" maxlength="8" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="••••">
       </div>
       <div class="login-error" id="loginError">Incorrect code. Try again.</div>
       <button type="button" class="login-btn" id="loginBtn" onclick="attemptLogin()">Login</button>
-      <div class="login-hint">Sale Staff · Admin access only</div>
+      <div class="login-hint">Admin: leave Staff ID blank · Salespersons: enter Staff ID</div>
     </div>
   </div>
 </div>
@@ -1757,6 +1759,9 @@ select[multiple] {
           <strong>Customer Details</strong>
           <small>Name, phone, address &amp; remarks</small>
         </span>
+      </button>
+      <button type="button" class="menu-nav-item admin-only" data-admin-only="1" onclick="closeReportsMenu(); openStaffManagement()">
+        <span class="mn-icon">👥</span><span class="mn-text"><strong>Staff Management</strong><small>Add, rename, reset PIN, disable employees</small></span>
       </button>
     </nav>
     
@@ -2538,12 +2543,79 @@ select[multiple] {
   </div>
 </div>
 
+<!-- Admin-only Staff Management -->
+<div class="hist-overlay no-print" id="staffManagementOverlay" style="z-index:8000">
+  <div class="hist-modal" role="dialog" aria-modal="true" aria-label="Staff Management">
+    <div class="hist-header"><h3>👥 Staff Management</h3><button type="button" class="btn btn-ghost" onclick="closeStaffManagement()">Close ✕</button></div>
+    <div class="hist-body">
+      <div class="card" style="padding:16px;margin-bottom:14px">
+        <h3 style="margin-bottom:12px">Add salesperson</h3>
+        <div class="form-group" style="margin-bottom:10px"><label>Staff ID (e.g. S01)</label><input id="newStaffId" maxlength="16" autocomplete="off" placeholder="S01"></div>
+        <div class="form-group" style="margin-bottom:10px"><label>Employee name</label><input id="newStaffName" maxlength="100" autocomplete="off" placeholder="Full name"></div>
+        <div class="form-group" style="margin-bottom:12px"><label>Personal PIN (6–12 digits)</label><input id="newStaffPin" type="password" inputmode="numeric" autocomplete="new-password" maxlength="12" placeholder="Private PIN"></div>
+        <button class="btn btn-primary" onclick="createStaffAccount()">Add employee</button>
+      </div>
+      <div class="card" style="padding:16px"><h3 style="margin-bottom:8px">Existing employees</h3><div id="staffAccountList">Loading...</div></div>
+    </div>
+  </div>
+</div>
+
+
 <script>
+
+
+/* Admin-only employee account management. Never include PIN hashes in browser responses. */
+async function staffApi(url,options={}) {
+  const r=await fetch(url,{credentials:'same-origin',...options,headers:{'Content-Type':'application/json',...(options.headers||{})}});
+  const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||('HTTP '+r.status));return d;
+}
+function closeStaffManagement(){document.getElementById('staffManagementOverlay')?.classList.remove('show')}
+async function openStaffManagement(){
+  if(!requireAdmin('Staff Management'))return;
+  document.getElementById('staffManagementOverlay')?.classList.add('show');
+  await loadStaffAccounts();
+}
+async function createStaffAccount(){
+  if(!requireAdmin('Staff Management'))return;
+  const staffId=document.getElementById('newStaffId').value.trim().toUpperCase();
+  const name=document.getElementById('newStaffName').value.trim();
+  const pin=document.getElementById('newStaffPin').value;
+  try{
+    await staffApi('/api/staff',{method:'POST',body:JSON.stringify({staffId,name,pin})});
+    document.getElementById('newStaffPin').value='';document.getElementById('newStaffName').value='';document.getElementById('newStaffId').value='';
+    toast('Employee added','success');await loadStaffAccounts();
+  }catch(e){toast(e.message,'error')}
+}
+async function updateStaffAccount(staffId,updates){
+  if(!requireAdmin('Staff Management'))return;
+  try{await staffApi('/api/staff/'+encodeURIComponent(staffId),{method:'PATCH',body:JSON.stringify(updates)});toast('Employee updated','success');await loadStaffAccounts()}
+  catch(e){toast(e.message,'error')}
+}
+function staffRowButton(label,onClick){const b=document.createElement('button');b.type='button';b.className='btn btn-ghost btn-sm';b.textContent=label;b.addEventListener('click',onClick);return b;}
+async function loadStaffAccounts(){
+  const target=document.getElementById('staffAccountList');if(!target)return;
+  target.textContent='Loading...';
+  try{
+    const users=await staffApi('/api/staff');target.replaceChildren();
+    if(!users.length){target.textContent='No personal accounts yet. Add S01 above.';return}
+    users.forEach(u=>{
+      const wrap=document.createElement('div');wrap.style.cssText='padding:12px 0;border-bottom:1px solid #eee';
+      const heading=document.createElement('div');heading.style.cssText='font-weight:700;margin-bottom:8px';
+      heading.textContent=u.staffId+' — '+u.name+(u.active?' (Active)':' (Disabled)');wrap.appendChild(heading);
+      const actions=document.createElement('div');actions.style.cssText='display:flex;gap:6px;flex-wrap:wrap';
+      actions.appendChild(staffRowButton('Rename',()=>{const name=prompt('New name for '+u.staffId,u.name);if(name!==null)updateStaffAccount(u.staffId,{name:name.trim()})}));
+      actions.appendChild(staffRowButton('Reset PIN',()=>{const pin=prompt('New 6–12 digit PIN for '+u.staffId+' (do not share)');if(pin!==null&&confirm('Reset PIN for '+u.staffId+'? This will sign out the old session.'))updateStaffAccount(u.staffId,{pin})}));
+      actions.appendChild(staffRowButton(u.active?'Disable':'Enable',()=>{if(confirm((u.active?'Disable':'Enable')+' '+u.name+' ('+u.staffId+')?'))updateStaffAccount(u.staffId,{active:!u.active})}));
+      wrap.appendChild(actions);target.appendChild(wrap);
+    });
+  }catch(e){target.textContent=e.message;toast(e.message,'error')}
+}
 
 /* ══════════ ROLE / LOGIN ══════════ */
 // Role codes are verified by the server; no access codes are embedded in HTML.
 const AUTH_STORAGE_KEY = 'starChickenPosRole';
 let currentRole = null; // 'admin' | 'staff'
+let currentStaffId=null, currentStaffName=null;
 
 function getStoredRole() {
   try { return sessionStorage.getItem(AUTH_STORAGE_KEY); } catch (e) { return null; }
@@ -2577,18 +2649,18 @@ function applyRoleUI() {
     } else if (currentRole === 'staff') {
       badge.style.display = '';
       badge.className = 'role-badge staff';
-      badge.textContent = 'Sale Staff';
+      badge.textContent = currentStaffName ? ('Staff: '+currentStaffName) : 'Sale Staff';
     } else {
       badge.style.display = 'none';
     }
   }
   if (menuRole) {
-    menuRole.textContent = currentRole === 'admin' ? 'Logged in as Admin' : (currentRole === 'staff' ? 'Logged in as Sale Staff' : 'Switch user');
+    menuRole.textContent = currentRole === 'admin' ? 'Logged in as Admin' : (currentRole === 'staff' ? ('Logged in as '+(currentStaffName||'Sale Staff')) : 'Switch user');
   }
 }
 
 function showLogin() {
-  currentRole = null;
+  currentRole = null; currentStaffId=null; currentStaffName=null;
   const overlay = document.getElementById('loginOverlay');
   if (overlay) overlay.classList.remove('hidden');
   document.body.style.overflow = 'hidden';
@@ -2608,21 +2680,23 @@ async function attemptLogin() {
   const pinEl=document.getElementById('loginPin');
   const err=document.getElementById('loginError');
   const code=(pinEl&&pinEl.value||'').trim();
+  const staffId=(document.getElementById('staffLoginId')?.value||'').trim().toUpperCase();
   if(!code)return;
   try {
-    const r=await fetch('/api/role/login',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
+    const r=await fetch('/api/role/login',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({code,staffId})});
     if(!r.ok)throw new Error((await r.json().catch(()=>({}))).error||'Access denied');
     const result=await r.json();
-    currentRole=result.role; setStoredRole(null);
+    currentRole=result.role; currentStaffId=result.staffId||null; currentStaffName=result.staffName||null; setStoredRole(null);
     if(err)err.classList.remove('show');
     if(pinEl)pinEl.value='';
+    const idEl=document.getElementById('staffLoginId');if(idEl)idEl.value='';
     hideLogin(); applyRoleUI();
     toast(currentRole==='admin'?'Welcome, Admin':'Welcome, Sale Staff','success');
   } catch(e){console.warn('Role login failed:',e.message);if(err)err.classList.add('show');if(pinEl){pinEl.value='';pinEl.focus();} toast(e.message,'error');}
 }
 async function logoutUser() {
   try{await fetch('/api/role/logout',{method:'POST',credentials:'same-origin'});}catch(e){console.warn(e)}
-  setStoredRole(null);currentRole=null;applyRoleUI();
+  setStoredRole(null);currentRole=null;currentStaffId=null;currentStaffName=null;applyRoleUI();
   try{closeDashboard()}catch(e){}
   try{closeAllInvoicesModal()}catch(e){}
   try{closeHistoryModal()}catch(e){}
@@ -2632,7 +2706,7 @@ async function initAuth() {
   showLogin(); // Never trust sessionStorage to grant a role.
   try {
     const r=await fetch('/api/role/me',{credentials:'same-origin'});
-    if(r.ok){const data=await r.json();if(data.role==='admin'||data.role==='staff'){currentRole=data.role;hideLogin();applyRoleUI();}}
+    if(r.ok){const data=await r.json();if(data.role==='admin'||data.role==='staff'){currentRole=data.role;currentStaffId=data.staffId||null;currentStaffName=data.staffName||null;hideLogin();applyRoleUI();}}
   }catch(e){console.warn('Role check failed',e)}
   const pin=document.getElementById('loginPin');
   if(pin)pin.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();attemptLogin();}});

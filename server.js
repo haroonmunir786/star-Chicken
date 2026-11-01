@@ -33,6 +33,32 @@ app.use(cookieParser());
 // This upgrade does not modify invoice, stock, customer or ordering SQL.
 // A separate signed role cookie complements the existing outer sc_session login.
 const roleSecret = process.env.JWT_SECRET;
+// Personal staff PINs are hashed using Node's built-in scrypt and a per-user salt.
+function hashStaffPin(pin) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const digest = crypto.scryptSync(pin, salt, 64).toString('hex');
+  return `scrypt:${salt}:${digest}`;
+}
+function validStaffPin(pin) { return typeof pin === 'string' && /^[0-9]{6,12}$/.test(pin); }
+function verifyStaffPin(pin, stored) {
+  if (!validStaffPin(pin) || typeof stored !== 'string') return false;
+  const [method, salt, digest] = stored.split(':');
+  if (method !== 'scrypt' || !/^[a-f0-9]{32}$/.test(salt||'') || !/^[a-f0-9]{128}$/.test(digest||'')) return false;
+  const actual = crypto.scryptSync(pin, salt, 64);
+  return crypto.timingSafeEqual(actual, Buffer.from(digest, 'hex'));
+}
+function staffIdValid(id) { return /^S[A-Z0-9]{2,15}$/.test(id); }
+function readRoleIdentity(req) {
+  try {
+    const d=jwt.verify(req.cookies.sc_role_session||'',roleSecret,{algorithms:['HS256']});
+    return d && ['admin','staff'].includes(d.role) ? d : null;
+  } catch (_) { return null; }
+}
+async function requireManagedAdmin(req,res,next) {
+  if (readRoleIdentity(req)?.role !== 'admin') return res.status(403).json({error:'Admin access required'});
+  next();
+}
+
 const loginAttempts = new Map();
 function checkRateLimit(req, res, next) {
   const key = `${req.path}:${req.ip}`;
@@ -78,12 +104,22 @@ function signSession() {
   });
 }
 
-function auth(req, res, next) {
+async function auth(req, res, next) {
   const token = req.cookies.sc_session;
   if (!token) return res.status(401).json({ error: 'Authentication required' });
 
   try {
     jwt.verify(token, process.env.JWT_SECRET);
+    const identity=readRoleIdentity(req);
+    if(identity?.role==='staff' && identity.staffId) {
+      try {
+        const r=await pool.query('select active,session_version from public.pos_staff_users where staff_id=$1',[identity.staffId]);
+        if(!r.rowCount||!r.rows[0].active||r.rows[0].session_version!==identity.version) {
+          res.clearCookie('sc_role_session',roleCookieOptions);
+          return res.status(403).json({error:'Staff account disabled or session expired'});
+        }
+      } catch(e) { console.error('Staff permission check failed',e);return res.status(503).json({error:'Unable to verify Staff session'}); }
+    }
     next();
   } catch (e) {
     res.clearCookie('sc_session');
@@ -177,11 +213,40 @@ app.post('/logout', (req, res) => {
 
 
 /* ---------- Server-verified POS Admin/Staff roles ---------- */
-app.get('/api/role/me', auth, (req,res)=>res.json({role:roleFromCookie(req)}));
-app.post('/api/role/login', auth, checkRateLimit, (req,res)=>{
+app.get('/api/role/me', auth, async (req,res)=>{
+  const identity=readRoleIdentity(req);
+  if (!identity) return res.json({role:null});
+  if (identity.role==='staff' && identity.staffId) {
+    try {
+      const r=await pool.query('select staff_id,full_name,active,session_version from public.pos_staff_users where staff_id=$1',[identity.staffId]);
+      if (!r.rowCount || !r.rows[0].active || r.rows[0].session_version!==identity.version) {
+        res.clearCookie('sc_role_session',roleCookieOptions);
+        return res.json({role:null});
+      }
+      return res.json({role:'staff',staffId:r.rows[0].staff_id,staffName:r.rows[0].full_name});
+    } catch(e) { console.error('Staff session validation error',e); return res.status(503).json({error:'Staff login temporarily unavailable'}); }
+  }
+  res.json({role:identity.role,staffId:null,staffName:null});
+});
+app.post('/api/role/login', auth, checkRateLimit, async (req,res)=>{
   const adminCode=process.env.POS_ADMIN_CODE;
   const staffCode=process.env.POS_STAFF_CODE;
   if(!adminCode || !staffCode || adminCode===staffCode) return res.status(503).json({error:'POS role credentials not configured on server'});
+  // Optional personal Staff ID + PIN. Legacy shared Staff code remains available for safe rollout.
+  const staffId=String(req.body?.staffId||'').trim().toUpperCase();
+  if(staffId) {
+    const pin=String(req.body?.code||'');
+    if(!staffIdValid(staffId) || !validStaffPin(pin)) return res.status(401).json({error:'Incorrect Staff ID or PIN'});
+    try {
+      const r=await pool.query('select staff_id,full_name,pin_hash,active,session_version from public.pos_staff_users where staff_id=$1',[staffId]);
+      if(!r.rowCount || !r.rows[0].active || !verifyStaffPin(pin,r.rows[0].pin_hash)) return res.status(401).json({error:'Incorrect Staff ID or PIN'});
+      clearLoginAttempts(req);
+      const u=r.rows[0];
+      const token=jwt.sign({role:'staff',staffId:u.staff_id,version:u.session_version},roleSecret,{expiresIn:'8h',algorithm:'HS256'});
+      res.cookie('sc_role_session',token,{...roleCookieOptions,maxAge:8*60*60*1000});
+      return res.json({ok:true,role:'staff',staffId:u.staff_id,staffName:u.full_name});
+    } catch(e) { console.error('Staff login DB error',e); return res.status(503).json({error:'Staff login not ready. Ask Admin to check Staff setup.'}); }
+  }
   const submitted=String(req.body?.code||'');
   const role=verifyCode(submitted,adminCode)?'admin':verifyCode(submitted,staffCode)?'staff':null;
   if(!role)return res.status(401).json({error:'Incorrect access code'});
@@ -191,6 +256,37 @@ app.post('/api/role/login', auth, checkRateLimit, (req,res)=>{
   res.json({ok:true,role});
 });
 app.post('/api/role/logout', auth, (req,res)=>{res.clearCookie('sc_role_session',roleCookieOptions);res.json({ok:true})});
+
+/* ---------- Admin-only Staff Management (separate table; existing business tables untouched) ---------- */
+app.get('/api/staff',auth,requireManagedAdmin,async(req,res)=>{
+  try {const r=await pool.query('select staff_id,full_name,active,created_at,updated_at from public.pos_staff_users order by staff_id');res.json(r.rows.map(u=>({staffId:u.staff_id,name:u.full_name,active:u.active,createdAt:u.created_at,updatedAt:u.updated_at})));}
+  catch(e){console.error('Staff list error',e);res.status(503).json({error:'Staff table unavailable. Run staff_accounts.sql first.'});}
+});
+app.post('/api/staff',auth,requireManagedAdmin,async(req,res)=>{
+  const id=String(req.body?.staffId||'').trim().toUpperCase(),name=String(req.body?.name||'').trim(),pin=String(req.body?.pin||'');
+  if(!staffIdValid(id)||name.length<2||name.length>100||!validStaffPin(pin))return res.status(400).json({error:'Use ID S01–S999..., name 2–100 characters, and a private 6–12 digit PIN'});
+  try {await pool.query('insert into public.pos_staff_users(staff_id,full_name,pin_hash) values($1,$2,$3)',[id,name,hashStaffPin(pin)]);res.status(201).json({ok:true});}
+  catch(e){if(e.code==='23505')return res.status(409).json({error:'Staff ID already exists'});console.error('Staff creation error',e);res.status(503).json({error:'Could not create Staff account'});}
+});
+app.patch('/api/staff/:id',auth,requireManagedAdmin,async(req,res)=>{
+  const id=String(req.params.id||'').trim().toUpperCase();
+  if(!staffIdValid(id))return res.status(400).json({error:'Invalid Staff ID'});
+  const name=req.body?.name,active=req.body?.active,pin=req.body?.pin;
+  if(name===undefined&&active===undefined&&pin===undefined)return res.status(400).json({error:'No changes supplied'});
+  if(name!==undefined&&(typeof name!=='string'||name.trim().length<2||name.trim().length>100))return res.status(400).json({error:'Invalid employee name'});
+  if(active!==undefined&&typeof active!=='boolean')return res.status(400).json({error:'Active must be true or false'});
+  if(pin!==undefined&&!validStaffPin(pin))return res.status(400).json({error:'PIN must contain 6–12 digits'});
+  try {
+    const r=await pool.query(`update public.pos_staff_users set
+      full_name=coalesce($2,full_name),active=coalesce($3,active),pin_hash=coalesce($4,pin_hash),
+      session_version=session_version+case when $3 is not null or $4 is not null then 1 else 0 end,
+      updated_at=now() where staff_id=$1 returning staff_id`,
+      [id,name===undefined?null:name.trim(),active===undefined?null:active,pin===undefined?null:hashStaffPin(pin)]);
+    if(!r.rowCount)return res.status(404).json({error:'Staff account not found'});
+    res.json({ok:true});
+  }catch(e){console.error('Staff update error',e);res.status(503).json({error:'Could not update Staff account'});}
+});
+
 
 /* ---------- Health ---------- */
 app.get('/api/health', async (req, res) => {
