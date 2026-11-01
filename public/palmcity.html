@@ -1763,6 +1763,10 @@ select[multiple] {
       <button type="button" class="menu-nav-item admin-only" data-admin-only="1" onclick="closeReportsMenu(); openStaffManagement()">
         <span class="mn-icon">👥</span><span class="mn-text"><strong>Staff Management</strong><small>Add, rename, reset PIN, disable employees</small></span>
       </button>
+
+      <button type="button" class="menu-nav-item admin-only" data-admin-only="1" onclick="closeReportsMenu(); openActivityLog()">
+        <span class="mn-icon">📜</span><span class="mn-text"><strong>Activity Log</strong><small>Invoice creation, edits and deletions</small></span>
+      </button>
     </nav>
     
       <button type="button" class="menu-nav-item" onclick="closeReportsMenu(); logoutUser()" style="border-top:2px solid #E5E5EA;margin-top:6px">
@@ -2543,6 +2547,13 @@ select[multiple] {
   </div>
 </div>
 
+<!-- Admin-only Phase 2 activity history -->
+<div class="hist-overlay no-print" id="activityLogOverlay" style="z-index:8100">
+ <div class="hist-modal" role="dialog" aria-modal="true" aria-label="Activity Log">
+  <div class="hist-header"><h3>📜 Activity Log</h3><button class="btn btn-ghost" onclick="closeActivityLog()">Close ✕</button></div>
+  <div class="hist-body"><p style="margin:8px 0 12px;font-size:.78rem;color:#777">Most recent 500 server-recorded actions. Older invoices are not retroactively attributed.</p><div id="activityLogRows">Loading...</div></div>
+ </div>
+</div>
 <!-- Admin-only Staff Management -->
 <div class="hist-overlay no-print" id="staffManagementOverlay" style="z-index:8000">
   <div class="hist-modal" role="dialog" aria-modal="true" aria-label="Staff Management">
@@ -2563,6 +2574,32 @@ select[multiple] {
 
 <script>
 
+
+async function openActivityLog(){
+  if(!requireAdmin('Activity Log'))return;
+  document.getElementById('activityLogOverlay').classList.add('show');
+  const out=document.getElementById('activityLogRows');out.textContent='Loading...';
+  try {
+    const r=await fetch('/api/activity',{credentials:'same-origin'});
+    const data=await r.json();if(!r.ok)throw Error(data.error||'Cannot load activity');
+    out.textContent='';
+    if(!data.length){out.textContent='No activity recorded yet.';return;}
+    for(const a of data){
+      const box=document.createElement('div');box.className='card';box.style.cssText='padding:12px;margin-bottom:8px';
+      const title=document.createElement('strong');title.textContent=(a.actor_name||a.actor_id||'Unknown')+' — '+(a.action||'');
+      const detail=document.createElement('div');detail.style.cssText='font-size:.78rem;color:#666;margin-top:5px';
+      detail.textContent=(a.invoice_no||'')+' · '+new Date(a.created_at).toLocaleString('en-PK',{timeZone:'Asia/Karachi'});
+      box.append(title,detail);out.appendChild(box);
+    }
+  }catch(e){out.textContent=e.message;}
+}
+function closeActivityLog(){document.getElementById('activityLogOverlay').classList.remove('show');}
+function autoSetBillMaker(){
+  const el=document.getElementById('billMaker');if(!el)return;
+  const name=currentRole==='admin'?'Admin':(currentRole==='staff'?(currentStaffName||'Shared Staff'):'');
+  if(!currentId)el.value=name;
+  el.readOnly=!!currentRole;
+}
 
 /* Admin-only employee account management. Never include PIN hashes in browser responses. */
 async function staffApi(url,options={}) {
@@ -2690,7 +2727,7 @@ async function attemptLogin() {
     if(err)err.classList.remove('show');
     if(pinEl)pinEl.value='';
     const idEl=document.getElementById('staffLoginId');if(idEl)idEl.value='';
-    hideLogin(); applyRoleUI();
+    hideLogin(); applyRoleUI();autoSetBillMaker();
     toast(currentRole==='admin'?'Welcome, Admin':'Welcome, Sale Staff','success');
   } catch(e){console.warn('Role login failed:',e.message);if(err)err.classList.add('show');if(pinEl){pinEl.value='';pinEl.focus();} toast(e.message,'error');}
 }
@@ -2706,7 +2743,7 @@ async function initAuth() {
   showLogin(); // Never trust sessionStorage to grant a role.
   try {
     const r=await fetch('/api/role/me',{credentials:'same-origin'});
-    if(r.ok){const data=await r.json();if(data.role==='admin'||data.role==='staff'){currentRole=data.role;currentStaffId=data.staffId||null;currentStaffName=data.staffName||null;hideLogin();applyRoleUI();}}
+    if(r.ok){const data=await r.json();if(data.role==='admin'||data.role==='staff'){currentRole=data.role;currentStaffId=data.staffId||null;currentStaffName=data.staffName||null;hideLogin();applyRoleUI();autoSetBillMaker();}}
   }catch(e){console.warn('Role check failed',e)}
   const pin=document.getElementById('loginPin');
   if(pin)pin.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();attemptLogin();}});
@@ -3476,6 +3513,7 @@ function newInvoice(skipConfirm) {
   setInvoiceDateTimeNow();
   startPktLiveClock();
   ['customerName','billMaker','customerPhone'].forEach(id => document.getElementById(id).value = '');
+  autoSetBillMaker();
   const pt = document.getElementById('partyType');
   if (pt) pt.value = 'star';
   onPartyTypeChange();

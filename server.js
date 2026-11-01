@@ -288,6 +288,28 @@ app.patch('/api/staff/:id',auth,requireManagedAdmin,async(req,res)=>{
 });
 
 
+/* Phase 2 audit entries: server-generated identity, never browser-supplied. */
+function auditIdentity(req) {
+  const i=readRoleIdentity(req);
+  if(!i) return {id:'outer-login',name:'Unidentified legacy session'};
+  return i.role==='admin' ? {id:'ADMIN',name:'Admin'} :
+    i.staffId ? {id:i.staffId,name:null} : {id:'SHARED_STAFF',name:'Shared Staff code'};
+}
+async function writeAudit(db,req,action,invoiceId,invoiceNo,details={}) {
+  const actor=auditIdentity(req);
+  await db.query(`insert into public.pos_activity_log
+    (actor_id,actor_name,action,invoice_id,invoice_no,details)
+    values ($1,coalesce((select full_name from public.pos_staff_users where staff_id=$1),$2),$3,$4,$5,$6::jsonb)`,
+    [actor.id,actor.name,action,invoiceId||null,invoiceNo||null,JSON.stringify(details)]);
+}
+app.get('/api/activity',auth,requireManagedAdmin,async(req,res)=>{
+  try {
+    const r=await pool.query(`select id,actor_id,actor_name,action,invoice_id,invoice_no,details,created_at
+      from public.pos_activity_log order by id desc limit 500`);
+    res.json(r.rows);
+  } catch(e) {console.error('Activity log read failed',e);res.status(503).json({error:'Activity Log unavailable. Run phase2_activity_log.sql first.'});}
+});
+
 /* ---------- Health ---------- */
 app.get('/api/health', async (req, res) => {
   try {
@@ -444,13 +466,25 @@ app.post('/api/invoices', auth, async (req, res) => {
     await client.query('begin');
 
     const existing = await client.query(
-      'select invoice_no from public.invoices where id = $1',
+      'select invoice_no, bill_maker from public.invoices where id = $1',
       [inv.id]
     );
 
     if (existing.rowCount) {
       inv.invoiceNo = existing.rows[0].invoice_no;
+      // Preserve original preparer on edits: older invoices are not reassigned.
+      inv.billMaker = existing.rows[0].bill_maker || '';
     } else {
+      const identity=readRoleIdentity(req);
+      if (identity?.role==='staff' && identity.staffId) {
+        const person=await client.query('select full_name from public.pos_staff_users where staff_id=$1 and active=true',[identity.staffId]);
+        if (!person.rowCount) {await client.query('rollback');return res.status(403).json({error:'Valid employee session required'});}
+        inv.billMaker=person.rows[0].full_name;
+      } else if(identity?.role==='admin') inv.billMaker='Admin';
+      else if(identity?.role==='staff') inv.billMaker='Shared Staff';
+      else {await client.query('rollback');return res.status(403).json({error:'Please sign in to POS before saving an invoice'});}
+    }
+    if (!existing.rowCount) {
       const counterResult = await client.query(
         `update public.invoice_counters
          set last_number = last_number + 1
@@ -495,6 +529,7 @@ app.post('/api/invoices', auth, async (req, res) => {
       inv.balance, inv.savedAt
     ]);
 
+    await writeAudit(client,req,existing.rowCount?'invoice.updated':'invoice.created',inv.id,inv.invoiceNo,{grandTotal:inv.grandTotal});
     await client.query('commit');
     res.status(201).json(dbRowToInvoice(result.rows[0]));
   } catch (e) {
@@ -510,17 +545,20 @@ app.post('/api/invoices', auth, async (req, res) => {
 });
 
 app.delete('/api/invoices/:id', auth, adminOnly, async (req, res) => {
+  const client=await pool.connect();
   try {
-    const result = await pool.query(
-      'delete from public.invoices where id = $1',
-      [req.params.id]
-    );
-    if (!result.rowCount) return res.status(404).json({ error: 'Invoice not found' });
+    await client.query('begin');
+    const found=await client.query('select invoice_no from public.invoices where id=$1 for update',[req.params.id]);
+    if(!found.rowCount) {await client.query('rollback');return res.status(404).json({error:'Invoice not found'});}
+    await client.query('delete from public.invoices where id=$1',[req.params.id]);
+    await writeAudit(client,req,'invoice.deleted',req.params.id,found.rows[0].invoice_no);
+    await client.query('commit');
     res.status(204).end();
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'Could not delete invoice' });
-  }
+  } catch(e) {
+    try{await client.query('rollback')}catch(_){}
+    console.error('Invoice deletion failed',e);
+    res.status(500).json({error:'Could not delete invoice'});
+  } finally {client.release();}
 });
 
 /* ---------- One-time migration endpoint ---------- */
