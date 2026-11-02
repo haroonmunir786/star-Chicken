@@ -2110,7 +2110,7 @@ select[multiple] {
     <div class="dash-header">
       <h3>📈 Business Dashboard</h3>
       <div style="display:flex;gap:8px;align-items:center;">
-        <button class="btn btn-ghost btn-sm" onclick="renderDashboard()" title="Refresh">↻ Refresh</button>
+        <button class="btn btn-ghost btn-sm" onclick="refreshDashboardFromCloud()" title="Fetch latest invoices">↻ Refresh</button>
         <button class="btn btn-ghost btn-sm" onclick="closeDashboard()" style="height:32px;padding:0 10px;">✕</button>
       </div>
     </div>
@@ -2800,6 +2800,7 @@ async function attemptLogin() {
     if(pinEl)pinEl.value='';
     const idEl=document.getElementById('staffLoginId');if(idEl)idEl.value='';
     hideLogin(); applyRoleUI();autoSetBillMaker();
+    refreshDashboardFromCloud();
     toast(currentRole==='admin'?'Welcome, Admin':'Welcome, Sale Staff','success');
   } catch(e){console.warn('Role login failed:',e.message);if(err)err.classList.add('show');if(pinEl){pinEl.value='';pinEl.focus();} toast(e.message,'error');}
 }
@@ -2815,7 +2816,7 @@ async function initAuth() {
   showLogin(); // Never trust sessionStorage to grant a role.
   try {
     const r=await fetch('/api/role/me',{credentials:'same-origin'});
-    if(r.ok){const data=await r.json();if(data.role==='admin'||data.role==='staff'){currentRole=data.role;currentStaffId=data.staffId||null;currentStaffName=data.staffName||null;hideLogin();applyRoleUI();autoSetBillMaker();}}
+    if(r.ok){const data=await r.json();if(data.role==='admin'||data.role==='staff'){currentRole=data.role;currentStaffId=data.staffId||null;currentStaffName=data.staffName||null;hideLogin();applyRoleUI();autoSetBillMaker();refreshDashboardFromCloud();}}
   }catch(e){console.warn('Role check failed',e)}
   const pin=document.getElementById('loginPin');
   if(pin)pin.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();attemptLogin();}});
@@ -3303,6 +3304,39 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('storageInfo').textContent = cloudOnline
     ? '✓ Cloud database connected'
     : '⚠ Local storage mode';
+});
+
+/* STAR CHICKEN SAFE BACKGROUND INVOICE REFRESH — 20 seconds.
+   Read-only, no invoice/stock/order writes. Never replace data on network failure. */
+let scInvoiceRefreshBusy = false;
+let scLastInvoiceRefresh = 0;
+async function refreshDashboardFromCloud() {
+  if (scInvoiceRefreshBusy || !cloudOnline || !currentRole || document.hidden) return;
+  scInvoiceRefreshBusy = true;
+  try {
+    // A failed request must not replace the current dashboard with local/offline data.
+    const r = await fetch('/api/invoices', {credentials:'same-origin', cache:'no-store'});
+    if (!r.ok) throw new Error('Invoice refresh HTTP ' + r.status);
+    const latest = await r.json();
+    if (!Array.isArray(latest)) throw new Error('Unexpected invoice response');
+    const oldSignature = JSON.stringify(allHistory.map(x=>[x.id,x.invoiceNo,x.grandTotal,x.balance,x.savedAt,x.items]));
+    const newSignature = JSON.stringify(latest.map(x=>[x.id,x.invoiceNo,x.grandTotal,x.balance,x.savedAt,x.items]));
+    scLastInvoiceRefresh = Date.now();
+    if (oldSignature !== newSignature) {
+      allHistory = latest;
+      renderHistory();
+      if (document.getElementById('dashboardOverlay')?.classList.contains('show')) renderDashboard();
+    } else if (document.getElementById('dashboardOverlay')?.classList.contains('show')) {
+      renderDashboard(); // Refresh Today/date figures even when no new invoice arrived.
+    }
+  } catch (e) { console.warn('[POS background refresh]', e.message); }
+  finally { scInvoiceRefreshBusy = false; }
+}
+setInterval(() => {
+  if (!document.hidden && currentRole && cloudOnline) refreshDashboardFromCloud();
+}, 20000);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && currentRole && cloudOnline) refreshDashboardFromCloud();
 });
 
 /* ══════════ HISTORY UI ══════════ */

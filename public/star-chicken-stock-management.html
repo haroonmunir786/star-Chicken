@@ -266,6 +266,22 @@ async function refreshPosSalesFromInvoices() {
   status.textContent = 'POS sales synced from ' + invoices.length + ' cloud invoices';
   if (!status.parentNode) document.querySelector('header')?.after(status);
 }
+/* STAR CHICKEN SAFE INVENTORY DISPLAY REFRESH — 20 seconds.
+   Only reload invoice-derived POS sales; does not overwrite stockDB or save state.
+   Pause while stock entry is being edited to protect unsaved changes. */
+let scStockRefreshBusy=false;
+async function scRefreshStockDisplay(){
+  if (scStockRefreshBusy || !cloudReady || dirty || document.hidden) return;
+  scStockRefreshBusy=true;
+  try {
+    await refreshPosSalesFromInvoices();
+    if (!dirty) render();
+  } catch(e){console.warn('[Stock background refresh]', e.message);}
+  finally {scStockRefreshBusy=false;}
+}
+setInterval(scRefreshStockDisplay,20000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)scRefreshStockDisplay();});
+
 initializeCloudStock().then(() => {
   try {
     const p = new URLSearchParams(location.search || '');
