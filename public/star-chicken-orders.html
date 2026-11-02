@@ -477,7 +477,7 @@ dialog.modal::backdrop{background:rgba(25,18,18,.55)}
    CONSTANTS & DEFAULT DATA (taken from Star_chicken_ordering (Oct-26).xlsx)
    ===================================================================== */
 const DEFAULT_BRANCHES=['Kasur SH','Mustafabad','Hatchery','Gajjumata','Marghzar','Gulshan Ravi'];
-const DEFAULT_ITEMS=[["SBB (B Grade Trimming)", 2], ["SBB Slice", 2], ["Skinless Breast", 1], ["Boneless Handi", 1], ["Boneless Breast  Whole", 2], ["Boneless Breast  RS", 2], ["Boneless Breast  YUM", 2], ["Innerfillet", 2], ["Mince Premium", 1], ["Zinger CP S/O", 2], ["SBL Thigh", 2], ["Zinger Skinless", 2], ["Zinger SL JC/RS", 2], ["Thigh Triming", 2], ["Trimming+Bone", 2], ["Drumstick SC", 1], ["Drumstick Skinless", 1], ["Whole Leg", 2], ["Drummet A", 2], ["Drummet B", 2], ["Niblet A", 2], ["Niblet B", 2], ["Wing Tip", 2], ["3 Joined Wings", 2], ["2 Joined Wings SO", 2], ["2 Joined Wings SL", 1], ["Karahi Cut", 1], ["Raw Broast Leg", 1.404], ["Raw Broast Thigh", 1.404], ["Whole Bird S/o", 1.404], ["Whole Bird S/L", 1], ["D-Triming", 2], ["Neck", 1], ["Carcass", 4], ["Skin", 2], ["Tail (kg)", 2], ["Heart (kg)", 1], ["Liver (kg)", 1], ["Gizzard (kg)", 1], ["Shanks (kg)", 1], ["MDM Mince", 1], ["Marinated Butterfly JC", 2.09], ["Marinated Butterfly LC", 2], ["Marinated Butterfly (2 kg)", 2.09], ["Marinated niblit CP", 1], ["Marinated niblit (2 KG)", 2], ["Marinated drummet CP", 1], ["Marinated drummet (2 KG)", 2], ["Marinated 5-cut", 2], ["Mari Injected Broast", 3.5], ["Marinated SBL Thigh", 2], ["Marinated Zinger CP", 2], ["Marinated Zinger JC", 2], ["Marinated Zinger (2 KG)", 2], ["Marinated Zinger SL", 2], ["Marinated Drumstick", 1], ["Marinated Strips CP", 1], ["Marinated Strips (2 KG)", 2], ["Marinated Crispy CP", 1], ["Kebab", 0.5], ["Nuggets", 1], ["Chicken Fries", 1], ["Burger Patty 12 pc", 0.96], ["Burger Patty 8 pc", 0.48], ["Chicken Samosa 12 PCs", 0.3], ["Chicken Samosa 24 PCs", 0.6], ["Spring Roll 12 PCs", 0.42], ["Spring Roll 24 Pcs", 0.84], ["Breading Flour", 4], ["Kofta", 1]];
+const DEFAULT_ITEMS=[["SBB (B Grade Trimming)", 2], ["SBB Slice", 2], ["Skinless Breast", 1], ["Boneless Handi", 1], ["Boneless Breast  Whole", 2], ["Boneless Breast  RS", 2], ["Boneless Breast  YUM", 2], ["Innerfillet", 2], ["Mince Premium", 1], ["Zinger CP S/O", 2], ["SBL Thigh", 2], ["Zinger Skinless", 2], ["Zinger SL JC/RS", 2], ["Thigh Triming", 2], ["Trimming+Bone", 2], ["Drumstick SC", 1], ["Drumstick Skinless", 1], ["Whole Leg", 2], ["Drummet A", 2], ["Drummet B", 2], ["Niblet A", 2], ["Niblet B", 2], ["Wing Tip", 2], ["3 Joined Wings", 2], ["2 Joined Wings SO", 2], ["2 Joined Wings SL", 1], ["Karahi Cut", 1], ["2 Pcs Cut/Combo Cut", 1], ["Raw Broast Leg", 1.404], ["Raw Broast Thigh", 1.404], ["Whole Bird S/o", 1.404], ["Whole Bird S/L", 1], ["D-Triming", 2], ["Neck", 1], ["Carcass", 4], ["Skin", 2], ["Tail (kg)", 2], ["Heart (kg)", 1], ["Liver (kg)", 1], ["Gizzard (kg)", 1], ["Shanks (kg)", 1], ["MDM Mince", 1], ["Marinated Butterfly JC", 2.09], ["Marinated Butterfly LC", 2], ["Marinated Butterfly (2 kg)", 2.09], ["Marinated niblit CP", 1], ["Marinated niblit (2 KG)", 2], ["Marinated drummet CP", 1], ["Marinated drummet (2 KG)", 2], ["Marinated 5-cut", 2], ["Mari Injected Broast", 3.5], ["Marinated SBL Thigh", 2], ["Marinated Zinger CP", 2], ["Marinated Zinger JC", 2], ["Marinated Zinger (2 KG)", 2], ["Marinated Zinger SL", 2], ["Marinated Drumstick", 1], ["Marinated Strips CP", 1], ["Marinated Strips (2 KG)", 2], ["Marinated Crispy CP", 1], ["Kebab", 0.5], ["Nuggets", 1], ["Chicken Fries", 1], ["Burger Patty 12 pc", 0.96], ["Burger Patty 8 pc", 0.48], ["Chicken Samosa 12 PCs", 0.3], ["Chicken Samosa 24 PCs", 0.6], ["Spring Roll 12 PCs", 0.42], ["Spring Roll 24 Pcs", 0.84], ["Breading Flour", 4], ["Chapli Kabab", 1], ["Kofta", 1]];
 const XL_MIME='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const KEY='starchicken_state_v1', LOGO_KEY='starchicken_logo_v1', SNAP_KEY='starchicken_snaps_v1';
 const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -536,6 +536,19 @@ function normalize(d){
   out.items=(Array.isArray(d.items)?d.items:[]).filter(i=>i&&i.id&&String(i.name||'').trim()&&+i.pack>0).map(i=>({id:String(i.id),name:String(i.name).trim().slice(0,60),pack:+i.pack}));
   if(!out.branches.length) out.branches=base.branches;
   if(!out.items.length) out.items=base.items;
+  /* Merge any DEFAULT_ITEMS missing from saved list (e.g. newly added products) */
+  ;(function mergeDefaultItems(){
+    const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,'');
+    const have=new Set(out.items.map(i=>norm(i.name)));
+    let maxN=0;
+    out.items.forEach(i=>{const m=String(i.id).match(/^p(\d+)$/);if(m)maxN=Math.max(maxN,+m[1])});
+    DEFAULT_ITEMS.forEach(([n,pack])=>{
+      if(have.has(norm(n))) return;
+      maxN++;
+      out.items.push({id:'p'+maxN,name:n,pack:+pack||1});
+      have.add(norm(n));
+    });
+  })();
   if(!out.branches.some(b=>b.id===out.ui.branch)) out.ui.branch=out.branches[0].id;
   if(d.orders&&typeof d.orders==='object'){
     for(const [date,byB] of Object.entries(d.orders)){

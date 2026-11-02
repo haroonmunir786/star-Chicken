@@ -2952,7 +2952,7 @@ function setPartyFilter(screen, mode) {
 }
 
 /* ══════════ PRODUCTS ══════════ */
-const mainProducts = ["SBB Trimming","SBB Slice","Skinless Breast","Boneless Handi","Boneless Breast","Breast RS","Breast Yum","Premium Mince","Zinger CP S/O","Zinger CP S/L","Zinger S/L JC/RS","Drumstick S/O","Drumstick S/L","Karahi Cut","Whole Bird S/O","Whole Bird S/L"];
+const mainProducts = ["SBB Trimming","SBB Slice","Skinless Breast","Boneless Handi","Boneless Breast","Breast RS","Breast Yum","Premium Mince","Zinger CP S/O","Zinger CP S/L","Zinger S/L JC/RS","Drumstick S/O","Drumstick S/L","Karahi Cut","2 Pcs Cut/Combo Cut","Whole Bird S/O","Whole Bird S/L"];
 const byPartsProducts = ["Inner Fillet","Thigh Trimming","Trimming Bone","Whole Leg","Drummet A","Drummet B","Niblet A","Niblet B","Wing Tip","3 Joint Wings","2 Joint Wings S/O","2 Joint Wings S/L","D Trimming","Neck","Carcass","Skin","Tail","Heart","Liver","Gizzard","Shanks","MDM Mince"];
 const furtherProducts = ["Marinated ButterFly JC","Marinated ButterFly LC","Marinated Niblet 1kg","Marinated Niblet","Marinated Drummet 1kg","Marinated Drummet","Marinated 5 cut","Injected Chicken Pieces","Marinated Zinger CP","Marinated Zinger SBL","Marinated Zinger S/O","Marinated Zinger S/L","Marinated Drumstick","Marinated Strips","Marinated Strips 2kg","Marinated Crispy"];
 const readyToCookProducts = ["Kebab","Nuggets","Chicken Fries","Burger Patty 12 Pcs","Burger Patty 8 Pcs","Chicken Samosa 12 pcs","Chicken Samosa 24 pcs","Fried Samosa","Fried Spring Roll","Chicken Roll 12 pcs","Chicken Roll 24 pcs","Breading Flour","Chapli Kabab","Chicken Kofta","Pizza Topping Tikka","Pizza Topping Fajita"];
@@ -5334,7 +5334,7 @@ const STOCK_ITEMS = [
   "B Trimming","SBB Slice","Skinless Breast","Boneless Handi","Boneless Breast","Breast RS","Breast Yum",
   "Inner Fillet","Premium Mince","Zinger CP S/O","Zinger CP S/L","Zinger S/L JC/RS","Thigh Trimming","Trimming Bone",
   "Drumstick S/O","Drumstick S/L","Whole Leg","Drummet A","Drummet B","Niblet A","Niblet B","Wing Tip",
-  "3 Joint Wings","2 Joint Wings S/O","2 Joint Wings S/L","Karahi Cut","Whole Bird S/O","Whole Bird S/L",
+  "3 Joint Wings","2 Joint Wings S/O","2 Joint Wings S/L","Karahi Cut","2 Pcs Cut/Combo Cut","Whole Bird S/O","Whole Bird S/L",
   "D Trimming","Neck","Carcass","Skin","Tail","Heart","Liver","Gizzard","Shanks","MDM Mince",
   "Marinated ButterFly JC","Marinated ButterFly LC","Marinated Niblet 1kg","Marinated Niblet",
   "Marinated Drummet 1kg","Marinated Drummet","Marinated 5 cut","Injected Chicken Pieces",
@@ -5399,6 +5399,9 @@ const POS_TO_STOCK_PRODUCT = {
   '2 joint wings s/l': '2 Joint Wings S/L',
   '2 joined wings sl': '2 Joint Wings S/L',
   'karahi cut': 'Karahi Cut',
+  '2 pcs cut/combo cut': '2 Pcs Cut/Combo Cut',
+  '2 pcs cut': '2 Pcs Cut/Combo Cut',
+  'combo cut': '2 Pcs Cut/Combo Cut',
   'whole bird s/o': 'Whole Bird S/O',
   'whole bird s/l': 'Whole Bird S/L',
   'd trimming': 'D Trimming',
