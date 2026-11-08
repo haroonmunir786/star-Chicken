@@ -960,8 +960,8 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
 }
 .dash-overlay.show { display: flex; }
 .dash-modal {
-  background: var(--bg); width: 100%; max-width: 1100px; height: 100%;
-  max-height: 100vh; overflow-y: auto; box-shadow: var(--shadow-lg);
+  background: var(--bg); width: 100%; max-width: none; height: 100vh;
+  height: 100dvh; max-height: none; overflow-y: auto; box-shadow: none;
   display: flex; flex-direction: column;
 }
 .dash-header {
@@ -2800,6 +2800,9 @@ async function attemptLogin() {
     if(pinEl)pinEl.value='';
     const idEl=document.getElementById('staffLoginId');if(idEl)idEl.value='';
     hideLogin(); applyRoleUI();autoSetBillMaker();
+    // Admin starts on the full-screen dashboard; Staff stays on the invoice form.
+    if(currentRole==='admin') openDashboard();
+    else closeDashboard();
     refreshDashboardFromCloud();
     toast(currentRole==='admin'?'Welcome, Admin':'Welcome, Sale Staff','success');
   } catch(e){console.warn('Role login failed:',e.message);if(err)err.classList.add('show');if(pinEl){pinEl.value='';pinEl.focus();} toast(e.message,'error');}
@@ -2816,7 +2819,7 @@ async function initAuth() {
   showLogin(); // Never trust sessionStorage to grant a role.
   try {
     const r=await fetch('/api/role/me',{credentials:'same-origin'});
-    if(r.ok){const data=await r.json();if(data.role==='admin'||data.role==='staff'){currentRole=data.role;currentStaffId=data.staffId||null;currentStaffName=data.staffName||null;hideLogin();applyRoleUI();autoSetBillMaker();refreshDashboardFromCloud();}}
+    if(r.ok){const data=await r.json();if(data.role==='admin'||data.role==='staff'){currentRole=data.role;currentStaffId=data.staffId||null;currentStaffName=data.staffName||null;hideLogin();applyRoleUI();autoSetBillMaker();if(currentRole==='admin')openDashboard();else closeDashboard();refreshDashboardFromCloud();}}
   }catch(e){console.warn('Role check failed',e)}
   const pin=document.getElementById('loginPin');
   if(pin)pin.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();attemptLogin();}});
