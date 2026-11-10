@@ -1652,6 +1652,18 @@ select[multiple] {
 
 
 </style>
+<style>
+/* Desktop Admin: persistent sidebar and dashboard sharing the screen. */
+@media screen and (min-width:801px) {
+  body.admin-workspace .menu-sidebar-overlay {display:block!important;background:transparent;pointer-events:none}
+  body.admin-workspace .menu-sidebar {transform:translateX(0)!important;width:300px;box-shadow:1px 0 12px #0002;pointer-events:auto}
+  body.admin-workspace .menu-sidebar-close,body.admin-workspace .sidebar-menu-btn {display:none!important}
+  body.admin-workspace .topbar,body.admin-workspace .app-shell {margin-left:300px}
+  body.admin-workspace .dash-overlay {left:300px;right:0;width:auto;background:#FFF8E7}
+  body.admin-workspace .dash-modal {width:100%;max-width:none;margin:0}
+}
+@media print {body.admin-workspace .topbar,body.admin-workspace .app-shell {margin-left:0!important}}
+</style>
 </head>
 <body>
 
@@ -2744,6 +2756,7 @@ function requireAdmin(actionName) {
 }
 
 function applyRoleUI() {
+  document.body.classList.toggle('admin-workspace', currentRole === 'admin');
   const badge = document.getElementById('roleBadge');
   const menuRole = document.getElementById('menuRoleLabel');
   document.querySelectorAll('.menu-nav-item.admin-only').forEach(el => {
@@ -2810,6 +2823,7 @@ async function attemptLogin() {
 async function logoutUser() {
   try{await fetch('/api/role/logout',{method:'POST',credentials:'same-origin'});}catch(e){console.warn(e)}
   setStoredRole(null);currentRole=null;currentStaffId=null;currentStaffName=null;applyRoleUI();
+  document.getElementById('reportsMenuOverlay')?.classList.remove('show');
   try{closeDashboard()}catch(e){}
   try{closeAllInvoicesModal()}catch(e){}
   try{closeHistoryModal()}catch(e){}
@@ -5965,12 +5979,17 @@ function renderCustomerList() {
 refreshCustomersFromServer().catch(e => console.warn('Customer list will load when opened:', e));
 
 
+function adminSidebarFixed() {
+  return currentRole === 'admin' && window.matchMedia('(min-width:801px)').matches;
+}
 function openReportsMenu() {
+  if (adminSidebarFixed()) return;
   const el = document.getElementById('reportsMenuOverlay');
   if (el) el.classList.add('show');
   document.body.style.overflow = 'hidden';
 }
 function closeReportsMenu() {
+  if (adminSidebarFixed()) return;
   const el = document.getElementById('reportsMenuOverlay');
   if (el) el.classList.remove('show');
   document.body.style.overflow = '';
