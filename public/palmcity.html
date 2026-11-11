@@ -1664,6 +1664,36 @@ select[multiple] {
 }
 @media print {body.admin-workspace .topbar,body.admin-workspace .app-shell {margin-left:0!important}}
 </style>
+<style>
+/* All Invoices — desktop-style data grid; uses only existing invoice fields. */
+#historyOverlay .hist-modal {width:100%;max-width:none;margin:0;height:100%;max-height:100%;border-radius:0}
+#historyOverlay .hist-body {padding:0;background:#fff;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+#historyOverlay .hist-filters {padding:10px 16px}
+#historyOverlay .sc-invoice-table-scroll {overflow:auto;flex:1;min-height:0;overscroll-behavior:contain;background:#fff}
+#historyOverlay .sc-invoice-grid {min-width:1530px;width:100%;table-layout:auto;border-collapse:separate;border-spacing:0;font-size:12px}
+#historyOverlay .sc-invoice-grid th {position:sticky;top:0;z-index:3;background:#eef0f3;color:#252b33;text-align:left;border:1px solid #cbd0d8;border-left:0;white-space:nowrap;padding:9px 8px;font-size:11px;font-weight:700;cursor:pointer}
+#historyOverlay .sc-invoice-grid thead tr.sc-grid-filters th {top:35px;z-index:2;background:#f8f9fb;padding:4px 5px;cursor:auto}
+#historyOverlay .sc-grid-filter {width:100%;min-width:65px;box-sizing:border-box;border:1px solid #c6cbd2;border-radius:3px;padding:5px 6px;height:27px;background:white;color:#30343b;font:11px Inter,Arial,sans-serif}
+#historyOverlay .sc-invoice-grid td {border-right:1px solid #e0e4e9;border-bottom:1px solid #e0e4e9;padding:8px 7px;line-height:1.35;white-space:nowrap;font-size:12px}
+#historyOverlay .sc-invoice-grid tbody tr {cursor:pointer}
+#historyOverlay .sc-invoice-grid tbody tr:nth-child(odd) {background:#f4f9fc}
+#historyOverlay .sc-invoice-grid tbody tr:nth-child(even) {background:#fff}
+#historyOverlay .sc-invoice-grid tbody tr:hover {background:#fff0da}
+#historyOverlay .sc-invoice-grid tbody tr.sc-selected {background:#d9e8ff}
+#historyOverlay .sc-invoice-grid td.sc-number {text-align:right;font-variant-numeric:tabular-nums}
+#historyOverlay .sc-invoice-grid tfoot td {position:sticky;bottom:0;background:#e7edf2;font-weight:800;border-top:2px solid #aeb5be;z-index:2}
+#historyOverlay .sc-grid-summary {display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;padding:10px 16px;background:#f5f6f8;border-top:1px solid #d8dce2;font-size:12px;font-weight:600}
+#historyOverlay .sc-grid-open {border:1px solid #cad5e1;background:#fff;border-radius:5px;padding:4px 9px;font-size:11px;cursor:pointer;color:#164b7c}
+#historyOverlay .sc-grid-delete {border:1px solid #f7c0c0;background:#fff7f7;border-radius:5px;padding:4px 8px;font-size:11px;cursor:pointer;color:#b51a1a;margin-left:4px}
+@media screen and (min-width:801px) {
+  body.admin-workspace #historyOverlay {left:300px;right:0;width:auto;background:#fff}
+}
+@media screen and (max-width:800px) {
+  #historyOverlay .hist-filters {padding:8px}
+  #historyOverlay .hist-header {padding:10px}
+  #historyOverlay .sc-invoice-grid {min-width:1420px}
+}
+</style>
 </head>
 <body>
 
@@ -1890,7 +1920,14 @@ select[multiple] {
       </div>
     </div>
     <div class="hist-body" id="historyList">
-      <div class="sidebar-empty">No saved invoices yet.<br>Create &amp; save one!</div>
+      <div class="sc-invoice-table-scroll">
+        <table class="sc-invoice-grid" aria-label="All saved invoices">
+          <thead id="scInvoiceGridHead"></thead>
+          <tbody id="scInvoiceGridBody"></tbody>
+          <tfoot id="scInvoiceGridFoot"></tfoot>
+        </table>
+      </div>
+      <div class="sc-grid-summary" id="scInvoiceGridSummary">Loading saved invoices…</div>
     </div>
     <div class="hist-footer" id="storageInfo">Storage ready</div>
   </div>
@@ -3510,63 +3547,153 @@ function clearHistoryDate() {
   renderHistory();
 }
 
-function renderHistory() {
-  const q = (document.getElementById('historySearch').value || '').toLowerCase().trim();
-  const shopFilter = (document.getElementById('historyShopFilter') && document.getElementById('historyShopFilter').value) || '';
-  const dateFilter = (document.getElementById('historyDateFilter') && document.getElementById('historyDateFilter').value) || '';
-  let list = filterByPartyMode(allHistory || [], partyFilters.hist || 'all');
-  // Date filter uses the invoice's own date field (not last-edit time)
-  if (dateFilter) {
-    list = list.filter(inv => {
-      const iso = (typeof invDateISO === 'function') ? invDateISO(inv) : (inv.date || '');
-      return iso === dateFilter;
-    });
+/* Grid filters remain local to the browser. No invoice data is modified here. */
+const scGridColumns = [
+  {key:'shop',label:'Store / Party',type:'text'},
+  {key:'number',label:'Invoice #',type:'text'},
+  {key:'date',label:'Invoice Date',type:'text'},
+  {key:'customer',label:'Customer / Party Name',type:'text'},
+  {key:'phone',label:'Phone',type:'text'},
+  {key:'items',label:'Items',type:'number'},
+  {key:'subtotal',label:'Invoice Total',type:'number'},
+  {key:'discount',label:'Discount',type:'number'},
+  {key:'net',label:'Net Total',type:'number'},
+  {key:'paid',label:'Paid',type:'number'},
+  {key:'balance',label:'Balance',type:'number'},
+  {key:'prepared',label:'Prepared By',type:'text'},
+  {key:'action',label:'Open Invoice',type:'action'}
+];
+const scGridFilters = {};
+let scGridSort = {key:'date',direction:-1};
+function scGridValue(inv,key) {
+  switch(key) {
+    case 'shop':return String(inv.shopName||'');
+    case 'number':return String(inv.invoiceNo||'');
+    case 'date':return String(inv.date||'');
+    case 'customer':return String(inv.customerName||'');
+    case 'phone':return String(inv.customerPhone||'');
+    case 'items':return Array.isArray(inv.items)?inv.items.length:0;
+    case 'subtotal':return Number(inv.subTotal)||0;
+    case 'discount':return Number(inv.discount)||0;
+    case 'net':return Number(inv.grandTotal)||0;
+    case 'paid':return Number(inv.amountPaid)||0;
+    case 'balance':return Number(inv.balance)||0;
+    case 'prepared':return String(inv.billMaker||'');
+    default:return '';
   }
-  if (shopFilter) {
-    list = list.filter(inv => (inv.shopName || '').trim() === shopFilter);
-  }
-  if (q) {
-    list = list.filter(inv =>
-      (inv.invoiceNo||'').toLowerCase().includes(q) ||
-      (inv.customerName||'').toLowerCase().includes(q) ||
-      (inv.shopName||'').toLowerCase().includes(q));
-  }
-
-  const countEl = document.getElementById('historyCount');
-  if (shopFilter || q || dateFilter) {
-    countEl.textContent = list.length + '/' + allHistory.length;
-  } else {
-    countEl.textContent = allHistory.length;
-  }
-  const el = document.getElementById('historyList');
-
-  if (!list.length) {
-    const msg = (shopFilter || q || dateFilter)
-      ? (dateFilter ? 'No invoices on this date.' : 'No invoices found for this filter.')
-      : 'No saved invoices yet.<br>Create &amp; save one!';
-    el.innerHTML = '<div class="sidebar-empty">' + msg + '</div>';
-    return;
-  }
-
-  el.innerHTML = list.map(inv => {
-    const active = currentId === inv.id ? ' active' : '';
-    const total = inv.grandTotal != null ? inv.grandTotal : 0;
-    const cust = inv.customerName || '—';
-    const shop = inv.shopName || '';
-    return `<div class="inv-item${active}" onclick="loadInvoice('${inv.id}'); closeHistoryModal()">
-      <div class="inv-no">${esc(inv.invoiceNo)}</div>
-      <div class="inv-cust">${esc(cust)}${shop ? ' · <span style="color:var(--primary);font-weight:600">' + esc(shop) + '</span>' : ''}</div>
-      <div class="inv-meta">
-        <span>${esc(inv.date || '')}</span>
-        <span class="inv-amt">Rs. ${fmt(total)}</span>
-      </div>
-      <div class="inv-item-actions no-print" onclick="event.stopPropagation()">
-        <button class="btn btn-ghost btn-xs" onclick="loadInvoice('${inv.id}'); closeHistoryModal()">Open</button>
-        <button class="btn btn-danger btn-xs" onclick="deleteInvoiceById('${inv.id}', '${esc(inv.invoiceNo)}')">Delete</button>
-      </div>
-    </div>`;
-  }).join('');
 }
+function scGridSortBy(key) {
+  if(key==='action')return;
+  scGridSort = scGridSort.key === key
+    ? {key,direction:-scGridSort.direction}
+    : {key,direction:key==='date'||key==='number'?-1:1};
+  renderHistory();
+}
+function scGridRenderHeader() {
+  const head=document.getElementById('scInvoiceGridHead');
+  if(!head)return;
+  head.innerHTML = '<tr>'+scGridColumns.map(c=>
+    '<th scope="col" data-sort="'+c.key+'" title="Click to sort">'+esc(c.label)+
+    (scGridSort.key===c.key?(scGridSort.direction>0?' ▲':' ▼'):'')+'</th>').join('')+'</tr>'+
+    '<tr class="sc-grid-filters">'+scGridColumns.map(c=>
+    '<th>'+(c.type==='action'?'':
+    '<input class="sc-grid-filter" data-col="'+c.key+'" type="text" placeholder="Filter" value="'+
+    esc(scGridFilters[c.key]||'')+'" aria-label="Filter '+esc(c.label)+'">')+'</th>').join('')+'</tr>';
+}
+function scGridFilterRows(list) {
+  return list.filter(inv=>scGridColumns.every(c=>{
+    const needle=(scGridFilters[c.key]||'').trim().toLowerCase();
+    return !needle || String(scGridValue(inv,c.key)).toLowerCase().includes(needle);
+  }));
+}
+function renderHistory(keepFilterFocus) {
+  const active=document.activeElement;
+  const activeCol=keepFilterFocus && active?.dataset?.col;
+  const caret=activeCol?active.selectionStart:null;
+  const q=(document.getElementById('historySearch')?.value||'').toLowerCase().trim();
+  const shopFilter=document.getElementById('historyShopFilter')?.value||'';
+  const dateFilter=document.getElementById('historyDateFilter')?.value||'';
+  let list=filterByPartyMode(allHistory||[],partyFilters.hist||'all');
+  if(dateFilter)list=list.filter(inv=>String(inv.date||'')===dateFilter);
+  if(shopFilter)list=list.filter(inv=>(inv.shopName||'').trim()===shopFilter);
+  if(q)list=list.filter(inv=>[
+    inv.invoiceNo,inv.customerName,inv.shopName,inv.customerPhone,inv.billMaker
+  ].some(v=>String(v||'').toLowerCase().includes(q)));
+  list=scGridFilterRows(list);
+  const key=scGridSort.key, dir=scGridSort.direction;
+  list.sort((a,b)=>{
+    const x=scGridValue(a,key),y=scGridValue(b,key);
+    let cmp=typeof x==='number'&&typeof y==='number'?x-y:
+      String(x).localeCompare(String(y),undefined,{numeric:true,sensitivity:'base'});
+    return cmp*dir || (Number(b.savedAt)||0)-(Number(a.savedAt)||0);
+  });
+  const countEl=document.getElementById('historyCount');
+  if(countEl)countEl.textContent=list.length+'/'+(allHistory||[]).length;
+  scGridRenderHeader();
+  const body=document.getElementById('scInvoiceGridBody');
+  const foot=document.getElementById('scInvoiceGridFoot');
+  const summary=document.getElementById('scInvoiceGridSummary');
+  if(!body||!foot||!summary)return;
+  if(!list.length){
+    body.innerHTML='<tr><td colspan="13" style="padding:32px;text-align:center">No invoices match the selected filters.</td></tr>';
+  } else {
+    body.innerHTML=list.map(inv=>{
+      const selected=currentId===inv.id?' sc-selected':'';
+      return '<tr class="'+selected+'" data-id="'+esc(inv.id)+'" title="Click to open this saved invoice">'+
+        scGridColumns.map(c=>{
+          if(c.key==='action')return '<td><button type="button" class="sc-grid-open" data-action="open">Open</button>'+
+            (currentRole==='admin'?'<button type="button" class="sc-grid-delete" data-action="delete">Delete</button>':'')+'</td>';
+          const raw=scGridValue(inv,c.key);
+          const val=c.type==='number' ? (c.key==='items'?String(raw):fmt(raw)) : esc(raw||'—');
+          return '<td'+(c.type==='number'?' class="sc-number"':'')+'>'+val+'</td>';
+        }).join('')+'</tr>';
+    }).join('');
+  }
+  const sum=k=>list.reduce((n,inv)=>n+(Number(scGridValue(inv,k))||0),0);
+  foot.innerHTML='<tr><td colspan="5">TOTAL ('+list.length+' invoices)</td>'+
+    ['items','subtotal','discount','net','paid','balance'].map(k=>
+      '<td class="sc-number">'+(k==='items'?fmt(sum(k)):fmt(sum(k)))+'</td>').join('')+
+    '<td colspan="2"></td></tr>';
+  summary.innerHTML='<span>Showing <strong>'+list.length+'</strong> of '+(allHistory||[]).length+' saved invoices</span>'+
+    '<span>Net Total: <strong>Rs. '+fmt(sum('net'))+'</strong> &nbsp; | &nbsp; Balance: <strong>Rs. '+fmt(sum('balance'))+'</strong></span>';
+  if(activeCol){
+    const next=document.querySelector('#scInvoiceGridHead input[data-col="'+activeCol+'"]');
+    if(next){next.focus();try{next.setSelectionRange(caret,caret)}catch(_){}}
+  }
+}
+/* Event delegation is safer than embedding invoice IDs in inline JavaScript. */
+document.addEventListener('DOMContentLoaded',()=>{
+  const head=document.getElementById('scInvoiceGridHead');
+  head?.addEventListener('click',e=>{
+    const th=e.target.closest('th[data-sort]');
+    if(th)scGridSortBy(th.dataset.sort);
+  });
+  head?.addEventListener('input',e=>{
+    if(e.target.matches('input[data-col]')){
+      scGridFilters[e.target.dataset.col]=e.target.value;
+      renderHistory(true);
+    }
+  });
+  document.getElementById('scInvoiceGridBody')?.addEventListener('click',e=>{
+    const tr=e.target.closest('tr[data-id]');if(!tr)return;
+    const action=e.target.closest('[data-action]')?.dataset.action;
+    const id=tr.dataset.id;
+    const inv=(allHistory||[]).find(x=>x.id===id);
+    if(action==='delete'){
+      if(inv)deleteInvoiceById(id,inv.invoiceNo||'');
+    } else {
+      closeHistoryModal();
+      loadInvoice(id);
+    }
+  });
+  // Clicking another Admin sidebar module closes Dashboard before its normal handler runs.
+  document.querySelector('.menu-sidebar-nav')?.addEventListener('click',e=>{
+    const item=e.target.closest('.menu-nav-item');
+    if(!item)return;
+    closeHistoryModal();
+    if(!item.getAttribute('onclick')?.includes('openDashboard()'))closeDashboard();
+  },true);
+});
 
 function toggleSidebar() {
   // Legacy: permanent sidebar removed — open history modal instead
@@ -5842,11 +5969,16 @@ function openInvoiceHistoryFromMenu() {
   openHistoryModal();
 }
 function openHistoryModal() {
+  closeDashboard();
+  // Start with all saved invoices; Today remains available as an optional filter.
+  const histDate = document.getElementById('historyDateFilter');
+  if (histDate) histDate.value = '';
+  updateHistoryDateBtns();
   renderHistory();
   const el = document.getElementById('historyOverlay');
   if (el) el.classList.add('show');
   const search = document.getElementById('historySearch');
-  if (search) setTimeout(() => search.focus(), 200);
+  if (search && window.innerWidth <= 800) setTimeout(() => search.focus(), 200);
 }
 function closeHistoryModal() {
   document.getElementById('historyOverlay')?.classList.remove('show');
