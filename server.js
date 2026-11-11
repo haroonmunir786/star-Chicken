@@ -666,6 +666,57 @@ app.post('/api/invoices/bulk', auth, adminOnly, async (req, res) => {
   }
 });
 
+/* ---------- Admin-only invoice Bluetooth print tracking ---------- */
+// Separate append-only request log. Never updates business invoices or counters.
+app.get('/api/reports/print-tracking', auth, requireManagedAdmin, async (req, res) => {
+  const from=String(req.query.from||''),to=String(req.query.to||'');
+  const validDate=d=>/^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(d+'T00:00:00Z')) && new Date(d+'T00:00:00Z').toISOString().slice(0,10)===d;
+  if(!validDate(from)||!validDate(to)||from>to) return res.status(400).json({error:'Select a valid From and To invoice date'});
+  try {
+    const r=await pool.query(`
+      with first_creator as (
+        select distinct on (invoice_id) invoice_id,actor_id,actor_name
+        from public.pos_activity_log
+        where action='invoice.created' and invoice_id is not null
+        order by invoice_id,id asc
+      ), print_totals as (
+        select invoice_id,count(*)::int as requests,
+               min(requested_at) as first_requested_at,
+               max(requested_at) as last_requested_at,
+               count(receipt_fetched_at)::int as app_fetches
+        from public.pos_print_requests group by invoice_id
+      ), last_request as (
+        select distinct on (invoice_id) invoice_id,actor_id,actor_name
+        from public.pos_print_requests
+        order by invoice_id,requested_at desc,id desc
+      )
+      select i.id as "invoiceId",i.invoice_no as "invoiceNo",
+             to_char(i.invoice_date,'YYYY-MM-DD') as "invoiceDate",
+             i.customer_name as "customerName",
+             i.bill_maker as "billMaker",
+             coalesce(c.actor_id,'') as "creatorId",
+             coalesce(u.full_name,c.actor_name,i.bill_maker,'Unknown') as "creatorName",
+             coalesce(p.requests,0) as "requests",
+             coalesce(p.app_fetches,0) as "appFetches",
+             p.first_requested_at as "firstRequestedAt",
+             p.last_requested_at as "lastRequestedAt",
+             coalesce(l.actor_id,'') as "lastRequestedById",
+             coalesce(l.actor_name,'') as "lastRequestedByName"
+      from public.invoices i
+      left join first_creator c on c.invoice_id=i.id
+      left join public.pos_staff_users u on u.staff_id=c.actor_id
+      left join print_totals p on p.invoice_id=i.id
+      left join last_request l on l.invoice_id=i.id
+      where i.invoice_date >= $1::date and i.invoice_date <= $2::date
+      order by i.invoice_date desc,i.invoice_no desc`,[from,to]);
+    res.setHeader('Cache-Control','no-store');
+    res.json({from,to,rows:r.rows,scope:'Print tracking starts after installation. Print requested is not proof that paper was printed.'});
+  } catch(e) {
+    console.error('Print tracking report failed:',e);
+    res.status(503).json({error:'Unable to load Print Tracking Report. Install print_tracking.sql first.'});
+  }
+});
+
 /* ---------- Short-lived Bluetooth Print receipts (read-only) ---------- */
 // The printer app fetches a receipt without sharing the browser's login cookies.
 // Only a signed, short-lived token for ONE saved invoice can access this route.
@@ -733,9 +784,16 @@ app.post('/api/print/bluetooth/link', auth, async (req, res) => {
   const id = req.body && typeof req.body.id === 'string' ? req.body.id.trim() : '';
   if (!id || id.length > 150) return res.status(400).json({error:'Saved invoice ID required'});
   try {
-    const found = await pool.query('select id from public.invoices where id=$1',[id]);
+    const found = await pool.query('select id,invoice_no from public.invoices where id=$1',[id]);
     if (!found.rowCount) return res.status(404).json({error:'This invoice is not saved in the cloud. Save it first.'});
-    const token = jwt.sign({purpose:'bluetooth-receipt',invoiceId:id}, roleSecret, {
+    const actor=auditIdentity(req);
+    // Record a print request BEFORE returning the link. The app can fail to print,
+    // so this is intentionally not called a confirmed printed receipt.
+    const logged=await pool.query(`insert into public.pos_print_requests
+      (invoice_id,invoice_no,actor_id,actor_name)
+      values ($1,$2,$3,coalesce((select full_name from public.pos_staff_users where staff_id=$3),$4))
+      returning id`,[id,found.rows[0].invoice_no,actor.id,actor.name]);
+    const token = jwt.sign({purpose:'bluetooth-receipt',invoiceId:id,printRequestId:String(logged.rows[0].id)}, roleSecret, {
       algorithm:'HS256',expiresIn:'3m',audience:bluetoothPrintAudience,issuer:bluetoothPrintIssuer
     });
     res.setHeader('Cache-Control','no-store');
@@ -762,6 +820,15 @@ app.get('/api/print/bluetooth/receipt/:token', async (req, res) => {
       shop_name, customer_phone, bill_maker, items, discount, subtotal, grand_total,
       amount_paid, balance from public.invoices where id=$1`,[payload.invoiceId]);
     if (!found.rowCount) return res.status(404).json({error:'Invoice no longer exists'});
+    // This means the app fetched the JSON, NOT that the printer produced paper.
+    // Printing should still work if this secondary status update fails.
+    if (/^\d+$/.test(String(payload.printRequestId||''))) {
+      try {
+        await pool.query(`update public.pos_print_requests
+          set receipt_fetched_at=coalesce(receipt_fetched_at,now())
+          where id=$1 and invoice_id=$2`,[payload.printRequestId,payload.invoiceId]);
+      } catch(logError) {console.error('Print receipt fetch tracking failed:',logError);}
+    }
     res.setHeader('Content-Type','application/json; charset=utf-8');
     return res.json(bluetoothReceipt(found.rows[0]));
   } catch (e) {

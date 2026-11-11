@@ -1779,6 +1779,9 @@ select[multiple] {
       <button type="button" class="menu-nav-item admin-only" data-admin-only="1" onclick="closeReportsMenu(); openStaffSalesReport()">
         <span class="mn-icon">📊</span><span class="mn-text"><strong>Staff Sales Report</strong><small>Employee totals, date filter &amp; Excel</small></span>
       </button>
+      <button type="button" class="menu-nav-item admin-only" data-admin-only="1" onclick="closeReportsMenu(); openPrintTrackingReport()">
+        <span class="mn-icon">🖨️</span><span class="mn-text"><strong>Print Tracking Report</strong><small>Check invoices with no Bluetooth print request</small></span>
+      </button>
       <button type="button" class="menu-nav-item admin-only" data-admin-only="1" onclick="closeReportsMenu(); openActivityLog()">
         <span class="mn-icon">📜</span><span class="mn-text"><strong>Activity Log</strong><small>Invoice creation, edits and deletions</small></span>
       </button>
@@ -2594,6 +2597,28 @@ select[multiple] {
   </div>
  </div>
 </div>
+<!-- Admin-only Bluetooth print tracking -->
+<div class="hist-overlay no-print" id="printTrackingOverlay" style="z-index:8250">
+ <div class="hist-modal" role="dialog" aria-modal="true" aria-label="Print Tracking Report" style="max-width:1050px">
+  <div class="hist-header"><h3>🖨️ Print Tracking Report</h3><button type="button" class="btn btn-ghost" onclick="closePrintTrackingReport()">Close ✕</button></div>
+  <div class="hist-body">
+   <div class="card" style="padding:14px;margin-bottom:12px">
+    <div class="form-grid">
+     <div class="form-group"><label for="printTrackingFrom">From (invoice date)</label><input id="printTrackingFrom" type="date"></div>
+     <div class="form-group"><label for="printTrackingTo">To (invoice date)</label><input id="printTrackingTo" type="date"></div>
+     <div class="form-group"><label for="printTrackingStaff">Salesperson</label><select id="printTrackingStaff" onchange="renderPrintTrackingReport()"><option value="">All salespersons</option></select></div>
+     <div class="form-group"><label for="printTrackingStatus">Print status</label><select id="printTrackingStatus" onchange="renderPrintTrackingReport()"><option value="all">All invoices</option><option value="none">No print request</option><option value="requested">Print requested</option><option value="fetched">App fetched receipt</option></select></div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+     <button class="btn btn-primary" type="button" onclick="loadPrintTrackingReport()">Show Report</button>
+     <button class="btn btn-ghost" type="button" onclick="exportPrintTrackingReport()">Export Excel</button>
+    </div>
+   </div>
+   <p style="font-size:.76rem;color:#666;margin-bottom:12px">A print request means the employee tapped Print Bluetooth. "App fetched" means the printer app downloaded the receipt, <strong>not</strong> proof that paper printed. Tracking starts only after installing this feature; earlier invoices may show no request even if they were printed.</p>
+   <div id="printTrackingResults" aria-live="polite">Choose dates and select Show Report.</div>
+  </div>
+ </div>
+</div>
 <!-- Admin-only Phase 2 activity history -->
 <div class="hist-overlay no-print" id="activityLogOverlay" style="z-index:8100">
  <div class="hist-modal" role="dialog" aria-modal="true" aria-label="Activity Log">
@@ -2622,6 +2647,88 @@ select[multiple] {
 <script>
 
 
+
+/* Bluetooth print tracking, Admin-only. No staff reminders. */
+let printTrackingRows=null;
+function printTrackingDate(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function printTrackingTime(value){return value?new Date(value).toLocaleString('en-PK',{dateStyle:'short',timeStyle:'short'}):'—';}
+function openPrintTrackingReport(){
+  if(!requireAdmin('Print Tracking Report'))return;
+  const now=new Date(),first=new Date(now.getFullYear(),now.getMonth(),1);
+  document.getElementById('printTrackingFrom').value=printTrackingDate(first);
+  document.getElementById('printTrackingTo').value=printTrackingDate(now);
+  document.getElementById('printTrackingStatus').value='all';
+  document.getElementById('printTrackingOverlay').classList.add('show');
+  loadPrintTrackingReport();
+}
+function closePrintTrackingReport(){document.getElementById('printTrackingOverlay').classList.remove('show');}
+async function loadPrintTrackingReport(){
+  if(!requireAdmin('Print Tracking Report'))return;
+  const from=document.getElementById('printTrackingFrom').value,to=document.getElementById('printTrackingTo').value;
+  const out=document.getElementById('printTrackingResults');
+  printTrackingRows=null;
+  if(!from||!to||from>to){out.textContent='Select valid dates (From must not be after To).';return;}
+  out.textContent='Loading report...';
+  try{
+    const r=await fetch('/api/reports/print-tracking?from='+encodeURIComponent(from)+'&to='+encodeURIComponent(to),{credentials:'same-origin',cache:'no-store'});
+    const data=await r.json();if(!r.ok)throw Error(data.error||'Could not load print tracking');
+    printTrackingRows=data.rows||[];
+    const staff=document.getElementById('printTrackingStaff'),selected=staff.value;
+    const employees=new Map();
+    for(const x of printTrackingRows){const id=x.creatorId||'UNTRACKED';employees.set(id,id==='UNTRACKED'?'Unknown / legacy':(x.creatorName||id)+' ('+id+')');}
+    staff.replaceChildren(new Option('All salespersons',''));
+    for(const [id,name] of [...employees].sort((a,b)=>a[1].localeCompare(b[1])))staff.add(new Option(name,id));
+    staff.value=employees.has(selected)?selected:'';
+    renderPrintTrackingReport();
+  }catch(e){out.textContent=e.message||'Unable to load print tracking report';}
+}
+function filteredPrintTrackingRows(){
+  if(!printTrackingRows)return[];
+  const staff=document.getElementById('printTrackingStaff').value,status=document.getElementById('printTrackingStatus').value;
+  return printTrackingRows.filter(r=>{
+    if(staff&&(r.creatorId||'UNTRACKED')!==staff)return false;
+    const n=Number(r.requests||0),f=Number(r.appFetches||0);
+    return status==='none'?n===0:status==='requested'?n>0:status==='fetched'?f>0:true;
+  });
+}
+function renderPrintTrackingReport(){
+  const out=document.getElementById('printTrackingResults');if(!printTrackingRows)return;
+  const rows=filteredPrintTrackingRows();out.replaceChildren();
+  const missing=rows.filter(r=>!Number(r.requests)).length;
+  const fetched=rows.filter(r=>Number(r.appFetches)>0).length;
+  const summary=document.createElement('div');summary.className='card';summary.style.cssText='padding:14px;margin-bottom:12px;font-weight:600';
+  summary.textContent='Invoices: '+rows.length+'  |  No print request: '+missing+'  |  Print requested: '+(rows.length-missing)+'  |  App fetched: '+fetched;
+  out.appendChild(summary);
+  if(!rows.length){const p=document.createElement('p');p.textContent='No invoices match these filters.';out.appendChild(p);return;}
+  const wrap=document.createElement('div');wrap.className='table-wrap card';
+  const table=document.createElement('table');table.style.minWidth='850px';
+  const head=document.createElement('thead'),tr=document.createElement('tr');
+  for(const name of ['Invoice','Invoice date','Salesperson','Print requests','Status','Last request','Requested by']){
+    const th=document.createElement('th');th.textContent=name;tr.appendChild(th);
+  }head.appendChild(tr);table.appendChild(head);
+  const body=document.createElement('tbody');
+  for(const row of rows){
+    const tr=document.createElement('tr');
+    const requests=Number(row.requests||0);
+    const status=requests===0?'No request':Number(row.appFetches)>0?'App fetched':'Print requested';
+    const values=[row.invoiceNo,row.invoiceDate,(row.creatorName||'Unknown')+(row.creatorId?' ('+row.creatorId+')':''),String(requests),status,printTrackingTime(row.lastRequestedAt),row.lastRequestedByName||row.lastRequestedById||'—'];
+    for(const value of values){const td=document.createElement('td');td.textContent=value??'';tr.appendChild(td);}
+    if(!requests)tr.style.background='#FFF0F0';
+    body.appendChild(tr);
+  }
+  table.appendChild(body);wrap.appendChild(table);out.appendChild(wrap);
+}
+function exportPrintTrackingReport(){
+  if(!requireAdmin('Print Tracking Report'))return;
+  if(!printTrackingRows){toast('Load the report first','error');return;}
+  if(typeof XLSX==='undefined'){toast('Excel library not available','error');return;}
+  const data=[['Invoice','Invoice Date','Creator ID','Salesperson','Print Requests','App Fetched','First Request','Last Request','Last Print Requested By']];
+  for(const row of filteredPrintTrackingRows())data.push([row.invoiceNo||'',row.invoiceDate||'',row.creatorId||'',row.creatorName||'',Number(row.requests||0),Number(row.appFetches||0),printTrackingTime(row.firstRequestedAt),printTrackingTime(row.lastRequestedAt),row.lastRequestedByName||row.lastRequestedById||'']);
+  const wb=XLSX.utils.book_new(),ws=XLSX.utils.aoa_to_sheet(data);
+  ws['!cols']=[{wch:19},{wch:15},{wch:15},{wch:26},{wch:17},{wch:16},{wch:24},{wch:24},{wch:27}];
+  XLSX.utils.book_append_sheet(wb,ws,'Print Tracking');
+  XLSX.writeFile(wb,'Star-Chicken-Print-Tracking-'+document.getElementById('printTrackingFrom').value+'-to-'+document.getElementById('printTrackingTo').value+'.xlsx');
+}
 
 /* Phase 3: all calculations on the backend; the interface only displays results. */
 let lastStaffSalesReport=null;
