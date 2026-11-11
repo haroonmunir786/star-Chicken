@@ -246,6 +246,15 @@ body {
 }
 #productDropdown .item:nth-child(even) { border-right: none; }
 #productDropdown .item:hover, #productDropdown .item.active { background: var(--gold-soft); }
+
+/* Inventory availability in invoice product suggestions (display only). */
+#productDropdown .item.stock-item { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+#productDropdown .item.stock-item .stock-product-name { min-width:0; flex:1; overflow-wrap:anywhere; }
+#productDropdown .item.stock-item .stock-availability { flex-shrink:0; text-align:right; font-size:0.73rem; font-weight:700; color:#157347; white-space:nowrap; }
+#productDropdown .item.stock-item .stock-availability.stock-none { color:#b42318; }
+#productDropdown .item.stock-item .stock-availability.stock-unknown { color:#777; font-weight:500; }
+#productDropdown .stock-context { padding:6px 12px; background:#f6f7f9; border-bottom:1px solid var(--border); color:#666; font-size:0.7rem; }
+
 @media (max-width: 560px) {
   .add-panel-fields { grid-template-columns: 1fr 1fr; }
   .add-panel-fields .form-group:last-child { grid-column: 1 / -1; }
@@ -3953,38 +3962,115 @@ function matchProduct(name, q) {
   return true;
 }
 
+/* Display-only stock lookup. No stock writes or invoice edits. */
+let scSuggestionStock = null;
+let scSuggestionStockLoadedAt = 0;
+let scSuggestionStockPending = null;
+const SC_SUGGESTION_STOCK_REFRESH_MS = 15000;
+
+async function refreshSuggestionStock(force = false) {
+  if (!force && scSuggestionStock && Date.now() - scSuggestionStockLoadedAt < SC_SUGGESTION_STOCK_REFRESH_MS) return;
+  if (scSuggestionStockPending) return scSuggestionStockPending;
+  scSuggestionStockPending = (async () => {
+    try {
+      const r = await fetch('/api/stock/state', {credentials:'same-origin',cache:'no-store'});
+      if (!r.ok) throw new Error('Stock read failed: ' + r.status);
+      const payload = await r.json();
+      scSuggestionStock = payload && payload.state && payload.state.stockDB ? payload.state.stockDB : {};
+      scSuggestionStockLoadedAt = Date.now();
+    } catch (err) {
+      // Never display a stale quantity as the current available stock.
+      scSuggestionStock = null;
+      scSuggestionStockLoadedAt = 0;
+      console.warn('Could not read stock for product suggestions', err);
+    } finally {
+      scSuggestionStockPending = null;
+    }
+  })();
+  return scSuggestionStockPending;
+}
+
+function suggestionStockContext() {
+  const shop = document.getElementById('shopName')?.value || '';
+  const branch = mapShopToStockBranch(shop);
+  if (!branch) return {message: shop ? 'No linked stock branch for this Party' : 'Select a Party to see stock'};
+  if (!scSuggestionStock) return {message:'Stock unavailable — check connection'};
+  const sheets = scSuggestionStock[branch] || {};
+  const today = getPakistanDateISO();
+  const days = Object.keys(sheets).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= today && Array.isArray(sheets[d]?.r)).sort();
+  if (!days.length) return {message: branch + ': no saved stock sheet'};
+  const date = days[days.length-1];
+  return {branch, date, rows:sheets[date].r, message:branch + ' stock as of ' + date};
+}
+
+function suggestionStockLabel(product, ctx) {
+  if (!ctx.rows) return {text:'Not available',kind:'stock-unknown'};
+  const i = mapPosProductToStockIndex(product);
+  if (i < 0 || !Array.isArray(ctx.rows[i])) return {text:'Not tracked',kind:'stock-unknown'};
+  const a = ctx.rows[i];
+  // Exact calculation used by Stock Management: Bal + Receive - Sale - Return/Transfer.
+  const value = (Number(a[0]) || 0) + (Number(a[1]) || 0) - (Number(a[2]) || 0) - (Number(a[3]) || 0);
+  const qty = Math.round(value * 100) / 100;
+  return {text:'Avail: ' + qty.toLocaleString('en-PK',{maximumFractionDigits:2}) + ' pkts',kind:qty <= 0 ? 'stock-none' : ''};
+}
+
+function renderProductSuggestions() {
+  const input = document.getElementById('productSearch');
+  const dd = document.getElementById('productDropdown');
+  if (!input || !dd) return;
+  const q = input.value.trim().toLowerCase();
+  dd.innerHTML = ''; activeIdx = -1;
+  if (!q) { dd.style.display = 'none'; return; }
+  const ctx = suggestionStockContext();
+  const info = document.createElement('div');
+  info.className = 'stock-context';
+  info.textContent = ctx.message;
+  dd.appendChild(info);
+  let found = false;
+  allProducts.forEach(g => {
+    const matches = g.items.filter(p => matchProduct(p,q));
+    if (!matches.length) return;
+    found = true;
+    const cat = document.createElement('div');
+    cat.className = 'cat'; cat.textContent = g.cat; dd.appendChild(cat);
+    const grid = document.createElement('div');
+    grid.className = 'items-grid';
+    matches.slice(0,20).forEach(p => {
+      const d = document.createElement('div');
+      d.className = 'item stock-item';
+      const name = document.createElement('span');
+      name.className = 'stock-product-name'; name.textContent = p;
+      const amount = document.createElement('span');
+      const stock = suggestionStockLabel(p,ctx);
+      amount.className = 'stock-availability ' + stock.kind;
+      amount.textContent = stock.text;
+      d.append(name,amount);
+      d.onclick = () => selectProduct(p);
+      grid.appendChild(d);
+    });
+    dd.appendChild(grid);
+  });
+  dd.style.display = found ? 'block' : 'none';
+}
+
 function setupSearch() {
   const input = document.getElementById('productSearch');
   const dd = document.getElementById('productDropdown');
-  input.addEventListener('input', () => {
-    const q = input.value.trim().toLowerCase();
-    dd.innerHTML = ''; activeIdx = -1;
-    if (!q) { dd.style.display = 'none'; return; }
-    let found = false;
-    allProducts.forEach(g => {
-      const matches = g.items.filter(p => matchProduct(p, q));
-      if (matches.length) {
-        found = true;
-        const cat = document.createElement('div');
-        cat.className = 'cat'; cat.textContent = g.cat;
-        dd.appendChild(cat);
-        const grid = document.createElement('div');
-        grid.className = 'items-grid';
-        matches.slice(0, 20).forEach(p => {
-          const d = document.createElement('div');
-          d.className = 'item'; d.textContent = p;
-          d.onclick = () => selectProduct(p);
-          grid.appendChild(d);
-        });
-        dd.appendChild(grid);
-      }
+  const requestAndRender = () => {
+    renderProductSuggestions();
+    refreshSuggestionStock().then(() => {
+      if (input.value.trim() && document.activeElement === input && !dd.querySelector('.item.active')) renderProductSuggestions();
     });
-    dd.style.display = found ? 'block' : 'none';
-  });
+  };
+  input.addEventListener('input',requestAndRender);
+  input.addEventListener('focus', () => { if (input.value.trim()) requestAndRender(); });
+  // Switching parties changes which branch's stock must be displayed.
+  document.getElementById('shopName')?.addEventListener('change', () => { if (input.value.trim()) requestAndRender(); });
+  document.getElementById('partyType')?.addEventListener('change', () => { if (input.value.trim()) requestAndRender(); });
   input.addEventListener('keydown', e => {
     const list = dd.querySelectorAll('.item');
     if (!list.length) return;
-    if (e.key === 'ArrowDown') { e.preventDefault(); activeIdx = Math.min(activeIdx+1, list.length-1); list.forEach((el,i)=>el.classList.toggle('active',i===activeIdx)); list[activeIdx].scrollIntoView({block:'nearest'}); }
+    if (e.key === 'ArrowDown') { e.preventDefault(); activeIdx = Math.min(activeIdx+1,list.length-1); list.forEach((el,i)=>el.classList.toggle('active',i===activeIdx)); list[activeIdx].scrollIntoView({block:'nearest'}); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); activeIdx = Math.max(activeIdx-1,0); list.forEach((el,i)=>el.classList.toggle('active',i===activeIdx)); list[activeIdx].scrollIntoView({block:'nearest'}); }
     else if (e.key === 'Enter' && activeIdx >= 0) { e.preventDefault(); list[activeIdx].click(); }
     else if (e.key === 'Escape') dd.style.display = 'none';
