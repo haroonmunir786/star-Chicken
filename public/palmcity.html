@@ -1672,18 +1672,30 @@ select[multiple] {
 .sc-trend-chart .dash-m-val {font-size:.59rem}
 .sc-trend-chart .dash-m-lbl {font-size:.6rem}
 .sc-trend-footer {margin-top:9px;border-top:1px dashed #ead5b4;padding-top:8px;font-size:.72rem;font-weight:650;color:#7b553a;text-align:right}
-.sc-top-tiles {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:minmax(65px,auto);gap:7px}
-.sc-top-tile {display:flex;flex-direction:column;justify-content:space-between;min-width:0;border-radius:12px;border:1px solid #eccfa8;padding:8px 10px;background:linear-gradient(145deg,#fff6e5,#ffe6bb);box-shadow:0 2px 5px #744b2014;transition:transform .18s,box-shadow .18s}
-.sc-top-tile:nth-child(1) {background:linear-gradient(135deg,#d62929,#aa1616);color:white;grid-column:span 2}
-.sc-top-tile:nth-child(2) {background:linear-gradient(135deg,#ffbd3a,#f7a315)}
-.sc-top-tile:nth-child(3) {background:linear-gradient(135deg,#ffe6b1,#ffca60)}
-.sc-top-tile:hover {transform:translateY(-3px) scale(1.015);box-shadow:0 7px 14px #744b2030}
-.sc-top-tile-title {font-size:.72rem;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sc-top-tile-bottom {display:flex;justify-content:space-between;align-items:baseline;gap:8px}
-.sc-top-tile-amount {font-size:.83rem;font-weight:800;white-space:nowrap}
-.sc-top-tile-qty {font-size:.64rem;opacity:.83;white-space:nowrap}
-.sc-top-tile:nth-child(1) .sc-top-tile-amount {font-size:1.04rem}
-@media (max-width:520px){.sc-top-tile-bottom{flex-wrap:wrap}.sc-top-tile-qty{white-space:normal}}
+/* Power BI-inspired treemap: each rectangle is proportional to sales amount. */
+.sc-top-tiles {position:relative;display:block;width:100%;height:345px;min-height:345px;
+  overflow:hidden;background:#fff8e8;border:1px solid #f1dec0;border-radius:14px;padding:0}
+.sc-treemap-cell {position:absolute;box-sizing:border-box;padding:clamp(6px,.9vw,12px);
+  border:3px solid #fff9ee;border-radius:11px;color:#fff;overflow:hidden;
+  display:flex;flex-direction:column;justify-content:center;align-items:flex-start;
+  box-shadow:inset 0 -9px 24px #00000012;transition:filter .22s,box-shadow .22s,transform .22s;
+  cursor:default;isolation:isolate}
+.sc-treemap-cell::after {content:'';position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(140deg,#ffffff29 0%,transparent 49%,#00000016 100%);z-index:-1}
+.sc-treemap-cell:hover {filter:brightness(1.12);box-shadow:inset 0 0 0 2px #fff8,0 8px 20px #5a291a38;
+  transform:scale(.984);z-index:2}
+.sc-treemap-name {font-size:clamp(.68rem,.95vw,.87rem);font-weight:800;line-height:1.22;
+  overflow-wrap:anywhere;max-width:100%;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.sc-treemap-value {font-size:clamp(.67rem,1.02vw,.92rem);font-weight:800;margin-top:5px;white-space:nowrap}
+.sc-treemap-share {font-size:.67rem;opacity:.92;margin-top:2px}
+.sc-treemap-cell.sc-treemap-small {padding:5px;align-items:center;text-align:center}
+.sc-treemap-cell.sc-treemap-small .sc-treemap-name {font-size:.64rem;-webkit-line-clamp:2}
+.sc-treemap-cell.sc-treemap-small .sc-treemap-value {font-size:.62rem;margin-top:2px}
+.sc-treemap-cell.sc-treemap-small .sc-treemap-share {display:none}
+.sc-treemap-cell.sc-treemap-tiny .sc-treemap-value,.sc-treemap-cell.sc-treemap-tiny .sc-treemap-share {display:none}
+.sc-treemap-cell.sc-treemap-tiny .sc-treemap-name {font-size:.59rem;-webkit-line-clamp:2}
+.sc-treemap-empty {padding:28px;text-align:center;color:#8e6a45;width:100%}
+@media(max-width:600px){.sc-top-tiles{height:390px;min-height:390px}.sc-treemap-cell{border-width:2px;border-radius:7px}}
 
 </style>
 <style>
@@ -2476,13 +2488,13 @@ select[multiple] {
         <div class="dash-card dash-card-chart">
           <div class="dash-card-h dash-card-h-flex">
             <div>
-              <div class="dch-title">🏆 Top 10 Products</div>
+              <div class="dch-title">🧩 Top 10 Products · Treemap</div>
               <div class="dch-sub" id="dashTopTilesNote">Same date range as Branch-wise Sales</div>
             </div>
             <span class="dch-pill" id="dashTopTilesTotal">Rs 0</span>
           </div>
           <div class="dash-card-b">
-            <div class="sc-top-tiles" id="dashTopTiles"><div class="dash-empty">No product sales yet</div></div>
+            <div class="sc-top-tiles" id="dashTopTiles" role="img" aria-label="Top 10 products by sales amount, proportional treemap"><div class="dash-empty">No product sales yet</div></div>
           </div>
         </div>
         <div class="dash-card">
@@ -5555,14 +5567,65 @@ function renderDashTopTiles(){
   if(note)note.textContent=dashFmtDateNote(filtered.fromStr,filtered.toStr,'All dates')+' · '+(partyFilters.dash==='all'?'All parties':partyFilters.dash==='star'?'Star Chicken':'Party customers');
   const pill=document.getElementById('dashTopTilesTotal');
   if(pill)pill.textContent=fmt(total);
-  if(!ranked.length){el.innerHTML='<div class="dash-empty" style="grid-column:1/-1">No product sales for this date range</div>';return;}
-  el.innerHTML=ranked.map((row,i)=>{
-    const qty=Number(row.qty.toFixed(2));
-    const weight=Number(row.weight.toFixed(2));
+  if(!ranked.length){el.innerHTML='<div class="sc-treemap-empty">No product sales for this date range</div>';return;}
+  // The chart's area represents the actual sales amount; zero-value items have no area.
+  const positive=ranked.filter(row=>row.amount>0);
+  if(!positive.length){el.innerHTML='<div class="sc-treemap-empty">No positive product sales for this date range</div>';return;}
+  const width=Math.max(1,el.clientWidth||620),height=Math.max(1,el.clientHeight||345);
+  const bounds=scSquarifyTreemap(positive.map(row=>row.amount),width,height);
+  const colors=['#c72128','#f5a623','#1565c0','#23944b','#7d35b6','#d7661d','#008e9b','#b23d79','#477d30','#74493c'];
+  el.innerHTML=positive.map((row,i)=>{
+    const rect=bounds[i];
+    const share=(row.amount/total*100).toFixed(1)+'%';
+    const qty=Number(row.qty.toFixed(2)),weight=Number(row.weight.toFixed(2));
     const units=(qty?qty+' qty':'')+(qty&&weight?' · ':'')+(weight?weight+' kg':'');
-    return '<div class="sc-top-tile" title="'+esc(row.name)+' · '+fmt(row.amount)+'"><div class="sc-top-tile-title">#'+(i+1)+' '+esc(row.name)+'</div><div class="sc-top-tile-bottom"><span class="sc-top-tile-amount">'+fmt(row.amount)+'</span><span class="sc-top-tile-qty">'+esc(units)+'</span></div></div>';
+    const size=rect.w<105||rect.h<80?' sc-treemap-tiny':rect.w<155||rect.h<110?' sc-treemap-small':'';
+    const title='#'+(i+1)+' '+row.name+' | '+fmt(row.amount)+' | '+share+(units?' | '+units:'');
+    return '<div class="sc-treemap-cell'+size+'" style="left:'+((rect.x/width)*100).toFixed(5)+'%;top:'+((rect.y/height)*100).toFixed(5)+'%;width:'+((rect.w/width)*100).toFixed(5)+'%;height:'+((rect.h/height)*100).toFixed(5)+'%;background:'+colors[i%colors.length]+'" title="'+esc(title)+'" aria-label="'+esc(title)+'">'+
+      '<div class="sc-treemap-name">#'+(i+1)+' '+esc(row.name)+'</div>'+
+      '<div class="sc-treemap-value">'+fmt(row.amount)+'</div>'+
+      '<div class="sc-treemap-share">'+share+'</div></div>';
   }).join('');
 }
+
+// Squarified treemap layout: keeps rectangles close to square while preserving area.
+// All values and positions are computed in memory from existing read-only invoice data.
+function scSquarifyTreemap(values,width,height){
+  const total=values.reduce((sum,v)=>sum+v,0);
+  const areas=values.map(v=>v/total*width*height);
+  const result=new Array(values.length);
+  let remaining=areas.map((area,i)=>({area,i}));
+  let x=0,y=0,w=width,h=height;
+  function worst(row,side){
+    const sum=row.reduce((s,item)=>s+item.area,0);
+    const largest=Math.max(...row.map(item=>item.area)),smallest=Math.min(...row.map(item=>item.area));
+    if(!smallest||!side)return Infinity;
+    return Math.max(side*side*largest/(sum*sum),(sum*sum)/(side*side*smallest));
+  }
+  function layout(row){
+    const area=row.reduce((sum,item)=>sum+item.area,0);
+    if(w>=h){
+      const rh=Math.min(h,area/Math.max(w,0.0001));let xx=x;
+      row.forEach((item,i)=>{const rw=i===row.length-1?x+w-xx:item.area/Math.max(rh,0.0001);result[item.i]={x:xx,y,w:Math.max(0,rw),h:rh};xx+=rw;});
+      y+=rh;h=Math.max(0,h-rh);
+    }else{
+      const rw=Math.min(w,area/Math.max(h,0.0001));let yy=y;
+      row.forEach((item,i)=>{const rh=i===row.length-1?y+h-yy:item.area/Math.max(rw,0.0001);result[item.i]={x,y:yy,w:rw,h:Math.max(0,rh)};yy+=rh;});
+      x+=rw;w=Math.max(0,w-rw);
+    }
+  }
+  while(remaining.length){
+    const row=[remaining.shift()];
+    while(remaining.length&&worst([...row,remaining[0]],Math.min(w,h))<=worst(row,Math.min(w,h)))row.push(remaining.shift());
+    layout(row);
+  }
+  return result;
+}
+// Reflow proportional rectangles when the Dashboard changes width on a device.
+window.addEventListener('resize',()=>{
+  const chart=document.getElementById('dashTopTiles');
+  if(chart&&chart.closest('.dash-overlay.show'))renderDashTopTiles();
+});
 
 /* Linked date filters: Branch / Products / Customers share the same range */
 const DASH_FROM_IDS = ['dashBranchFrom', 'dashProdFrom', 'dashCustFrom'];
