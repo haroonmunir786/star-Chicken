@@ -1717,6 +1717,25 @@ select[multiple] {
   .sc-category-fill-card .dash-cat-leg-amt {min-width:65px;font-size:.72rem;}
 }
 
+
+/* Dashboard sales goal progress — read-only, derives values from existing invoices. */
+.dash-kpis-modern .dash-kpi-m.sc-target-card { min-height: 205px; padding-bottom: 15px; }
+.sc-target-card .dkm-foot { margin-top: 11px; }
+.sc-target-card .dkm-spark { top: 53px; bottom: auto; right: 12px; opacity: .35; }
+.sc-target-card .dkm-val { margin-bottom: 0; }
+.sc-target { margin-top: 15px; position: relative; z-index: 2; }
+.sc-target-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 7px; font-size: .73rem; font-weight: 700; }
+.sc-target-title { opacity: .95; }
+.sc-target-ratio { font-size: .76rem; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sc-target-track { height: 10px; background: rgba(0,0,0,.22); border-radius: 100px; overflow: hidden; border: 1px solid rgba(255,255,255,.25); box-shadow: inset 0 2px 4px rgba(0,0,0,.13); }
+.sc-target-fill { height: 100%; width: 0%; background: linear-gradient(90deg,#fff4ae,#ffffff); border-radius: inherit; transition: width .7s cubic-bezier(.15,.8,.25,1); box-shadow: 0 0 9px rgba(255,255,255,.5); }
+.sc-target-summary { margin-top: 6px; font-size: .72rem; font-weight: 600; opacity: .97; font-variant-numeric: tabular-nums; }
+.k-month-m .sc-target-track { background: rgba(106,54,0,.23); }
+.k-month-m .sc-target-fill { background: linear-gradient(90deg,#fffbe5,#fff); }
+.k-total-m .sc-target-track { background: rgba(255,255,255,.19); }
+@media (max-width: 560px) { .sc-target-head { font-size: .7rem; } .sc-target-ratio { font-size: .72rem; } }
+@media (prefers-reduced-motion: reduce) { .sc-target-fill { transition: none; } }
+
 </style>
 <style>
 /* Desktop Admin: persistent sidebar and dashboard sharing the screen. */
@@ -2413,6 +2432,11 @@ select[multiple] {
             <span class="dkm-label">Today's sale</span>
           </div>
           <div class="dkm-val" id="dashToday">Rs 0</div>
+          <div class="sc-target" aria-label="Daily sales target">
+            <div class="sc-target-head"><span class="sc-target-title">Today’s target: Rs 150,000</span><span class="sc-target-ratio" id="dashTodayTargetPct">0%</span></div>
+            <div class="sc-target-track" role="progressbar" id="dashTodayTargetTrack" aria-label="Daily target achieved" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="sc-target-fill" id="dashTodayTargetFill"></div></div>
+            <div class="sc-target-summary" id="dashTodayTargetAmount">Rs 0 / Rs 150,000</div>
+          </div>
           <div class="dkm-foot">
             <span class="dkm-badge down" id="dashTodayPctBadge"><span id="dashTodayPct">0%</span></span>
             <span class="dkm-vs" id="dashTodayVsText">vs yesterday</span>
@@ -2428,6 +2452,11 @@ select[multiple] {
             <span class="dkm-label">This month sale</span>
           </div>
           <div class="dkm-val" id="dashMonth">Rs 0</div>
+          <div class="sc-target" aria-label="Monthly sales target">
+            <div class="sc-target-head"><span class="sc-target-title">Month target: Rs 4,500,000</span><span class="sc-target-ratio" id="dashMonthTargetPct">0%</span></div>
+            <div class="sc-target-track" role="progressbar" id="dashMonthTargetTrack" aria-label="Monthly target achieved" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="sc-target-fill" id="dashMonthTargetFill"></div></div>
+            <div class="sc-target-summary" id="dashMonthTargetAmount">Rs 0 / Rs 4,500,000</div>
+          </div>
           <div class="dkm-foot">
             <span class="dkm-badge up" id="dashMonthPctBadge"><span id="dashMonthPct">0%</span></span>
             <span class="dkm-vs" id="dashMonthVsText">vs last month (same days)</span>
@@ -2443,6 +2472,11 @@ select[multiple] {
             <span class="dkm-label">Total sale</span>
           </div>
           <div class="dkm-val" id="dashTotal">Rs 0</div>
+          <div class="sc-target" aria-label="Yearly sales target">
+            <div class="sc-target-head"><span class="sc-target-title">Year target: Rs 54,000,000</span><span class="sc-target-ratio" id="dashTotalTargetPct">0%</span></div>
+            <div class="sc-target-track" role="progressbar" id="dashTotalTargetTrack" aria-label="Yearly target achieved" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="sc-target-fill" id="dashTotalTargetFill"></div></div>
+            <div class="sc-target-summary" id="dashTotalTargetAmount">Rs 0 / Rs 54,000,000</div>
+          </div>
           <div class="dkm-foot">
             <span class="dkm-badge up" id="dashTotalPctBadge"><span id="dashTotalPct">—</span></span>
             <span class="dkm-vs">this year vs last year</span>
@@ -4911,6 +4945,20 @@ document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') closeDashboard();
 });
 
+function updateDashboardSalesTarget(cardId, sales, target) {
+  const amount = Math.max(0, Number(sales) || 0);
+  const pct = target > 0 ? amount * 100 / target : 0;
+  const wholePct = (Math.round(pct * 10) / 10).toLocaleString('en-PK', {maximumFractionDigits: 1});
+  const fill = document.getElementById(cardId + 'TargetFill');
+  const pctLabel = document.getElementById(cardId + 'TargetPct');
+  const amountLabel = document.getElementById(cardId + 'TargetAmount');
+  const track = document.getElementById(cardId + 'TargetTrack');
+  if (pctLabel) pctLabel.textContent = wholePct + '% achieved';
+  if (amountLabel) amountLabel.textContent = 'Rs ' + Math.round(amount).toLocaleString('en-PK') + ' / Rs ' + target.toLocaleString('en-PK');
+  if (track) track.setAttribute('aria-valuenow', String(Math.min(100, Math.max(0, Math.round(pct)))));
+  if (fill) fill.style.width = Math.min(100, Math.max(0, pct)) + '%';
+}
+
 function renderDashboard() {
   const raw = (typeof allHistory !== 'undefined' && allHistory) ? allHistory : [];
   const list = filterByPartyMode(raw, partyFilters.dash || 'all');
@@ -4950,6 +4998,8 @@ function renderDashboard() {
   document.getElementById('dashTodayCnt').textContent = todayCnt + (todayCnt === 1 ? ' invoice' : ' invoices');
   setDashboardCountValue('dashMonth', monthTotal, true);
   document.getElementById('dashMonthCnt').textContent = monthCnt + (monthCnt === 1 ? ' invoice' : ' invoices');
+  updateDashboardSalesTarget('dashToday', todayTotal, 150000);
+  updateDashboardSalesTarget('dashMonth', monthTotal, 4500000);
   setDashboardCountValue('dashTotal', grandTotal, true);
   document.getElementById('dashTotalCnt').textContent = list.length + (list.length === 1 ? ' invoice' : ' invoices');
 
@@ -5010,6 +5060,8 @@ function renderDashboard() {
     if (y === thisYear) thisYearTotal += amt;
     else if (y === lastYear) lastYearTotal += amt;
   });
+  // The Total Sale headline is all-time, but the annual target is based on THIS calendar year.
+  updateDashboardSalesTarget('dashTotal', thisYearTotal, 54000000);
   const yearDiff = thisYearTotal - lastYearTotal;
   let yearPct = 0;
   if (lastYearTotal > 0) yearPct = (yearDiff / lastYearTotal) * 100;
