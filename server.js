@@ -666,6 +666,110 @@ app.post('/api/invoices/bulk', auth, adminOnly, async (req, res) => {
   }
 });
 
+/* ---------- Short-lived Bluetooth Print receipts (read-only) ---------- */
+// The printer app fetches a receipt without sharing the browser's login cookies.
+// Only a signed, short-lived token for ONE saved invoice can access this route.
+const bluetoothPrintAudience = 'star-chicken-bluetooth-print';
+const bluetoothPrintIssuer = 'star-chicken-pos';
+
+function bluetoothText(content, options = {}) {
+  return {
+    type: 0,
+    content: String(content == null ? '' : content).replace(/[\r\n\t]+/g, ' ').slice(0, 250),
+    bold: options.bold ? 1 : 0,
+    align: options.align == null ? 0 : options.align,
+    format: options.format == null ? 0 : options.format
+  };
+}
+function bluetoothMoney(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '0.00';
+}
+function bluetoothPlain(value, maxLength = 100) {
+  return String(value == null ? '' : value).replace(/[\r\n\t]+/g, ' ').replace(/[<>]/g, '').trim().slice(0, maxLength);
+}
+function bluetoothReceipt(row) {
+  const records = [];
+  const add = (value, options) => records.push(bluetoothText(value, options));
+  const rule = () => add('--------------------------------');
+  add('STAR CHICKEN', {bold:true,align:1,format:2});
+  add('SAFE - HEALTHY - HYGIENIC', {align:1});
+  rule();
+  add('Invoice: ' + bluetoothPlain(row.invoice_no, 60), {bold:true});
+  const invoiceDate = row.invoice_date instanceof Date ? row.invoice_date.toISOString().slice(0, 10) : bluetoothPlain(row.invoice_date, 20);
+  add('Date: ' + invoiceDate + '  ' + bluetoothPlain(row.invoice_time, 30));
+  if (row.customer_name) add('Customer: ' + bluetoothPlain(row.customer_name));
+  if (row.shop_name) add('Party: ' + bluetoothPlain(row.shop_name));
+  if (row.customer_phone) add('Phone: ' + bluetoothPlain(row.customer_phone, 40));
+  rule();
+  add('ITEMS', {bold:true});
+  const items = Array.isArray(row.items) ? row.items.slice(0, 150) : [];
+  items.forEach((item, index) => {
+    add((index + 1) + '. ' + bluetoothPlain(item.name || item.product || 'Item', 85), {bold:true});
+    const qty = bluetoothPlain(item.qty == null ? '1' : item.qty, 18);
+    const weight = Number(item.weight);
+    const units = weight > 0 && Number.isFinite(weight) ? '  Wt ' + weight.toFixed(2) + 'kg' : '';
+    add('Qty ' + qty + units + '  @ Rs ' + bluetoothMoney(item.rate));
+    add('Rs ' + bluetoothMoney(item.amount), {align:2});
+  });
+  rule();
+  add('Sub Total: Rs ' + bluetoothMoney(row.subtotal));
+  add('Discount: Rs ' + bluetoothMoney(row.discount));
+  add('TOTAL: Rs ' + bluetoothMoney(row.grand_total), {bold:true,format:1});
+  add('Paid: Rs ' + bluetoothMoney(row.amount_paid));
+  add('Balance: Rs ' + bluetoothMoney(row.balance), {bold:true});
+  rule();
+  if (row.bill_maker) add('Prepared By: ' + bluetoothPlain(row.bill_maker, 80));
+  add('Thank you for choosing Star Chicken!', {align:1});
+  add(' ', {align:0});
+  add(' ', {align:0});
+  // PHP's JSON_FORCE_OBJECT produces an object with numeric keys, not an array.
+  return Object.fromEntries(records.map((record, index) => [String(index), record]));
+}
+
+// Browser-only: the requester must have both the outer session and a POS role.
+app.post('/api/print/bluetooth/link', auth, async (req, res) => {
+  if (!readRoleIdentity(req)) return res.status(403).json({error:'Please log in to Star Chicken POS'});
+  const id = req.body && typeof req.body.id === 'string' ? req.body.id.trim() : '';
+  if (!id || id.length > 150) return res.status(400).json({error:'Saved invoice ID required'});
+  try {
+    const found = await pool.query('select id from public.invoices where id=$1',[id]);
+    if (!found.rowCount) return res.status(404).json({error:'This invoice is not saved in the cloud. Save it first.'});
+    const token = jwt.sign({purpose:'bluetooth-receipt',invoiceId:id}, roleSecret, {
+      algorithm:'HS256',expiresIn:'3m',audience:bluetoothPrintAudience,issuer:bluetoothPrintIssuer
+    });
+    res.setHeader('Cache-Control','no-store');
+    res.json({path:'/api/print/bluetooth/receipt/'+encodeURIComponent(token),expiresInSeconds:180});
+  } catch (e) {
+    console.error('Could not create Bluetooth print link:',e);
+    res.status(503).json({error:'Could not prepare receipt for printing'});
+  }
+});
+
+// Printer-app-only: no normal browser cookie required. This cannot list invoices.
+app.get('/api/print/bluetooth/receipt/:token', async (req, res) => {
+  res.setHeader('Cache-Control','no-store, private');
+  res.setHeader('X-Robots-Tag','noindex, nofollow');
+  let payload;
+  try {
+    payload = jwt.verify(req.params.token, roleSecret, {
+      algorithms:['HS256'],audience:bluetoothPrintAudience,issuer:bluetoothPrintIssuer
+    });
+    if (payload.purpose !== 'bluetooth-receipt' || typeof payload.invoiceId !== 'string') throw new Error('Invalid purpose');
+  } catch (_) { return res.status(403).json({error:'Print link expired or invalid. Generate a new link in POS.'}); }
+  try {
+    const found = await pool.query(`select invoice_no, invoice_date, invoice_time, customer_name,
+      shop_name, customer_phone, bill_maker, items, discount, subtotal, grand_total,
+      amount_paid, balance from public.invoices where id=$1`,[payload.invoiceId]);
+    if (!found.rowCount) return res.status(404).json({error:'Invoice no longer exists'});
+    res.setHeader('Content-Type','application/json; charset=utf-8');
+    return res.json(bluetoothReceipt(found.rows[0]));
+  } catch (e) {
+    console.error('Bluetooth print receipt failed:',e);
+    return res.status(503).json({error:'Could not prepare invoice receipt'});
+  }
+});
+
 /* ---------- Serve protected front-end apps ---------- */
 app.get('/', auth, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'palmcity.html'));

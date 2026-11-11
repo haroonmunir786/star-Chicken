@@ -2090,6 +2090,18 @@ select[multiple] {
             <small>Load a shared invoice to edit</small>
           </span>
         </button>
+        <button class="action-sheet-btn" onclick="closeSharePrintMenu(); printInvoiceBluetooth()">
+          <span class="as-icon">📶</span>
+          <span class="as-text">
+            <strong>Print Bluetooth</strong>
+            <small>Send saved invoice to Bluetooth Print app on Android</small>
+          </span>
+        </button>
+        <a id="bluetoothAppLaunchLink" class="action-sheet-btn" href="#" style="display:none;text-decoration:none;color:inherit">
+          <span class="as-icon">✅</span>
+          <span class="as-text"><strong>Tap here if Bluetooth Print did not open</strong>
+          <small>Direct Android app link (valid for 3 minutes)</small></span>
+        </a>
         <button class="action-sheet-btn" onclick="closeSharePrintMenu(); window.print()">
           <span class="as-icon">🖨</span>
           <span class="as-text">
@@ -5997,6 +6009,48 @@ function closeReportsMenu() {
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') closeReportsMenu();
 });
+
+/* Bluetooth Print integration: only saved, unchanged cloud invoices can print.
+   The Android app fetches a 3-minute signed URL; no POS cookies are shared. */
+let scBluetoothPrintPending = false;
+async function printInvoiceBluetooth() {
+  if (scBluetoothPrintPending) return;
+  if (!currentRole) { toast('Please log in to POS before printing.', 'error'); return; }
+  if (!currentId || isDirty) {
+    toast('Save the invoice before Bluetooth printing.', 'error');
+    return;
+  }
+  if (!cloudOnline) {
+    toast('Internet connection required for Bluetooth printing.', 'error');
+    return;
+  }
+  scBluetoothPrintPending = true;
+  try {
+    const response = await fetch('/api/print/bluetooth/link', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({id:currentId})
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.path) throw new Error(result.error || 'Bluetooth printing unavailable');
+    // Exact custom scheme documented for Mate Bluetooth Print (mate.bluetoothprint).
+    // The app fetches the HTTPS URL itself, without Chrome's login cookies.
+    const receiptUrl = window.location.origin + result.path;
+    const appUrl = 'my.bluetoothprint.scheme://' + receiptUrl;
+    // Chrome sometimes blocks an app launch after an asynchronous network call.
+    // Leave a real link to tap if the automatic launch is blocked.
+    const retryLink = document.getElementById('bluetoothAppLaunchLink');
+    if (retryLink) { retryLink.href = appUrl; retryLink.style.display = 'flex'; }
+    openSharePrintMenu();
+    window.location.href = appUrl;
+  } catch (e) {
+    console.error('Bluetooth printing error:', e);
+    toast(e.message || 'Unable to start Bluetooth printing.', 'error');
+  } finally {
+    scBluetoothPrintPending = false;
+  }
+}
 
 function openSharePrintMenu() {
   document.getElementById('sharePrintOverlay').classList.add('show');
