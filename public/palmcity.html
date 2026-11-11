@@ -1703,6 +1703,88 @@ select[multiple] {
   #historyOverlay .sc-invoice-grid {min-width:1420px}
 }
 </style>
+
+<style>
+/* Star Chicken 3D sidebar: visual only; existing navigation and permissions unchanged. */
+.menu-sidebar {
+  background: linear-gradient(148deg,#fff 0%,#fafbff 54%,#fff8f7 100%);
+  border-right:1px solid rgba(211,47,47,.12);
+  perspective:900px;
+}
+.menu-sidebar-header {
+  background:linear-gradient(115deg,#ffffff 0%,#fff0ed 55%,#fff9f2 100%);
+  box-shadow:inset 0 -1px 0 rgba(183,28,28,.12),0 3px 12px rgba(0,0,0,.035);
+}
+.menu-sidebar-header h3 {letter-spacing:.2px;text-shadow:0 1px 0 #fff}
+.menu-sidebar-nav {padding:10px 9px 18px}
+.menu-sidebar .menu-nav-item {
+  position:relative; isolation:isolate;
+  border:1px solid transparent;
+  border-radius:13px;
+  margin:2px 0 5px;
+  padding:10px 11px;
+  min-height:63px;
+  background:linear-gradient(155deg,rgba(255,255,255,.9),rgba(249,250,253,.65));
+  box-shadow:0 2px 3px rgba(28,28,30,.025),inset 0 1px 0 rgba(255,255,255,.96);
+  transition:transform .2s cubic-bezier(.2,.85,.3,1.1),box-shadow .2s ease,background .2s ease,border-color .2s ease;
+  transform:translateZ(0);
+  will-change:transform;
+}
+.menu-sidebar .menu-nav-item:hover,
+.menu-sidebar .menu-nav-item:focus-visible {
+  transform:translate3d(4px,-2px,10px);
+  border-color:rgba(211,47,47,.19);
+  background:linear-gradient(120deg,#fffaf8,#fff 70%);
+  box-shadow:0 9px 17px rgba(80,35,30,.12),0 3px 4px rgba(80,35,30,.045),inset 0 1px 0 #fff;
+  outline:none;
+}
+.menu-sidebar .menu-nav-item:active {
+  transform:translate3d(1px,1px,0) scale(.985);
+  box-shadow:inset 0 2px 6px rgba(28,28,30,.10);
+}
+.menu-sidebar .mn-icon {
+  border:1px solid rgba(255,255,255,.8);
+  box-shadow:0 5px 8px rgba(0,0,0,.12),inset 0 2px 2px rgba(255,255,255,.75);
+  transition:transform .25s ease,box-shadow .25s ease;
+  transform:translateZ(4px);
+}
+.menu-sidebar .menu-nav-item:hover .mn-icon,
+.menu-sidebar .menu-nav-item:focus-visible .mn-icon {
+  transform:translateY(-2px) rotate(-5deg) scale(1.07);
+  box-shadow:0 8px 12px rgba(0,0,0,.16),inset 0 1px 2px #fff;
+}
+.menu-sidebar .mn-text strong {font-size:.91rem}
+.menu-sidebar .mn-text small {font-size:.71rem;line-height:1.35}
+.menu-sidebar-footer {background:linear-gradient(90deg,#fff,#fff7f5);box-shadow:0 -2px 10px #00000008}
+/* All Invoices filters: two compact lines instead of four tall rows. */
+#historyOverlay .hist-filters.sc-compact-invoice-filters {padding:7px 12px;display:grid;gap:6px}
+#historyOverlay .sc-invoice-filter-line {display:flex;align-items:stretch;gap:8px;min-width:0}
+#historyOverlay .sc-invoice-filter-top .party-seg {display:flex;gap:6px;flex:1 1 auto;min-width:0;margin:0;flex-wrap:nowrap}
+#historyOverlay .sc-invoice-filter-top .party-seg button {min-width:0;height:33px;padding:0 8px;flex:1 1 0;font-size:.76rem;white-space:nowrap}
+#historyOverlay .sc-invoice-date-buttons {display:flex;gap:6px;flex:0 0 190px;min-width:0}
+#historyOverlay .sc-invoice-date-buttons button {height:33px;flex:1 1 0;min-width:0;padding:0 8px;white-space:nowrap;font-size:.76rem}
+#historyOverlay .sc-invoice-filter-bottom input,
+#historyOverlay .sc-invoice-filter-bottom select {height:33px;min-width:0;border:1.5px solid var(--border);border-radius:8px;background:#fff;color:var(--ink);font: .82rem Inter,Arial,sans-serif;padding:0 10px}
+#historyOverlay .sc-invoice-filter-bottom input {flex:2 1 55%}
+#historyOverlay .sc-invoice-filter-bottom select {flex:1 1 40%;width:auto}
+#historyOverlay .sc-invoice-filter-bottom :is(input,select):focus {outline:2px solid rgba(211,47,47,.18);border-color:#d32f2f}
+@media (max-width:650px) {
+  #historyOverlay .hist-filters.sc-compact-invoice-filters {padding:6px 7px;gap:5px}
+  #historyOverlay .sc-invoice-filter-line {gap:5px}
+  #historyOverlay .sc-invoice-date-buttons {flex-basis:105px;gap:3px}
+  #historyOverlay .sc-invoice-filter-top .party-seg {gap:3px}
+  #historyOverlay .sc-invoice-filter-top .party-seg button,
+  #historyOverlay .sc-invoice-date-buttons button {font-size:.68rem;padding:0 3px;height:32px}
+  #historyOverlay .sc-invoice-filter-bottom input,
+  #historyOverlay .sc-invoice-filter-bottom select {height:32px;font-size:.74rem;padding:0 6px}
+}
+@media (prefers-reduced-motion:reduce) {
+  .menu-sidebar .menu-nav-item,.menu-sidebar .mn-icon {transition:none!important;transform:none!important}
+}
+@media print {
+  .menu-sidebar .menu-nav-item {box-shadow:none}
+}
+</style>
 </head>
 <body>
 
@@ -1908,22 +1990,24 @@ select[multiple] {
       <h3 id="histTitle">📁 All Invoices <span class="badge" id="historyCount" style="margin-left:6px">0</span></h3>
       <button type="button" class="btn btn-ghost btn-sm" onclick="closeHistoryModal()" style="height:32px;padding:0 10px;">✕</button>
     </div>
-    <div class="hist-filters">
+    <div class="hist-filters sc-compact-invoice-filters">
       <input type="hidden" id="historyDateFilter" value="">
-      <div class="party-seg" id="histPartySeg" style="margin-bottom:8px">
-        <button type="button" data-mode="star" onclick="setPartyFilter('hist','star')">⭐ Star</button>
-        <button type="button" data-mode="party" class="party" onclick="setPartyFilter('hist','party')">👥 Party</button>
-        <button type="button" data-mode="all" class="all on" onclick="setPartyFilter('hist','all')">🔗 All</button>
+      <!-- First line: category and date controls -->
+      <div class="sc-invoice-filter-line sc-invoice-filter-top">
+        <div class="party-seg" id="histPartySeg">
+          <button type="button" data-mode="star" onclick="setPartyFilter('hist','star')">⭐ Star</button>
+          <button type="button" data-mode="party" class="party" onclick="setPartyFilter('hist','party')">👥 Party</button>
+          <button type="button" data-mode="all" class="all on" onclick="setPartyFilter('hist','all')">🔗 All</button>
+        </div>
+        <div class="sc-invoice-date-buttons">
+          <button type="button" class="btn btn-ghost btn-xs" id="histBtnToday" onclick="setHistoryDateToday()" title="Today only">Today</button>
+          <button type="button" class="btn btn-ghost btn-xs" id="histBtnAll" onclick="clearHistoryDate()" title="Show all dates">All Dates</button>
+        </div>
       </div>
-      <div class="hf-row">
-        <button type="button" class="btn btn-ghost btn-xs" id="histBtnToday" onclick="setHistoryDateToday()" title="Today only" style="flex:1;height:36px;padding:0 10px">Today</button>
-        <button type="button" class="btn btn-ghost btn-xs" id="histBtnAll" onclick="clearHistoryDate()" title="Show all dates" style="flex:1;height:36px;padding:0 10px">All</button>
-      </div>
-      <div class="hf-row">
-        <input type="text" id="historySearch" placeholder="Search invoices…" oninput="renderHistory()" style="flex:1;height:36px;padding:0 12px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;font-family:inherit;background:#FAFAFA;">
-      </div>
-      <div class="hf-row">
-        <select id="historyShopFilter" onchange="renderHistory()" style="width:100%;height:36px;padding:0 10px;border:1.5px solid var(--border);border-radius:8px;font-size:0.85rem;font-family:inherit;background:#FAFAFA;color:var(--ink);">
+      <!-- Second line: invoice search and party selection -->
+      <div class="sc-invoice-filter-line sc-invoice-filter-bottom">
+        <input type="text" id="historySearch" placeholder="Search invoices…" aria-label="Search invoices" oninput="renderHistory()">
+        <select id="historyShopFilter" aria-label="Filter by party" onchange="renderHistory()">
           <option value="">All Parties</option>
         </select>
       </div>
