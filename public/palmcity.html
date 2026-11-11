@@ -1806,26 +1806,6 @@ select[multiple] {
   border-bottom:1px solid rgba(185,18,26,.14);
 }
 .menu-sidebar-header h3 {color:#97171A}
-.sc-sidebar-logo {
-  position:relative;
-  flex-shrink:0;
-  margin:10px 12px 3px;
-  padding:7px 8px 6px;
-  border-radius:16px;
-  overflow:hidden;
-  border:1px solid rgba(173,42,26,.22);
-  background:linear-gradient(140deg,#FFD166,#FFA91D 65%,#FFBA48);
-  box-shadow:0 7px 14px rgba(148,43,19,.14),inset 0 2px 2px rgba(255,255,255,.75);
-  text-align:center;
-}
-.sc-sidebar-logo img {
-  display:block;max-width:100%;width:220px;height:106px;object-fit:contain;
-  margin:auto;border-radius:9px;
-}
-.sc-brand-tagline {
-  display:block;margin-top:3px;color:#8B221A;
-  font-size:.58rem;font-weight:800;letter-spacing:1.2px;
-}
 .menu-sidebar .menu-nav-item {
   border-color:rgba(229,91,46,.08);
   background:linear-gradient(148deg,#fffefb 0%,#fff8ed 78%,#fff5e8);
@@ -1872,13 +1852,10 @@ select[multiple] {
 #historyOverlay .sc-invoice-grid tbody tr:hover {background:#fff0d0}
 #historyOverlay .sc-invoice-grid thead tr:not(.sc-grid-filters) th {background:#fff1dd;border-bottom:2px solid #E9AA51}
 @media (max-width:800px){
-  .sc-sidebar-logo {margin:7px 14px 4px}
-  .sc-sidebar-logo img {height:88px;width:193px}
 }
 @media (prefers-reduced-motion:reduce){
   .dash-kpis-modern .dash-kpi-m,.dash-kpis-modern .dash-kpi-m .dkm-val {transition:none!important;transform:none!important}
 }
-@media print {.sc-sidebar-logo {display:none!important}}
 </style>
 </head>
 <body>
@@ -1930,10 +1907,6 @@ select[multiple] {
     <div class="menu-sidebar-header">
       <h3>☰ Menu</h3>
       <button type="button" class="menu-sidebar-close" onclick="closeReportsMenu()" title="Close">✕</button>
-    </div>
-    <div class="sc-sidebar-logo" aria-label="Star Chicken branding">
-      <img src="/star-chicken-logo.webp" alt="Star Chicken official logo" loading="eager">
-      <span class="sc-brand-tagline">QUALITY CHICKEN PRODUCTS</span>
     </div>
     <nav class="menu-sidebar-nav">
       <button type="button" class="menu-nav-item admin-only" data-admin-only="1" onclick="closeReportsMenu(); openDashboard()">
@@ -4804,8 +4777,52 @@ async function captureInvoice() {
 
 
 
+/* Animated KPI values: display-only, never modifies invoice amounts. */
+let dashboardCountUpPending = false;
+const dashboardCountAnimations = new Map();
+function setDashboardCountValue(id, rawValue, currency) {
+  const element = document.getElementById(id);
+  if (!element) return;
+  const endValue = Math.max(0, Math.round(Number(rawValue) || 0));
+  const display = amount => (currency ? 'Rs ' : '') + Math.round(amount).toLocaleString('en-PK');
+  const prior = dashboardCountAnimations.get(id);
+  if (prior && !dashboardCountUpPending) {
+    // Cloud data may refresh during the count-up; finish at the latest actual total.
+    prior.endValue = endValue;
+    return;
+  }
+  if (prior) {
+    cancelAnimationFrame(prior.frame);
+    dashboardCountAnimations.delete(id);
+  }
+  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!dashboardCountUpPending || reduceMotion || endValue === 0) {
+    element.textContent = display(endValue);
+    return;
+  }
+  element.textContent = display(0);
+  const animation = {endValue, frame: 0};
+  dashboardCountAnimations.set(id, animation);
+  let start = null;
+  const duration = 950; // Fast, smooth count-up from zero.
+  function tick(now) {
+    if (dashboardCountAnimations.get(id) !== animation) return;
+    if (start === null) start = now;
+    const progress = Math.min((now - start) / duration, 1);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    element.textContent = display(animation.endValue * eased);
+    if (progress < 1) animation.frame = requestAnimationFrame(tick);
+    else {
+      element.textContent = display(animation.endValue);
+      dashboardCountAnimations.delete(id);
+    }
+  }
+  animation.frame = requestAnimationFrame(tick);
+}
+
 /* ══════════ DASHBOARD ══════════ */
 function openDashboard() {
+  dashboardCountUpPending = true;
   document.getElementById('dashboardOverlay').classList.add('show');
   // Branch-wise (and linked product/customer filters) default to today
   setDashDatesToToday();
@@ -4869,16 +4886,16 @@ function renderDashboard() {
   });
 
   const fmtD = (n) => 'Rs ' + Math.round(Number(n) || 0).toLocaleString('en-PK');
-  document.getElementById('dashToday').textContent = fmtD(todayTotal);
+  setDashboardCountValue('dashToday', todayTotal, true);
   document.getElementById('dashTodayCnt').textContent = todayCnt + (todayCnt === 1 ? ' invoice' : ' invoices');
-  document.getElementById('dashMonth').textContent = fmtD(monthTotal);
+  setDashboardCountValue('dashMonth', monthTotal, true);
   document.getElementById('dashMonthCnt').textContent = monthCnt + (monthCnt === 1 ? ' invoice' : ' invoices');
-  document.getElementById('dashTotal').textContent = fmtD(grandTotal);
+  setDashboardCountValue('dashTotal', grandTotal, true);
   document.getElementById('dashTotalCnt').textContent = list.length + (list.length === 1 ? ' invoice' : ' invoices');
 
   // Orders today + avg bill
-  const ordersEl = document.getElementById('dashOrdersToday');
-  if (ordersEl) ordersEl.textContent = String(todayCnt);
+  setDashboardCountValue('dashOrdersToday', todayCnt, false);
+  dashboardCountUpPending = false;
   const avgBill = todayCnt > 0 ? Math.round(todayTotal / todayCnt) : 0;
   const avgBillEl = document.getElementById('dashAvgBill');
   if (avgBillEl) avgBillEl.textContent = 'avg bill Rs ' + avgBill.toLocaleString('en-PK');
