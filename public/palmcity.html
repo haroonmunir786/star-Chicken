@@ -1660,6 +1660,31 @@ select[multiple] {
 }
 
 
+
+/* Four-mode sales trend and ranked tiles; limited to Dashboard only */
+.sc-trend-controls {display:flex;gap:5px;flex-wrap:wrap;margin-bottom:11px;padding:4px;border:1px solid #f0d6aa;background:#fff7e8;border-radius:12px}
+.sc-trend-button {flex:1;min-width:65px;padding:8px 7px;border:0;border-radius:9px;background:transparent;color:#714424;font:700 .74rem Inter,sans-serif;cursor:pointer;transition:background .18s,transform .18s,box-shadow .18s}
+.sc-trend-button:hover {transform:translateY(-2px);background:#ffe3aa}
+.sc-trend-button.active {background:#ce2626;color:white;box-shadow:0 3px 11px #b51a1a42}
+.sc-trend-chart {height:196px;gap:3px;min-width:0;overflow-x:auto;overflow-y:hidden;padding-bottom:2px}
+.sc-trend-chart .dash-m-col {min-width:27px}
+.sc-trend-chart .dash-m-bar {width:70%;max-width:35px}
+.sc-trend-chart .dash-m-val {font-size:.59rem}
+.sc-trend-chart .dash-m-lbl {font-size:.6rem}
+.sc-trend-footer {margin-top:9px;border-top:1px dashed #ead5b4;padding-top:8px;font-size:.72rem;font-weight:650;color:#7b553a;text-align:right}
+.sc-top-tiles {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:minmax(65px,auto);gap:7px}
+.sc-top-tile {display:flex;flex-direction:column;justify-content:space-between;min-width:0;border-radius:12px;border:1px solid #eccfa8;padding:8px 10px;background:linear-gradient(145deg,#fff6e5,#ffe6bb);box-shadow:0 2px 5px #744b2014;transition:transform .18s,box-shadow .18s}
+.sc-top-tile:nth-child(1) {background:linear-gradient(135deg,#d62929,#aa1616);color:white;grid-column:span 2}
+.sc-top-tile:nth-child(2) {background:linear-gradient(135deg,#ffbd3a,#f7a315)}
+.sc-top-tile:nth-child(3) {background:linear-gradient(135deg,#ffe6b1,#ffca60)}
+.sc-top-tile:hover {transform:translateY(-3px) scale(1.015);box-shadow:0 7px 14px #744b2030}
+.sc-top-tile-title {font-size:.72rem;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc-top-tile-bottom {display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.sc-top-tile-amount {font-size:.83rem;font-weight:800;white-space:nowrap}
+.sc-top-tile-qty {font-size:.64rem;opacity:.83;white-space:nowrap}
+.sc-top-tile:nth-child(1) .sc-top-tile-amount {font-size:1.04rem}
+@media (max-width:520px){.sc-top-tile-bottom{flex-wrap:wrap}.sc-top-tile-qty{white-space:normal}}
+
 </style>
 <style>
 /* Desktop Admin: persistent sidebar and dashboard sharing the screen. */
@@ -2429,11 +2454,19 @@ select[multiple] {
         <div class="dash-card dash-card-chart">
           <div class="dash-card-h dash-card-h-flex">
             <div>
-              <div class="dch-title">📅 Monthly sale</div>
+              <div class="dch-title">📈 Sales Trend</div>
+              <div class="dch-sub" id="dashTrendNote">Sales grouped by month</div>
             </div>
           </div>
           <div class="dash-card-b">
-            <div class="dash-month-chart dash-bar-chart" id="dashMonthChart"><div class="dash-empty">No data yet</div></div>
+            <div class="sc-trend-controls" role="group" aria-label="Sales chart time period">
+              <button type="button" class="sc-trend-button" data-period="daily" onclick="setDashTrendPeriod('daily')">Daily</button>
+              <button type="button" class="sc-trend-button" data-period="weekly" onclick="setDashTrendPeriod('weekly')">Weekly</button>
+              <button type="button" class="sc-trend-button active" data-period="monthly" onclick="setDashTrendPeriod('monthly')">Monthly</button>
+              <button type="button" class="sc-trend-button" data-period="yearly" onclick="setDashTrendPeriod('yearly')">Yearly</button>
+            </div>
+            <div class="dash-month-chart dash-bar-chart sc-trend-chart" id="dashMonthChart"><div class="dash-empty">No data yet</div></div>
+            <div class="sc-trend-footer" id="dashTrendFooter">&nbsp;</div>
           </div>
         </div>
       </div>
@@ -2443,18 +2476,13 @@ select[multiple] {
         <div class="dash-card dash-card-chart">
           <div class="dash-card-h dash-card-h-flex">
             <div>
-              <div class="dch-title">📊 Weekly sale</div>
-              <div class="dch-sub">Last 7 days · <strong id="dashWeekChartTotal">Rs 0</strong></div>
+              <div class="dch-title">🏆 Top 10 Products</div>
+              <div class="dch-sub" id="dashTopTilesNote">Same date range as Branch-wise Sales</div>
             </div>
+            <span class="dch-pill" id="dashTopTilesTotal">Rs 0</span>
           </div>
           <div class="dash-card-b">
-            <div class="dash-week-summary" style="display:none">
-              <div class="ws-total">Week total: <span id="dashWeekTotal">Rs. 0</span></div>
-              <div class="ws-avg" id="dashWeekAvg">Avg / day: Rs. 0</div>
-            </div>
-            <div class="dash-week-wrap">
-              <div class="dash-month-chart dash-bar-chart" id="dashWeekChart"><div class="dash-empty">No data yet</div></div>
-            </div>
+            <div class="sc-top-tiles" id="dashTopTiles"><div class="dash-empty">No product sales yet</div></div>
           </div>
         </div>
         <div class="dash-card">
@@ -5055,72 +5083,14 @@ function renderDashboard() {
   drawSpark('dashMonthSpark', sparkMonth, 'rgba(255,255,255,0.9)');
   drawSpark('dashTotalSpark', mKeysArr.map(k => monthMap[k] || 0), 'rgba(255,255,255,0.75)');
 
-  // —— Weekly chart (last 7 days) ——
-  const weekKeys = Object.keys(weekMap);
-  const weekSum = weekKeys.reduce((s, k) => s + (weekMap[k] || 0), 0);
-  const daysWithSale = weekKeys.filter(k => weekMap[k] > 0).length || 1;
-  const maxWeek = Math.max(0, ...weekKeys.map(k => weekMap[k]));
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const wt = document.getElementById('dashWeekTotal');
-  const wa = document.getElementById('dashWeekAvg');
-  if (wt) wt.textContent = fmtD(weekSum);
-  if (wa) wa.textContent = 'Avg / day: ' + fmtD(weekSum / 7) + ' · ' + daysWithSale + ' active day' + (daysWithSale === 1 ? '' : 's');
-  const weekChartTotalEl = document.getElementById('dashWeekChartTotal');
-  if (weekChartTotalEl) weekChartTotalEl.textContent = fmtD(weekSum);
-  const weekEl = document.getElementById('dashWeekChart');
-  if (weekEl) {
-    if (!list.length || maxWeek === 0) {
-      weekEl.innerHTML = '<div class="dash-empty" style="width:100%">No weekly data yet</div>';
-    } else {
-      weekEl.innerHTML = weekKeys.map(k => {
-        const val = weekMap[k];
-        const h = maxWeek > 0 ? Math.max(6, Math.round((val / maxWeek) * 140)) : 6;
-        const parts = k.split('-').map(Number);
-        const dObj = new Date(parts[0], parts[1] - 1, parts[2]);
-        const lbl = dayNames[dObj.getDay()];
-        const isToday = k === todayISO;
-        const shortVal = val > 0 ? dashShortAmount(val, false) : '';
-        return '<div class="dash-m-col">' +
-          '<div class="dash-m-val">' + shortVal + '</div>' +
-          '<div class="dash-m-bar-wrap"><div class="dash-m-bar' + (isToday ? ' is-today' : '') +
-          '" style="height:' + h + 'px" title="' + fmtD(val) + '"></div></div>' +
-          '<div class="dash-m-lbl' + (isToday ? ' is-today' : '') + '">' + lbl + '</div></div>';
-      }).join('');
-    }
-  }
-
-  // —— Monthly chart ——
-  const monthKeys = Object.keys(monthMap);
-  const maxMonth = Math.max(0, ...monthKeys.map(k => monthMap[k]));
-  const monthSum = monthKeys.reduce((s, k) => s + (monthMap[k] || 0), 0);
-  const monthChartTotalEl = document.getElementById('dashMonthChartTotal');
-  if (monthChartTotalEl) monthChartTotalEl.textContent = fmtD(monthSum);
-  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const chartEl = document.getElementById('dashMonthChart');
-  if (chartEl) {
-    if (!list.length || maxMonth === 0) {
-      chartEl.innerHTML = '<div class="dash-empty" style="width:100%">No monthly data yet</div>';
-    } else {
-      chartEl.innerHTML = monthKeys.map(k => {
-        const val = monthMap[k];
-        const h = maxMonth > 0 ? Math.max(4, Math.round((val / maxMonth) * 140)) : 4;
-        const parts = k.split('-');
-        const lbl = monthNames[parseInt(parts[1], 10) - 1] || parts[1];
-        const isCurMonth = k === monthKeyNow;
-        const shortVal = val > 0 ? dashShortAmount(val, false) : '';
-        return '<div class="dash-m-col">' +
-          '<div class="dash-m-val">' + shortVal + '</div>' +
-          '<div class="dash-m-bar-wrap"><div class="dash-m-bar' + (isCurMonth ? ' is-today' : '') +
-          '" style="height:' + h + 'px" title="' + fmtD(val) + '"></div></div>' +
-          '<div class="dash-m-lbl' + (isCurMonth ? ' is-today' : '') + '">' + lbl + '</div></div>';
-      }).join('');
-    }
-  }
+  // Trend shows all invoice dates in the chosen rolling period, not the Branch date range.
+  renderDashSalesTrend();
 
   renderDashboardBranch();
   renderDashboardTopLists();
   renderDashboardCategory();
   renderDashboardStockByBranch();
+  renderDashTopTiles();
 }
 
 /** Branch stock summary: Sold / Received / Return-Transfer / Balance */
@@ -5487,6 +5457,113 @@ function renderDashboardBranch() {
   }
 }
 
+
+/* --- Dashboard time-period trend + linked top-product tiles --- */
+let dashTrendPeriod = 'monthly';
+function setDashTrendPeriod(period) {
+  if (!['daily','weekly','monthly','yearly'].includes(period)) return;
+  dashTrendPeriod = period;
+  renderDashSalesTrend();
+}
+function scDateUTC(iso) {
+  const p = iso.split('-').map(Number);
+  return new Date(Date.UTC(p[0],p[1]-1,p[2]));
+}
+function scISODateUTC(date) {return date.toISOString().slice(0,10);}
+// ISO 8601: Monday-first weeks; week 1 contains the year's first Thursday.
+function scISOWeekKey(iso) {
+  const d = scDateUTC(iso);
+  d.setUTCDate(d.getUTCDate()+4-(d.getUTCDay()||7));
+  const yr=d.getUTCFullYear();
+  const yearStart=new Date(Date.UTC(yr,0,1));
+  const week=Math.ceil((((d-yearStart)/86400000)+1)/7);
+  return yr+'-W'+String(week).padStart(2,'0');
+}
+function renderDashSalesTrend() {
+  const chart=document.getElementById('dashMonthChart');
+  if(!chart) return;
+  const period=dashTrendPeriod;
+  document.querySelectorAll('.sc-trend-button').forEach(btn=>{
+    const active=btn.dataset.period===period;
+    btn.classList.toggle('active',active);
+    btn.setAttribute('aria-pressed',String(active));
+  });
+  const today=scDateUTC(getPakistanDateISO());
+  const keys=[];
+  let label='';
+  if(period==='daily') {
+    for(let i=13;i>=0;i--){const d=new Date(today);d.setUTCDate(d.getUTCDate()-i);keys.push(scISODateUTC(d));}
+    label='Last 14 days';
+  } else if(period==='weekly') {
+    const monday=new Date(today);monday.setUTCDate(monday.getUTCDate()-((monday.getUTCDay()+6)%7));
+    for(let i=11;i>=0;i--){const d=new Date(monday);d.setUTCDate(d.getUTCDate()-i*7);keys.push(scISOWeekKey(scISODateUTC(d)));}
+    label='Last 12 ISO weeks · W01–W53';
+  } else if(period==='monthly') {
+    for(let i=11;i>=0;i--){const d=new Date(Date.UTC(today.getUTCFullYear(),today.getUTCMonth()-i,1));keys.push(scISODateUTC(d).slice(0,7));}
+    label='Last 12 months';
+  } else {
+    for(let i=5;i>=0;i--)keys.push(String(today.getUTCFullYear()-i));
+    label='Last 6 calendar years';
+  }
+  const amounts=Object.fromEntries(keys.map(k=>[k,0]));
+  const raw=typeof allHistory!=='undefined' && allHistory ? allHistory : [];
+  const list=filterByPartyMode(raw,partyFilters.dash||'all');
+  list.forEach(inv=>{
+    const iso=invDateISO(inv);
+    if(!iso||!/^\d{4}-\d{2}-\d{2}$/.test(iso))return;
+    const key=period==='daily'?iso:period==='weekly'?scISOWeekKey(iso):period==='monthly'?iso.slice(0,7):iso.slice(0,4);
+    if(Object.prototype.hasOwnProperty.call(amounts,key))amounts[key]+=Number(inv.grandTotal)||0;
+  });
+  const max=Math.max(0,...Object.values(amounts));
+  const fmt=n=>'Rs '+Math.round(n).toLocaleString('en-PK');
+  const mon=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const nowKey=period==='daily'?scISODateUTC(today):period==='weekly'?scISOWeekKey(scISODateUTC(today)):period==='monthly'?scISODateUTC(today).slice(0,7):String(today.getUTCFullYear());
+  chart.innerHTML=keys.map(k=>{
+    const amt=amounts[k];
+    const h=max>0?(amt>0?Math.max(5,Math.round(amt/max*135)):3):3;
+    const lbl=period==='daily'?k.slice(8):period==='weekly'?k.slice(5):period==='monthly'?mon[Number(k.slice(5))-1]:k;
+    const current=k===nowKey;
+    const val=amt>0?dashShortAmount(amt,false):'';
+    return '<div class="dash-m-col"><div class="dash-m-val">'+val+'</div><div class="dash-m-bar-wrap"><div class="dash-m-bar'+(current?' is-today':'')+'" style="height:'+h+'px" title="'+k+' · '+fmt(amt)+'"></div></div><div class="dash-m-lbl'+(current?' is-today':'')+'">'+lbl+'</div></div>';
+  }).join('');
+  const note=document.getElementById('dashTrendNote');
+  if(note)note.textContent=label+(period==='weekly'?' (ISO week numbers)':'');
+  const footer=document.getElementById('dashTrendFooter');
+  if(footer)footer.textContent='Period total: '+fmt(Object.values(amounts).reduce((a,b)=>a+b,0));
+}
+function renderDashTopTiles(){
+  const el=document.getElementById('dashTopTiles');
+  if(!el)return;
+  const filtered=filterListByDateInputs('dashBranchFrom','dashBranchTo');
+  const map=new Map();
+  filtered.list.forEach(inv=>{
+    (inv.items||[]).forEach(it=>{
+      const name=String(it.name||'').trim();
+      if(!name)return;
+      const key=name.toLocaleLowerCase('en');
+      if(!map.has(key))map.set(key,{name,amount:0,qty:0,weight:0});
+      const entry=map.get(key);
+      entry.amount+=Number(it.amount)||0;
+      entry.qty+=Number(it.qty)||0;
+      entry.weight+=Number(it.weight)||0;
+    });
+  });
+  const ranked=[...map.values()].sort((a,b)=>b.amount-a.amount||a.name.localeCompare(b.name)).slice(0,10);
+  const fmt=n=>'Rs '+Math.round(n).toLocaleString('en-PK');
+  const total=ranked.reduce((s,x)=>s+x.amount,0);
+  const note=document.getElementById('dashTopTilesNote');
+  if(note)note.textContent=dashFmtDateNote(filtered.fromStr,filtered.toStr,'All dates')+' · '+(partyFilters.dash==='all'?'All parties':partyFilters.dash==='star'?'Star Chicken':'Party customers');
+  const pill=document.getElementById('dashTopTilesTotal');
+  if(pill)pill.textContent=fmt(total);
+  if(!ranked.length){el.innerHTML='<div class="dash-empty" style="grid-column:1/-1">No product sales for this date range</div>';return;}
+  el.innerHTML=ranked.map((row,i)=>{
+    const qty=Number(row.qty.toFixed(2));
+    const weight=Number(row.weight.toFixed(2));
+    const units=(qty?qty+' qty':'')+(qty&&weight?' · ':'')+(weight?weight+' kg':'');
+    return '<div class="sc-top-tile" title="'+esc(row.name)+' · '+fmt(row.amount)+'"><div class="sc-top-tile-title">#'+(i+1)+' '+esc(row.name)+'</div><div class="sc-top-tile-bottom"><span class="sc-top-tile-amount">'+fmt(row.amount)+'</span><span class="sc-top-tile-qty">'+esc(units)+'</span></div></div>';
+  }).join('');
+}
+
 /* Linked date filters: Branch / Products / Customers share the same range */
 const DASH_FROM_IDS = ['dashBranchFrom', 'dashProdFrom', 'dashCustFrom'];
 const DASH_TO_IDS = ['dashBranchTo', 'dashProdTo', 'dashCustTo'];
@@ -5504,6 +5581,7 @@ function syncDashDates(sourceId) {
   renderDashboardBranch();
   renderDashboardTopLists();
   renderDashboardCategory();
+  renderDashTopTiles();
 }
 
 function clearAllDashDates() {
@@ -5514,6 +5592,7 @@ function clearAllDashDates() {
   renderDashboardBranch();
   renderDashboardTopLists();
   renderDashboardCategory();
+  renderDashTopTiles();
 }
 
 function clearDashBranchDates() { clearAllDashDates(); }
