@@ -1785,6 +1785,101 @@ select[multiple] {
   .menu-sidebar .menu-nav-item {box-shadow:none}
 }
 </style>
+<style>
+/* STAR CHICKEN / red + five-star gold brand palette — interface only. */
+:root {
+  --primary:#E02027;
+  --primary-dark:#B9121A;
+  --primary-soft:#FFF0E9;
+  --gold:#FFAF19;
+  --gold-soft:#FFF6DC;
+  --ink:#251C18;
+  --bg:#FFF9EE;
+}
+.menu-sidebar {
+  background:linear-gradient(166deg,#FFFDF7 0%,#FFF6DC 39%,#FFFDF9 76%,#FFF0E8 100%);
+  border-right:2px solid rgba(174,35,24,.22);
+  box-shadow:inset -10px 0 22px rgba(229,67,27,.045);
+}
+.menu-sidebar-header {
+  background:linear-gradient(105deg,#fff3de,#fff9ef);
+  border-bottom:1px solid rgba(185,18,26,.14);
+}
+.menu-sidebar-header h3 {color:#97171A}
+.sc-sidebar-logo {
+  position:relative;
+  flex-shrink:0;
+  margin:10px 12px 3px;
+  padding:7px 8px 6px;
+  border-radius:16px;
+  overflow:hidden;
+  border:1px solid rgba(173,42,26,.22);
+  background:linear-gradient(140deg,#FFD166,#FFA91D 65%,#FFBA48);
+  box-shadow:0 7px 14px rgba(148,43,19,.14),inset 0 2px 2px rgba(255,255,255,.75);
+  text-align:center;
+}
+.sc-sidebar-logo img {
+  display:block;max-width:100%;width:220px;height:106px;object-fit:contain;
+  margin:auto;border-radius:9px;
+}
+.sc-brand-tagline {
+  display:block;margin-top:3px;color:#8B221A;
+  font-size:.58rem;font-weight:800;letter-spacing:1.2px;
+}
+.menu-sidebar .menu-nav-item {
+  border-color:rgba(229,91,46,.08);
+  background:linear-gradient(148deg,#fffefb 0%,#fff8ed 78%,#fff5e8);
+  box-shadow:0 3px 7px rgba(111,51,29,.07),inset 0 1px 0 #fff;
+}
+.menu-sidebar .menu-nav-item:hover,
+.menu-sidebar .menu-nav-item:focus-visible {
+  border-color:rgba(205,31,31,.36);
+  background:linear-gradient(135deg,#fff 5%,#ffe8ce 100%);
+  box-shadow:0 11px 22px rgba(153,43,18,.18),inset 0 1px 0 #fff;
+}
+.menu-sidebar .mn-icon {background:linear-gradient(140deg,#fff9e6,#ffeed1)}
+.menu-sidebar .mn-text strong {color:#3C211D}
+.menu-sidebar .mn-text small {color:#776760}
+.menu-sidebar-footer {background:linear-gradient(95deg,#fff5de,#fff2e9);color:#A53527}
+/* KPI: motion is visual only — figures stay readable and never change on hover. */
+.dash-kpis-modern {perspective:1200px;align-items:stretch}
+.dash-kpis-modern .dash-kpi-m {
+  transform-style:preserve-3d;
+  transform:translate3d(0,0,0) rotateX(0);
+  box-shadow:0 8px 0 rgba(57,37,25,.075),0 17px 24px rgba(62,34,25,.13),inset 0 1px 0 rgba(255,255,255,.3);
+  transition:transform .26s cubic-bezier(.2,.85,.3,1.1),box-shadow .26s ease,filter .26s ease;
+  will-change:transform;
+  cursor:default;
+}
+.dash-kpis-modern .dash-kpi-m:hover {
+  transform:translate3d(0,-7px,0) rotateX(3deg) rotateY(-2deg);
+  box-shadow:0 12px 0 rgba(57,37,25,.065),0 25px 31px rgba(62,34,25,.22),inset 0 1px 0 rgba(255,255,255,.4);
+  filter:saturate(1.09);
+}
+.dash-kpis-modern .dash-kpi-m .dkm-val {
+  display:inline-block;transform:translateZ(0);
+  transition:transform .27s ease,text-shadow .27s ease;
+}
+.dash-kpis-modern .dash-kpi-m:hover .dkm-val {
+  transform:translate3d(0,-3px,24px) scale(1.055);
+  text-shadow:0 4px 14px rgba(0,0,0,.22);
+}
+.dash-kpis-modern .k-today-m {background:linear-gradient(140deg,#FF4D45 0%,#E01B28 57%,#9E101C 100%)}
+.dash-kpis-modern .k-month-m {background:linear-gradient(140deg,#FFCC47 0%,#FFAE19 50%,#F1840E 100%)}
+.dash-kpis-modern .k-total-m {background:linear-gradient(140deg,#392A23,#201A19 63%,#140F0E)}
+.dash-kpis-modern .k-orders-m {background:linear-gradient(145deg,#fff,#fff5e4)}
+.dash-header {border-bottom-color:rgba(215,60,28,.13)}
+#historyOverlay .sc-invoice-grid tbody tr:hover {background:#fff0d0}
+#historyOverlay .sc-invoice-grid thead tr:not(.sc-grid-filters) th {background:#fff1dd;border-bottom:2px solid #E9AA51}
+@media (max-width:800px){
+  .sc-sidebar-logo {margin:7px 14px 4px}
+  .sc-sidebar-logo img {height:88px;width:193px}
+}
+@media (prefers-reduced-motion:reduce){
+  .dash-kpis-modern .dash-kpi-m,.dash-kpis-modern .dash-kpi-m .dkm-val {transition:none!important;transform:none!important}
+}
+@media print {.sc-sidebar-logo {display:none!important}}
+</style>
 </head>
 <body>
 
@@ -1835,6 +1930,10 @@ select[multiple] {
     <div class="menu-sidebar-header">
       <h3>☰ Menu</h3>
       <button type="button" class="menu-sidebar-close" onclick="closeReportsMenu()" title="Close">✕</button>
+    </div>
+    <div class="sc-sidebar-logo" aria-label="Star Chicken branding">
+      <img src="/star-chicken-logo.webp" alt="Star Chicken official logo" loading="eager">
+      <span class="sc-brand-tagline">QUALITY CHICKEN PRODUCTS</span>
     </div>
     <nav class="menu-sidebar-nav">
       <button type="button" class="menu-nav-item admin-only" data-admin-only="1" onclick="closeReportsMenu(); openDashboard()">
@@ -3627,10 +3726,14 @@ function updateHistoryDateBtns() {
     btnA.style.borderColor = !isToday ? 'var(--primary)' : '';
   }
 }
-function setHistoryDateToday() {
+async function setHistoryDateToday() {
   const el = document.getElementById('historyDateFilter');
   if (el) el.value = getPakistanDateISO();
   updateHistoryDateBtns();
+  // Obtain the latest saved invoices; read-only, and retain existing data on failure.
+  if (typeof refreshDashboardFromCloud === 'function') {
+    try { await refreshDashboardFromCloud(); } catch (e) { console.warn('Today refresh unavailable', e); }
+  }
   renderHistory();
 }
 function clearHistoryDate() {
@@ -3707,8 +3810,14 @@ function renderHistory(keepFilterFocus) {
   const shopFilter=document.getElementById('historyShopFilter')?.value||'';
   const dateFilter=document.getElementById('historyDateFilter')?.value||'';
   let list=filterByPartyMode(allHistory||[],partyFilters.hist||'all');
-  if(dateFilter)list=list.filter(inv=>String(inv.date||'')===dateFilter);
-  if(shopFilter)list=list.filter(inv=>(inv.shopName||'').trim()===shopFilter);
+  if(dateFilter)list=list.filter(inv=>invDateISO(inv)===dateFilter);
+  if(shopFilter)list=list.filter(inv=>{
+    const a=String(inv.shopName||'').trim().toLocaleLowerCase('en');
+    const b=String(shopFilter).trim().toLocaleLowerCase('en');
+    return a===b || (typeof mapShopToStockBranch==='function' &&
+      mapShopToStockBranch(inv.shopName) &&
+      mapShopToStockBranch(inv.shopName)===mapShopToStockBranch(shopFilter));
+  });
   if(q)list=list.filter(inv=>[
     inv.invoiceNo,inv.customerName,inv.shopName,inv.customerPhone,inv.billMaker
   ].some(v=>String(v||'').toLowerCase().includes(q)));
