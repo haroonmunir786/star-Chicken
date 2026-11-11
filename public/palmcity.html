@@ -1697,6 +1697,26 @@ select[multiple] {
 .sc-treemap-empty {padding:28px;text-align:center;color:#8e6a45;width:100%}
 @media(max-width:600px){.sc-top-tiles{height:390px;min-height:390px}.sc-treemap-cell{border-width:2px;border-radius:7px}}
 
+
+/* Category Contribution fills the adjacent treemap card on wide displays. */
+@media (min-width: 901px) {
+  .sc-category-fill-card {display:flex;flex-direction:column;}
+  .sc-category-fill-card > .dash-card-b {flex:1;display:flex;flex-direction:column;justify-content:center;min-height:370px;}
+  .sc-category-fill-card #dashCatChart {width:100%;}
+  .sc-category-fill-card .dash-cat-wrap {gap:20px;justify-content:space-around;padding:14px 4px;}
+  .sc-category-fill-card .dash-cat-donut {width:clamp(190px,19vw,250px);height:clamp(190px,19vw,250px);}
+  .sc-category-fill-card .dash-cat-legend {gap:12px;min-width:190px;}
+  .sc-category-fill-card .dash-cat-leg-row {padding:8px 0;border-bottom:1px solid #f4eee5;}
+  .sc-category-fill-card .dash-cat-note {margin-top:16px;}
+}
+@media (max-width: 1150px) and (min-width: 901px) {
+  .sc-category-fill-card .dash-cat-wrap {gap:9px;}
+  .sc-category-fill-card .dash-cat-donut {width:170px;height:170px;}
+  .sc-category-fill-card .dash-cat-legend {min-width:165px;gap:7px;}
+  .sc-category-fill-card .dash-cat-leg-row {font-size:.72rem;gap:5px;}
+  .sc-category-fill-card .dash-cat-leg-amt {min-width:65px;font-size:.72rem;}
+}
+
 </style>
 <style>
 /* Desktop Admin: persistent sidebar and dashboard sharing the screen. */
@@ -2497,7 +2517,7 @@ select[multiple] {
             <div class="sc-top-tiles" id="dashTopTiles" role="img" aria-label="Top 10 products by sales amount, proportional treemap"><div class="dash-empty">No product sales yet</div></div>
           </div>
         </div>
-        <div class="dash-card">
+        <div class="dash-card sc-category-fill-card">
           <div class="dash-card-h">📊 Category Contribution <span style="font-weight:500;color:var(--muted);font-size:0.72rem;margin-left:6px">(same dates as Branch)</span></div>
           <div class="dash-card-b">
             <div id="dashCatChart"><div class="dash-empty">No category data yet</div></div>
@@ -5750,9 +5770,15 @@ function renderDashboardTopLists() {
 
   _dashFullProducts = allProdNames.map(name => {
     const p = productMap[name];
+    // Average price per KG uses the SAME aggregated invoice line sales and weight.
+    // Guard against zero/missing weight so the dashboard never displays Infinity/NaN.
+    const avgPerKg = p.weight > 0 ? p.amount / p.weight : null;
+    const avgLabel = avgPerKg === null ? 'Avg: N/A (no kg)' :
+      'Avg: Rs ' + avgPerKg.toLocaleString('en-PK', {minimumFractionDigits:2,maximumFractionDigits:2}) + '/kg';
     const meta = (p.category ? p.category + ' · ' : '') +
       (p.weight ? (Math.round(p.weight * 100) / 100) + ' kg' : '') +
-      (p.qty ? (p.weight ? ' · ' : '') + (Math.round(p.qty * 100) / 100) + ' qty' : '');
+      (p.qty ? (p.weight ? ' · ' : '') + (Math.round(p.qty * 100) / 100) + ' qty' : '') +
+      ' · ' + avgLabel;
     return { name, amount: p.amount, meta, category: p.category, qty: p.qty, weight: p.weight };
   });
   _dashFilteredProducts = _dashFullProducts.slice();
@@ -5775,7 +5801,8 @@ function renderDashboardTopLists() {
       totAmt += Number(r.amount) || 0;
     });
     const totMeta = (Math.round(totQty * 100) / 100) + ' qty · ' +
-      (Math.round(totWgt * 100) / 100) + ' kg';
+      (Math.round(totWgt * 100) / 100) + ' kg · ' +
+      (totWgt > 0 ? 'Avg: Rs ' + (totAmt / totWgt).toLocaleString('en-PK', {minimumFractionDigits:2,maximumFractionDigits:2}) + '/kg' : 'Avg: N/A (no kg)');
     prodEl.innerHTML = displayRows.map((row, i) => {
       const rankCls = i === 0 ? 'r1' : (i === 1 ? 'r2' : (i === 2 ? 'r3' : ''));
       return '<div class="dash-list-item">' +
@@ -5877,7 +5904,8 @@ function openDashFullList(type) {
         totAmt += Number(r.amount) || 0;
       });
       const totMeta = (Math.round(totQty * 100) / 100) + ' qty · ' +
-        (Math.round(totWgt * 100) / 100) + ' kg';
+        (Math.round(totWgt * 100) / 100) + ' kg · ' +
+        (totWgt > 0 ? 'Avg: Rs ' + (totAmt / totWgt).toLocaleString('en-PK', {minimumFractionDigits:2,maximumFractionDigits:2}) + '/kg' : 'Avg: N/A (no kg)');
       html += '<div class="dash-list-total">' +
         '<div class="dash-total-label">Total</div>' +
         '<div class="dash-total-meta">' + totMeta + '</div>' +
