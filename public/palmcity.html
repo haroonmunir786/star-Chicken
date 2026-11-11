@@ -5604,14 +5604,17 @@ function scSquarifyTreemap(values,width,height){
   }
   function layout(row){
     const area=row.reduce((sum,item)=>sum+item.area,0);
+    // Squarify against the shortest side: when the chart is wide, allocate
+    // a full-height COLUMN; when tall, allocate a full-width ROW.
+    // The previous orientation was reversed, producing thin horizontal strips.
     if(w>=h){
-      const rh=Math.min(h,area/Math.max(w,0.0001));let xx=x;
-      row.forEach((item,i)=>{const rw=i===row.length-1?x+w-xx:item.area/Math.max(rh,0.0001);result[item.i]={x:xx,y,w:Math.max(0,rw),h:rh};xx+=rw;});
-      y+=rh;h=Math.max(0,h-rh);
-    }else{
       const rw=Math.min(w,area/Math.max(h,0.0001));let yy=y;
       row.forEach((item,i)=>{const rh=i===row.length-1?y+h-yy:item.area/Math.max(rw,0.0001);result[item.i]={x,y:yy,w:rw,h:Math.max(0,rh)};yy+=rh;});
       x+=rw;w=Math.max(0,w-rw);
+    }else{
+      const rh=Math.min(h,area/Math.max(w,0.0001));let xx=x;
+      row.forEach((item,i)=>{const rw=i===row.length-1?x+w-xx:item.area/Math.max(rh,0.0001);result[item.i]={x:xx,y,w:Math.max(0,rw),h:rh};xx+=rw;});
+      y+=rh;h=Math.max(0,h-rh);
     }
   }
   while(remaining.length){
