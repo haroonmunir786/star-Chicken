@@ -5212,82 +5212,84 @@ function renderDashboardStockByBranch() {
   const body=document.getElementById('dashStockBody');
   const note=document.getElementById('dashStockNote');
   const pill=document.getElementById('dashStockTotalPill');
-  if(!body) return;
-
-  const iso=(typeof getPakistanDateISO==='function') ? getPakistanDateISO() : new Date().toISOString().slice(0,10);
-  // Load Supabase stock without modifying cloud data or invoking inventory save.
-  if(!dashStockCloud.loading && (Date.now()-dashStockCloud.loadedAt>25000)) {
-    refreshDashboardStockState();
-  }
-  if(!dashStockCloud.state) {
-    body.innerHTML='<tr><td colspan="6"><div class="dash-empty">'+(dashStockCloud.error ? 'Stock data temporarily unavailable — try Refresh' : 'Loading latest stock records…')+'</div></td></tr>';
-    if(note) note.textContent=dashStockCloud.error || 'Reading shared Inventory Management records from Supabase…';
-    if(pill) pill.textContent='Loading stock';
+  if(!body)return;
+  const startInput=document.getElementById('dashBranchFrom')?.value || '';
+  const endInput=document.getElementById('dashBranchTo')?.value || '';
+  const today=(typeof getPakistanDateISO==='function')?getPakistanDateISO():new Date().toISOString().slice(0,10);
+  const start=startInput || '0000-01-01';
+  const end=endInput || today;
+  if(start>end){
+    body.innerHTML='<tr><td colspan="6"><div class="dash-empty">From Date must be before or equal to To Date.</div></td></tr>';
+    if(note)note.textContent='Please correct the Branch-wise Sales date range.';
+    if(pill)pill.textContent='Invalid dates';
     return;
   }
-
-  const stockDB=dashStockCloud.state.stockDB || {};
-  // Stock Management recognises Gajjumatta (two t); older POS data may use Gajjumata.
-  const keysForBranch=b=>[b, b==='Gajjumatta'?'Gajjumata':b];
+  if(!dashStockCloud.loading && Date.now()-dashStockCloud.loadedAt>25000)refreshDashboardStockState();
+  if(!dashStockCloud.state){
+    body.innerHTML='<tr><td colspan="6"><div class="dash-empty">'+(dashStockCloud.error?'Stock service temporarily unavailable':'Loading stock records…')+'</div></td></tr>';
+    if(note)note.textContent=dashStockCloud.error || 'Reading Inventory Management records from Supabase…';
+    if(pill)pill.textContent='Loading stock';
+    return;
+  }
+  const db=dashStockCloud.state.stockDB||{};
+  const norm=v=>String(v||'').toLowerCase().replace(/[^a-z0-9]/g,'');
   const n=v=>Number(v)||0;
   const f2=v=>Math.round(v*100)/100;
-  const norm=v=>String(v||'').toLowerCase().replace(/[^a-z0-9]/g,'');
   const indexByName=new Map(DASH_STOCK_PRODUCTS.map((it,i)=>[norm(it[0]),i]));
-  const soldByBranch={};
-  DASH_STOCK_BRANCHES.forEach(b=>{soldByBranch[b]=new Array(DASH_STOCK_PRODUCTS.length).fill(0)});
-
-  // Invoice Management uses exactly this product-date-branch rule to calculate Sale.
-  const invoiceRows=Array.isArray(allHistory)?allHistory:[];
-  const nameToBranch=new Map(DASH_STOCK_BRANCHES.map(b=>[norm(b),b]));
-  const legacyDate=value=>{
-    const raw=String(value||'').trim();
-    if(/^\d{4}-\d\d-\d\d/.test(raw))return raw.slice(0,10);
-    const short=raw.match(/^(?:(?:mon|tue|wed|thu|fri|sat|sun)\s+)?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s+(\d{1,2})(?:\s*,?\s*(\d{4}))?$/i);
-    if(!short)return '';
-    const month=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].indexOf(short[1].toLowerCase())+1;
-    return String(short[3]||'2026')+'-'+String(month).padStart(2,'0')+'-'+String(short[2]).padStart(2,'0');
-  };
-  invoiceRows.forEach(inv=>{
-    if(legacyDate(inv.date)!==iso)return;
-    const branch=nameToBranch.get(norm(inv.shopName));
-    if(!branch)return;
-    (inv.items||[]).forEach(it=>{
-      const name=it.name||it.productName||it.product||it.detail;
-      let idx=indexByName.get(norm(name));
-      // The POS and Inventory Management refer to this same stock product by different names.
-      if(idx===undefined && norm(name)==='btrimming')idx=indexByName.get('sbbtrimming');
-      if(idx===undefined)return;
-      const qty=Number(it.qty??it.quantity??0);
-      if(Number.isFinite(qty)&&qty>=0)soldByBranch[branch][idx]+=qty;
-    });
-  });
-
-  let withRecords=0, totalBal=0;
-  const rows=[...DASH_STOCK_BRANCHES,'Link Road'].map(b=>{
-    const source=keysForBranch(b).map(k=>stockDB[k]).find(v=>v && typeof v==='object') || {};
-    const dates=Object.keys(source).filter(d=>/^\d{4}-\d\d-\d\d$/.test(d)&&d<=iso).sort();
-    const savedToday=source[iso] && Array.isArray(source[iso].r) ? source[iso].r : null;
-    const before=dates.filter(d=>d<iso);
-    const prior=before.length ? source[before[before.length-1]].r : null;
-    const sales=soldByBranch[b] || [];
-    const known=!!savedToday || Array.isArray(prior);
-    if(!known)return {branch:b,open:null,sold:b==='Link Road'?null:f2(sales.reduce((a,c)=>a+c,0)),recv:null,ret:null,bal:null,day:null};
-    const len=Math.max(DASH_STOCK_PRODUCTS.length,savedToday?.length||0,prior?.length||0);
-    let opening=0,received=0,returned=0,sold=0;
-    for(let i=0;i<len;i++){
-      const old=Array.isArray(prior?.[i])?prior[i]:[];
-      const a=Array.isArray(savedToday?.[i])?savedToday[i]:[];
-      opening+=savedToday?n(a[0]):n(old[0])+n(old[1])-n(old[2])-n(old[3]);
-      if(savedToday) {received+=n(a[1]);returned+=n(a[3]);}
-      sold+=n(sales[i]);
+  const branchByName=new Map(DASH_STOCK_BRANCHES.map(b=>[norm(b),b]));
+  branchByName.set('gajjumata','Gajjumatta');
+  const sales={};
+  for(const b of DASH_STOCK_BRANCHES)sales[b]=new Array(DASH_STOCK_PRODUCTS.length).fill(0);
+  // The same invoice-date parser already used by Branch-wise Sales supports older invoices.
+  const eligible=filterListByDateInputs('dashBranchFrom','dashBranchTo').list;
+  for(const inv of eligible){
+    const branch=branchByName.get(norm(inv.shopName));
+    if(!branch)continue;
+    const parsed=parseInvDate(inv);
+    if(!parsed)continue;
+    const day=[parsed.getFullYear(),String(parsed.getMonth()+1).padStart(2,'0'),String(parsed.getDate()).padStart(2,'0')].join('-');
+    if(day<start||day>end)continue;
+    for(const item of inv.items||[]){
+      let idx=indexByName.get(norm(item.name||item.productName||item.product||item.detail));
+      if(idx===undefined&&norm(item.name||item.productName||item.product||item.detail)==='btrimming')idx=indexByName.get('sbbtrimming');
+      if(idx===undefined)continue;
+      const qty=Number(item.qty??item.quantity??0);
+      if(Number.isFinite(qty)&&qty>=0)sales[branch][idx]+=qty;
     }
-    const balance=opening+received-sold-returned;
-    withRecords++;totalBal+=balance;
-    return {branch:b,open:f2(opening),sold:f2(sold),recv:f2(received),ret:f2(returned),bal:f2(balance),day:savedToday?iso:(before.at(-1)||null)};
+  }
+  let counted=0,totalBalance=0,partial=0;
+  const rows=[...DASH_STOCK_BRANCHES,'Link Road'].map(branch=>{
+    const source=(branch==='Gajjumatta'?[db.Gajjumatta,db.Gajjumata]:[db[branch]]).find(x=>x&&typeof x==='object')||{};
+    const dates=Object.keys(source).filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d)&&d<=end&&Array.isArray(source[d]?.r)).sort();
+    const before=dates.filter(d=>d<start);
+    const within=dates.filter(d=>d>=start&&d<=end);
+    const totalSold=f2((sales[branch]||[]).reduce((a,v)=>a+v,0));
+    if(!dates.length)return {branch,open:null,sold:branch==='Link Road'?null:totalSold,recv:null,ret:null,bal:null};
+    // Start-of-period opening comes from the saved From-day sheet, or the last
+    // saved balance before the period. If only a later sheet exists, flag the
+    // estimate as partial instead of pretending to know the earlier opening.
+    const first=source[start]?.r && Array.isArray(source[start].r)?start:(before.at(-1)||within[0]);
+    const firstRows=source[first].r;
+    let opening=0;
+    for(const row of firstRows){
+      const a=Array.isArray(row)?row:[];
+      opening += first<start ? n(a[0])+n(a[1])-n(a[2])-n(a[3]):n(a[0]);
+    }
+    const missingOpening=first>start;
+    if(missingOpening)partial++;
+    let recv=0,ret=0;
+    for(const day of within){
+      for(const row of source[day].r){
+        const a=Array.isArray(row)?row:[];
+        recv+=n(a[1]);ret+=n(a[3]);
+      }
+    }
+    const balance=opening+recv-totalSold-ret;
+    if(!missingOpening){counted++;totalBalance+=balance;}
+    return {branch,open:missingOpening?null:f2(opening),sold:totalSold,recv:f2(recv),ret:f2(ret),bal:missingOpening?null:f2(balance)};
   });
-
   const fmt=(v,kind)=>{
-    if(v==null) return '<span class="ds-cell ds-muted">—</span>';
+    if(v==null)return '<span class="ds-cell ds-muted">—</span>';
     const cls=kind==='bal'?(v<=0?'ds-out':v<20?'ds-low':'ds-ok'):(v===0?'ds-muted':'ds-ok');
     return '<span class="ds-cell '+cls+'">'+v.toLocaleString('en-PK',{maximumFractionDigits:2})+'</span>';
   };
@@ -5299,8 +5301,9 @@ function renderDashboardStockByBranch() {
     tr.addEventListener('click',open);
     tr.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}});
   });
-  if(pill)pill.textContent=withRecords?f2(totalBal).toLocaleString('en-PK')+' pkts balance':'No saved stock history';
-  if(note)note.textContent='Stock as of '+iso+' · '+withRecords+' branches with stock history · Sale from POS invoices for this date · Opening from today’s sheet or prior saved closing · — means no stock history'+(dashStockCloud.error?' · Refresh failed: '+dashStockCloud.error:'');
+  const period=(startInput||'Beginning')+' → '+(endInput||today);
+  if(pill)pill.textContent=counted?f2(totalBalance).toLocaleString('en-PK')+' pkts balance':'No saved stock history';
+  if(note)note.textContent='Period: '+period+' · '+counted+' branches with reliable opening balances · Sold from invoices in this date range · Opening from saved stock sheet · Received/Returned from saved days'+(partial?' · '+partial+' branch(es) have no opening snapshot before From Date (partial opening)':'')+(dashStockCloud.error?' · Refresh error: '+dashStockCloud.error:'');
 }
 
 /** Open Stock Management app on the given branch sheet */
@@ -5727,6 +5730,7 @@ function syncDashDates(sourceId) {
   renderDashboardTopLists();
   renderDashboardCategory();
   renderDashTopTiles();
+  renderDashboardStockByBranch();
 }
 
 function clearAllDashDates() {
@@ -5738,6 +5742,7 @@ function clearAllDashDates() {
   renderDashboardTopLists();
   renderDashboardCategory();
   renderDashTopTiles();
+  renderDashboardStockByBranch();
 }
 
 function clearDashBranchDates() { clearAllDashDates(); }
