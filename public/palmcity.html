@@ -263,6 +263,20 @@ body {
   #productDropdown .item { border-right: none; }
 }
 
+/* Add Party Customer modal — stays within the existing POS design. */
+.party-add-button { margin-top:7px; width:100%; height:34px; font-size:.79rem; color:#B71C1C; border-style:dashed; }
+.add-party-dialog { position:fixed; inset:0; margin:auto; border:1px solid #E6D2B9; border-radius:16px; padding:20px; width:min(420px,calc(100vw - 28px)); max-height:calc(100vh - 28px); overflow-y:auto; background:#fff; color:#1C1C1E; box-shadow:0 14px 55px #0004; }
+.add-party-dialog::backdrop { background:rgba(0,0,0,.52); }
+.add-party-dialog form { display:flex; flex-direction:column; gap:8px; }
+.party-dialog-title { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+.party-dialog-title h3 { font-size:1.08rem; color:#C62828; }
+.party-dialog-close { border:0; border-radius:9px; background:#F2F2F7; font-size:24px; width:34px; height:34px; cursor:pointer; }
+.party-dialog-hint { margin:0 0 8px; color:#6B6B70; font-size:.82rem; }
+.add-party-dialog label { margin-top:8px; font-size:.72rem; font-weight:700; }
+.add-party-dialog input { width:100%; min-height:42px; border:1.5px solid #E5E5EA; border-radius:9px; padding:9px 12px; font:inherit; }
+.add-party-dialog input:focus { outline:2px solid #F9A825; }
+.party-dialog-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; flex-wrap:wrap; }
+
 /* Customer name autocomplete */
 .customer-wrap { position: relative; width: 100%; }
 #customerDropdown {
@@ -2215,6 +2229,7 @@ select[multiple] {
               <select id="shopName" onchange="markDirty(); updatePrintMeta()">
                 <option value="">— Select Party —</option>
               </select>
+              <button type="button" id="addPartyCustomerBtn" class="btn btn-ghost party-add-button" onclick="openAddPartyCustomerDialog()" style="display:none">＋ Add New Party Customer</button>
             </div>
             <div class="form-group">
               <label>Bill Prepared By</label>
@@ -2227,6 +2242,25 @@ select[multiple] {
           </div>
         </div>
       </div>
+
+      <!-- Add party customer (saved through the existing cloud Customer Details API) -->
+      <dialog id="addPartyCustomerDialog" class="add-party-dialog no-print" aria-labelledby="addPartyCustomerTitle" onclick="if(event.target===this)closeAddPartyCustomerDialog()">
+        <form id="addPartyCustomerForm" onsubmit="event.preventDefault(); saveNewPartyCustomer();">
+          <div class="party-dialog-title">
+            <h3 id="addPartyCustomerTitle">＋ Add Party Customer</h3>
+            <button type="button" class="party-dialog-close" onclick="closeAddPartyCustomerDialog()" aria-label="Close">×</button>
+          </div>
+          <p class="party-dialog-hint">Add a party to the shared dropdown for all Star Chicken users.</p>
+          <label for="newPartyCustomerName">Party Customer Name *</label>
+          <input id="newPartyCustomerName" type="text" maxlength="100" required autocomplete="off" placeholder="Enter new party name">
+          <label for="newPartyCustomerPhone">Phone (optional)</label>
+          <input id="newPartyCustomerPhone" type="tel" maxlength="40" autocomplete="off" placeholder="03xx-xxxxxxx">
+          <div class="party-dialog-actions">
+            <button type="button" class="btn btn-ghost" onclick="closeAddPartyCustomerDialog()">Cancel</button>
+            <button id="saveNewPartyCustomerBtn" type="submit" class="btn btn-primary">Save &amp; Select Party</button>
+          </div>
+        </form>
+      </dialog>
 
       <!-- Add Products -->
       <div class="card">
@@ -3306,6 +3340,86 @@ const PARTY_CUSTOMERS = [
   'Yum DHA',
   'YUM Gulberg'
 ];
+/* New parties use the existing Supabase customer records; no new database table.
+   Only records bearing this exact marker are included as added party customers. */
+const SC_PARTY_CUSTOMER_MARKER = 'Star Chicken POS Party Customer';
+function allPartyCustomerNames() {
+  const names = PARTY_CUSTOMERS.slice();
+  const known = new Set(names.map(n => n.trim().toLocaleLowerCase('en')));
+  const extra = (typeof loadCustomers === 'function' ? loadCustomers() : [])
+    .filter(c => String(c.remarks || '').trim() === SC_PARTY_CUSTOMER_MARKER)
+    .map(c => String(c.name || '').trim()).filter(Boolean)
+    .sort((a,b) => a.localeCompare(b));
+  for (const name of extra) {
+    const key = name.toLocaleLowerCase('en');
+    if (!known.has(key)) { names.push(name); known.add(key); }
+  }
+  return names;
+}
+function refreshPartyCustomerOptions() {
+  // Preserve the current party and report-filter selections as lists expand.
+  if (document.getElementById('partyType')) onPartyTypeChange();
+  for (const screen of ['ps','sale','ai','hist','dash']) {
+    const id = {ps:'psShop',sale:'saleShop',ai:'aiShop',hist:'historyShopFilter',dash:'dashPCBranch'}[screen];
+    const el = document.getElementById(id);
+    if (el) fillSelectOptions(el, namesForMode(partyFilters[screen]), screen==='ai'?null:'All Parties', screen==='ai');
+  }
+}
+function openAddPartyCustomerDialog() {
+  if (document.getElementById('partyType')?.value !== 'party') return;
+  const dlg = document.getElementById('addPartyCustomerDialog');
+  if (!dlg) return;
+  document.getElementById('addPartyCustomerForm')?.reset();
+  if (!dlg.open) dlg.showModal();
+  setTimeout(() => document.getElementById('newPartyCustomerName')?.focus(), 0);
+}
+function closeAddPartyCustomerDialog() {
+  const dlg = document.getElementById('addPartyCustomerDialog');
+  if (dlg?.open) dlg.close();
+}
+async function saveNewPartyCustomer() {
+  const name = String(document.getElementById('newPartyCustomerName')?.value || '').replace(/\s+/g,' ').trim();
+  const phone = String(document.getElementById('newPartyCustomerPhone')?.value || '').trim();
+  if (!name || name.length > 100) { toast('Enter a party name (up to 100 characters)', 'error'); return; }
+  const normalized = name.toLocaleLowerCase('en');
+  if (STAR_BRANCHES.some(n => n.toLocaleLowerCase('en')===normalized)) {
+    toast('This name belongs to a Star Chicken branch', 'error'); return;
+  }
+  const btn = document.getElementById('saveNewPartyCustomerBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    // Refresh before checking to avoid duplicates created from another phone.
+    await refreshCustomersFromServer();
+    const found = allPartyCustomerNames().find(n => n.toLocaleLowerCase('en') === normalized);
+    if (found) {
+      refreshPartyCustomerOptions();
+      document.getElementById('shopName').value = found;
+      markDirty(); updatePrintMeta(); closeAddPartyCustomerDialog();
+      toast('Party already exists — selected from the list', 'success');
+      return;
+    }
+    const body = {id:uidCust(),name,phone,address:'',remarks:SC_PARTY_CUSTOMER_MARKER};
+    const r = await fetch('/api/customers', {
+      method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
+    });
+    const result = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(result.error || 'Unable to save party customer');
+    await refreshCustomersFromServer();
+    refreshPartyCustomerOptions();
+    const partyType = document.getElementById('partyType');
+    if (partyType) partyType.value = 'party';
+    onPartyTypeChange();
+    document.getElementById('shopName').value = name;
+    markDirty(); updatePrintMeta(); closeAddPartyCustomerDialog();
+    toast('Party customer added and selected', 'success');
+  } catch(e) {
+    console.error('Add party customer failed:',e);
+    toast(e.message || 'Could not save party customer', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Save & Select Party'; }
+  }
+}
+
 /** Per-screen party filter: 'star' | 'party' | 'all' */
 const partyFilters = { dash: 'star', ps: 'star', sale: 'star', ai: 'star', hist: 'all' };
 
@@ -3313,7 +3427,7 @@ function getInvoicePartyType(inv) {
   if (!inv) return 'star';
   if (inv.partyType === 'party' || inv.partyType === 'star') return inv.partyType;
   const name = (inv.shopName || '').trim();
-  if (PARTY_CUSTOMERS.some(p => p.toLowerCase() === name.toLowerCase())) return 'party';
+  if (allPartyCustomerNames().some(p => p.toLowerCase() === name.toLowerCase())) return 'party';
   return 'star';
 }
 function filterByPartyMode(list, mode) {
@@ -3321,9 +3435,9 @@ function filterByPartyMode(list, mode) {
   return (list || []).filter(inv => getInvoicePartyType(inv) === mode);
 }
 function namesForMode(mode) {
-  if (mode === 'party') return PARTY_CUSTOMERS.slice();
+  if (mode === 'party') return allPartyCustomerNames();
   if (mode === 'star') return STAR_BRANCHES.slice();
-  return STAR_BRANCHES.concat(PARTY_CUSTOMERS);
+  return STAR_BRANCHES.concat(allPartyCustomerNames());
 }
 function fillSelectOptions(sel, names, blankLabel, multi) {
   if (!sel) return;
@@ -3356,8 +3470,10 @@ function fillSelectOptions(sel, names, blankLabel, multi) {
 }
 function onPartyTypeChange() {
   const type = (document.getElementById('partyType') && document.getElementById('partyType').value) || 'star';
-  const names = type === 'party' ? PARTY_CUSTOMERS : STAR_BRANCHES;
+  const names = type === 'party' ? allPartyCustomerNames() : STAR_BRANCHES;
   fillSelectOptions(document.getElementById('shopName'), names, '— Select Party —', false);
+  const addBtn = document.getElementById('addPartyCustomerBtn');
+  if (addBtn) addBtn.style.display = type === 'party' ? 'inline-flex' : 'none';
 }
 function setPartyFilter(screen, mode) {
   partyFilters[screen] = mode;
@@ -6609,6 +6725,7 @@ async function refreshCustomersFromServer() {
     }
     const rows = await response.json();
     customerCache = Array.isArray(rows) ? rows : [];
+    refreshPartyCustomerOptions();
     return customerCache;
   })();
   try {
