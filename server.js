@@ -390,6 +390,35 @@ app.post('/api/shop-orders',auth,async(req,res)=>{
     await writeAudit(client,req,'shop.order.created',null,number,{branch,items:clean.length});await client.query('commit');res.status(201).json(scOrderPublic(inserted.rows[0]));
   }catch(e){await client.query('rollback').catch(()=>{});console.error('Order create failed',e);res.status(503).json({error:'Could not save order to Supabase'});}finally{client.release();}
 });
+/* Admin-only order cleanup. Stock sheets and invoice records are NEVER changed. */
+app.delete('/api/shop-orders/:id',auth,adminOnly,async(req,res)=>{
+  const id=String(req.params.id||'');
+  const confirmation=String(req.body?.confirmOrderNo||'').trim();
+  const reason=String(req.body?.reason||'').trim();
+  if(!/^[0-9a-f-]{36}$/i.test(id))return res.status(400).json({error:'Invalid order ID'});
+  if(reason.length<8||reason.length>300)return res.status(400).json({error:'Enter a reason of at least 8 characters'});
+  const client=await pool.connect();
+  try{
+    await client.query('begin');
+    const result=await client.query('select * from public.sc_shop_orders where id=$1 for update',[id]);
+    if(!result.rowCount){await client.query('rollback');return res.status(404).json({error:'Order not found. Refresh Orders.'});}
+    const order=result.rows[0];
+    if(confirmation!==order.order_no){await client.query('rollback');return res.status(400).json({error:'Confirmation must exactly match the order number'});}
+    // An audit snapshot protects traceability of the removed order and its allocation.
+    await writeAudit(client,req,'shop.order.admin_deleted',null,order.order_no,{
+      reason,branch:order.branch,orderDate:order.order_date,
+      deliveryDate:order.delivery_date,status:order.status,
+      items:order.items,receipts:order.receipts,
+      createdBy:order.created_by,completedBy:order.completed_by,
+      stockUnchanged:true
+    });
+    await client.query('delete from public.sc_shop_orders where id=$1',[id]);
+    await client.query('commit');
+    res.json({ok:true,orderNo:order.order_no,stockUnchanged:true});
+  }catch(e){try{await client.query('rollback')}catch(_){}console.error('Admin order deletion failed',e);res.status(503).json({error:'Order not deleted. Check Activity Log and server logs.'});}
+  finally{client.release();}
+});
+
 // Preview reads the SAME daily receipt columns in Inventory Management; it never changes stock.
 async function scOrderPreview(db,order,deliveryDate){
   const stock=await db.query('select state from public.stock_app_state where id=1');
