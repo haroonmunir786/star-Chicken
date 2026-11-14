@@ -362,6 +362,74 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
+
+/* ---------- Shop orders: read-only inventory reconciliation (never changes stock) ---------- */
+const SC_ORDER_BRANCHES=['Hatchery','Kasur','Gajjumatta','Mustafabad','Gulshan Ravi','Murghzar'];
+const SC_ORDER_ITEMS=[["SBB Trimming", 2], ["SBB Slice", 2], ["Skinless Breast", 1], ["Boneless Handi", 1], ["Boneless Breast", 2], ["Breast RS", 2], ["Breast Yum", 2], ["Premium Mince", 1], ["Zinger CP S/O", 2], ["Zinger CP S/L", 2], ["Zinger S/L JC/RS", 2], ["Drumstick S/O", 1], ["Drumstick S/L", 1], ["Karahi Cut", 1], ["2 Pcs Cut/Combo Cut", 1], ["Whole Bird S/O", 1], ["Whole Bird S/L", 1], ["Inner Fillet", 2], ["Thigh Trimming", 2], ["Trimming Bone", 2], ["Whole Leg", 2], ["Drummet A", 2], ["Drummet B", 2], ["Niblet A", 2], ["Niblet B", 2], ["Wing Tip", 2], ["3 Joint Wings", 2], ["2 Joint Wings S/O", 2], ["2 Joint Wings S/L", 1], ["D Trimming", 2], ["Neck", 1], ["Carcass", 4], ["Skin", 2], ["Tail", 2], ["Heart", 1], ["Liver", 1], ["Gizzard", 1], ["Shanks", 1], ["MDM Mince", 1], ["Marinated ButterFly JC", 2], ["Marinated ButterFly LC", 2], ["Marinated Niblet 1kg", 1], ["Marinated Niblet", 2], ["Marinated Drummet 1kg", 1], ["Marinated Drummet", 2], ["Marinated 5 cut", 2], ["Injected Chicken Pieces", 3.5], ["Marinated Zinger CP", 2], ["Marinated Zinger SBL", 2], ["Marinated Zinger S/O", 2], ["Marinated Zinger S/L", 2], ["Marinated Drumstick", 1], ["Marinated Strips", 1], ["Marinated Strips 2kg", 2], ["Marinated Crispy", 1], ["Kebab", 0.5], ["Nuggets", 1], ["Chicken Fries", 1], ["Burger Patty 12 Pcs", 0.96], ["Burger Patty 8 Pcs", 0.48], ["Chicken Samosa 12 pcs", 0.3], ["Chicken Samosa 24 pcs", 0.6], ["Fried Samosa", 0.5], ["Fried Spring Roll", 0.5], ["Chicken Roll 12 pcs", 0.42], ["Chicken Roll 24 pcs", 0.84], ["Breading Flour", 1], ["Chapli Kabab", 1], ["Chicken Kofta", 0.8], ["Pizza Topping Tikka", 1], ["Pizza Topping Fajita", 1]];
+const scOrderMoney=n=>Math.round(Number(n||0)*100)/100;
+const scOrderDateValid=s=>typeof s==='string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s+'T00:00:00Z')) && new Date(s+'T00:00:00Z').toISOString().slice(0,10)===s;
+function scOrderPublic(row){const dt=x=>x instanceof Date?x.toISOString().slice(0,10):String(x).slice(0,10);return {id:row.id,orderNo:row.order_no,branch:row.branch,orderDate:dt(row.order_date),expectedDate:dt(row.expected_date),deliveryDate:row.delivery_date?dt(row.delivery_date):null,status:row.status,items:row.items,receipts:row.receipts||[],notes:row.notes||'',createdBy:row.created_by,completedBy:row.completed_by||'',createdAt:row.created_at,completedAt:row.completed_at};}
+app.get('/api/shop-orders/catalog',auth,(req,res)=>{if(!readRoleIdentity(req))return res.status(403).json({error:'POS Staff or Admin login required'});res.json({branches:SC_ORDER_BRANCHES,items:SC_ORDER_ITEMS});});
+app.get('/api/shop-orders',auth,async(req,res)=>{
+  if(!readRoleIdentity(req))return res.status(403).json({error:'POS Staff or Admin login required'});
+  try{const r=await pool.query('select * from public.sc_shop_orders order by created_at desc limit 2000');res.set('Cache-Control','no-store');res.json(r.rows.map(scOrderPublic));}
+  catch(e){console.error('Shop order listing failed',e);res.status(503).json({error:'Order tables unavailable. Run shop_orders.sql first.'});}
+});
+app.post('/api/shop-orders',auth,async(req,res)=>{
+  if(!readRoleIdentity(req))return res.status(403).json({error:'POS Staff or Admin login required'});
+  const x=req.body||{},branch=String(x.branch||''),day=String(x.orderDate||''),expected=String(x.expectedDate||''),notes=String(x.notes||'').trim();
+  if(!SC_ORDER_BRANCHES.includes(branch)||!scOrderDateValid(day)||!scOrderDateValid(expected)||notes.length>400)return res.status(400).json({error:'Choose a valid branch and dates'});
+  const input=Array.isArray(x.items)?x.items:[];
+  if(!input.length||input.length>SC_ORDER_ITEMS.length)return res.status(400).json({error:'Add products to the order'});
+  const used=new Set(),clean=[];
+  for(const it of input){const i=Number(it.index),q=Number(it.qty);if(!Number.isInteger(i)||i<0||i>=SC_ORDER_ITEMS.length||used.has(i)||!Number.isFinite(q)||q<=0||q>100000||Math.round(q*1000)!==q*1000)return res.status(400).json({error:'Invalid product or packet quantity'});used.add(i);clean.push({index:i,name:SC_ORDER_ITEMS[i][0],kgPerPacket:SC_ORDER_ITEMS[i][1],qty:q});}
+  const by=auditIdentity(req).id;
+  const client=await pool.connect();
+  try{await client.query('begin');const counter=await client.query("select nextval('public.sc_shop_order_numbers') as n");const number='ORD-'+String(counter.rows[0].n).padStart(6,'0');
+    const inserted=await client.query('insert into public.sc_shop_orders(order_no,branch,order_date,expected_date,items,notes,created_by) values($1,$2,$3,$4,$5::jsonb,$6,$7) returning *',[number,branch,day,expected,JSON.stringify(clean),notes,by]);
+    await writeAudit(client,req,'shop.order.created',null,number,{branch,items:clean.length});await client.query('commit');res.status(201).json(scOrderPublic(inserted.rows[0]));
+  }catch(e){await client.query('rollback').catch(()=>{});console.error('Order create failed',e);res.status(503).json({error:'Could not save order to Supabase'});}finally{client.release();}
+});
+// Preview reads the SAME daily receipt columns in Inventory Management; it never changes stock.
+async function scOrderPreview(db,order,deliveryDate){
+  const stock=await db.query('select state from public.stock_app_state where id=1');
+  const state=stock.rows[0]?.state||{},daily=state.stockDB?.[order.branch]?.[deliveryDate];
+  if(!daily||!Array.isArray(daily.r))return {available:false,error:'There is no SAVED Inventory Management stock sheet for this branch and delivery date. Save Received quantities in Inventory first.'};
+  const consumed=await db.query("select receipts from public.sc_shop_orders where branch=$1 and status='completed' and delivery_date=$2 and id<>$3",[order.branch,deliveryDate,order.id]);
+  const byItem=new Map();for(const row of consumed.rows)for(const rec of(row.receipts||[])){const k=Number(rec.index);byItem.set(k,scOrderMoney((byItem.get(k)||0)+Number(rec.qty||0)));}
+  const summary=[];
+  for(const item of order.items){const i=item.index,qty=Number(item.qty),available=scOrderMoney(Math.max(0,Number(daily.r[i]?.[1]||0)-(byItem.get(i)||0)));
+    // A dated stock sheet may contain receipts from unrelated orders; allocation is selected by shopman.
+    summary.push({index:i,name:item.name,ordered:qty,receivedAvailable:available,kgPerPacket:item.kgPerPacket});}
+  return {available:true,products:summary,deliveryDate,branch:order.branch};
+}
+app.get('/api/shop-orders/:id/receipt-preview',auth,async(req,res)=>{
+  if(!readRoleIdentity(req))return res.status(403).json({error:'POS Staff or Admin login required'});
+  const day=String(req.query.deliveryDate||'');if(!scOrderDateValid(day))return res.status(400).json({error:'Invalid delivery date'});
+  try{const r=await pool.query('select * from public.sc_shop_orders where id=$1',[req.params.id]);if(!r.rowCount)return res.status(404).json({error:'Order not found'});if(r.rows[0].status!=='open')return res.status(409).json({error:'Order already completed'});res.json(await scOrderPreview(pool,r.rows[0],day));}
+  catch(e){console.error('Receipt preview failed',e);res.status(503).json({error:'Could not load saved stock receipts'});}
+});
+app.post('/api/shop-orders/:id/complete',auth,async(req,res)=>{
+  if(!readRoleIdentity(req))return res.status(403).json({error:'POS Staff or Admin login required'});
+  const deliveryDate=String(req.body?.deliveryDate||'');if(!scOrderDateValid(deliveryDate))return res.status(400).json({error:'Enter valid delivery date'});
+  const selected=Array.isArray(req.body?.received)?req.body.received:null;
+  if(!selected)return res.status(400).json({error:'Enter received quantities'});
+  const client=await pool.connect();
+  try{await client.query('begin');const r=await client.query('select * from public.sc_shop_orders where id=$1 for update',[req.params.id]);
+    if(!r.rowCount){await client.query('rollback');return res.status(404).json({error:'Order not found'});}
+    const order=r.rows[0];if(order.status!=='open'){await client.query('rollback');return res.status(409).json({error:'This order has already been completed'});}
+    // Serializes stock allocation by branch+delivery date across different orders.
+    await client.query('select pg_advisory_xact_lock(hashtext($1))',[`sc-order:${order.branch}:${deliveryDate}`]);
+    const preview=await scOrderPreview(client,order,deliveryDate);if(!preview.available){await client.query('rollback');return res.status(409).json({error:preview.error});}
+    const requested=new Map();for(const x of selected){const i=Number(x.index),qty=Number(x.qty);if(!Number.isInteger(i)||requested.has(i)||!Number.isFinite(qty)||qty<0||qty>100000||Math.round(qty*1000)!==qty*1000){await client.query('rollback');return res.status(400).json({error:'Invalid received quantities'});}requested.set(i,qty);}
+    if(requested.size!==order.items.length||order.items.some(it=>!requested.has(it.index))){await client.query('rollback');return res.status(400).json({error:'Submit all order products, including zero received quantities'});}
+    const receipts=[];for(const p of preview.products){const qty=requested.get(p.index);if(qty>p.receivedAvailable+0.0001){await client.query('rollback');return res.status(409).json({error:p.name+': received quantity exceeds available unallocated stock-sheet receipts. Refresh and check Inventory Management.'});}receipts.push({index:p.index,qty,deliveryDate});}
+    const completedBy=auditIdentity(req).id;
+    const changed=await client.query("update public.sc_shop_orders set status='completed',delivery_date=$2,receipts=$3::jsonb,completed_at=now(),completed_by=$4 where id=$1 returning *",[order.id,deliveryDate,JSON.stringify(receipts),completedBy]);
+    await writeAudit(client,req,'shop.order.completed',null,order.order_no,{branch:order.branch,deliveryDate,receipts});await client.query('commit');res.json(scOrderPublic(changed.rows[0]));
+  }catch(e){await client.query('rollback').catch(()=>{});console.error('Completing order failed',e);res.status(503).json({error:'Could not complete order. No changes saved.'});}finally{client.release();}
+});
+
 /* ---------- Shared Ordering System API ---------- */
 /*
   The ordering app has its own single JSON state row in a separate table.

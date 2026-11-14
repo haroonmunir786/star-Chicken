@@ -4413,7 +4413,7 @@ async function saveInvoice() {
     } else {
       toast('Invoice ' + (saved.invoiceNo || inv.invoiceNo) + ' saved!', 'success');
     }
-    if (window.innerWidth <= 768) toggleSidebar();
+    // Stay on the saved invoice on phones; history opens only when requested from Menu.
   } catch (e) {
     toast('Could not save. Try again.', 'error');
   }
