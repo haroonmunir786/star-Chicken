@@ -1866,6 +1866,13 @@ select[multiple] {
 @media (max-width: 560px) { .sc-target-head { font-size: .7rem; } .sc-target-ratio { font-size: .72rem; } }
 @media (prefers-reduced-motion: reduce) { .sc-target-fill { transition: none; } }
 
+@media print {
+  body.sc-invoice-print-blocked .app-shell { display:none !important; }
+  body.sc-invoice-print-blocked::after {
+    content:"INVOICE NOT SAVED - Save to cloud before printing.";
+    display:block; padding:20px; font-size:16px; color:#000;
+  }
+}
 </style>
 <style>
 /* Desktop Admin: persistent sidebar and dashboard sharing the screen. */
@@ -2530,11 +2537,11 @@ select[multiple] {
 
             <div class="actions no-print">
       <button class="btn btn-ghost" onclick="newInvoice()">🆕 New</button>
-      <button class="btn btn-success" onclick="saveInvoice()">💾 Save</button>
+      <button class="btn btn-success" id="scInvoiceSaveBtn" onclick="saveInvoice()">💾 Save</button>
       <button class="btn btn-danger" id="deleteInvoiceBtn" style="height:40px;padding:0 16px;font-size:0.85rem;display:none;" onclick="deleteCurrentInvoice()">🗑 Delete Invoice</button>
-      <button class="btn btn-primary" onclick="shareToWhatsApp()">📷 WhatsApp</button>
-      <button class="btn btn-ghost" onclick="saveAsPNG()">🖼 Save PNG</button>
-      <button class="btn btn-gold" onclick="openSharePrintMenu()">⋯ Share / Print</button>
+      <button class="btn btn-primary sc-saved-invoice-action" onclick="shareToWhatsApp()" style="display:none">📷 WhatsApp</button>
+      <button class="btn btn-ghost sc-saved-invoice-action" onclick="saveAsPNG()" style="display:none">🖼 Save PNG</button>
+      <button class="btn btn-gold sc-saved-invoice-action" onclick="openSharePrintMenu()" style="display:none">⋯ Share / Print</button>
       <input type="file" id="importFile" accept=".json,application/json" style="display:none" onchange="importInvoice(event)">
     </div>
 
@@ -2575,7 +2582,7 @@ select[multiple] {
           <span class="as-text"><strong>Tap here if Bluetooth Print did not open</strong>
           <small>Direct Android app link (valid for 3 minutes)</small></span>
         </a>
-        <button class="action-sheet-btn" onclick="closeSharePrintMenu(); window.print()">
+        <button class="action-sheet-btn" onclick="closeSharePrintMenu(); printSavedInvoice()">
           <span class="as-icon">🖨</span>
           <span class="as-text">
             <strong>Print</strong>
@@ -3987,6 +3994,50 @@ let items = [];
 let invoiceCounter = getCounter();
 let currentId = null; // null = new draft
 let isDirty = false;
+// Invoice actions unlock only after a verified cloud save. This flag is client-side
+// UI protection; Bluetooth printing also enforces the saved invoice on the server.
+let scCloudVerifiedInvoiceId = null;
+function scInvoiceCanShare() {
+  return !!(currentId && scCloudVerifiedInvoiceId === currentId && !isDirty && cloudOnline);
+}
+function scRequireSavedInvoice() {
+  if (scInvoiceCanShare()) return true;
+  toast('Save the invoice to the cloud before sharing, downloading or printing.', 'error');
+  return false;
+}
+async function scVerifyLoadedCloudInvoice(id) {
+  scCloudVerifiedInvoiceId = null;
+  updateStatus();
+  if (!id || !cloudOnline) return;
+  try {
+    const saved = await cloudFetch('/api/invoices/' + encodeURIComponent(id));
+    if (currentId === id && !isDirty && saved && saved.id === id) {
+      scCloudVerifiedInvoiceId = id;
+      updateStatus();
+    }
+  } catch (error) {
+    console.warn('Saved invoice could not be verified for sharing', error);
+  }
+}
+function printSavedInvoice() {
+  if (!scRequireSavedInvoice()) return;
+  window.print();
+}
+// Block keyboard print of an unsaved invoice; do not interfere with other views.
+window.addEventListener('beforeprint', function() {
+  document.body.classList.toggle('sc-invoice-print-blocked', !scInvoiceCanShare() &&
+    !document.querySelector('.dash-overlay.show, .hist-overlay.show, .sales-overlay.show'));
+});
+window.addEventListener('afterprint', function() {
+  document.body.classList.remove('sc-invoice-print-blocked');
+});
+document.addEventListener('keydown', function(e) {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p' &&
+      !scInvoiceCanShare() && !document.querySelector('.dash-overlay.show, .hist-overlay.show, .sales-overlay.show')) {
+    e.preventDefault();
+    scRequireSavedInvoice();
+  }
+});
 let editingIndex = -1;
 let activeIdx = -1;
 let allHistory = [];
@@ -4337,6 +4388,7 @@ async function saveInvoice() {
   try {
     const saved = await putInvoice(inv);
     currentId = saved.id;
+    scCloudVerifiedInvoiceId = cloudOnline ? saved.id : null;
     // The server (when online) is the source of truth for the invoice number —
     // it may differ from what was previewed if another device saved in between.
     if (saved.invoiceNo) {
@@ -4376,6 +4428,7 @@ async function loadInvoice(id) {
   if (!inv) return;
 
   currentId = inv.id;
+  scCloudVerifiedInvoiceId = null;
   isDirty = false;
   items = inv.items || [];
   editingIndex = -1;
@@ -4414,6 +4467,7 @@ async function loadInvoice(id) {
     document.getElementById('sidebar').classList.remove('open');
     document.getElementById('sidebarOverlay').classList.remove('show');
   }
+  scVerifyLoadedCloudInvoice(inv.id);
   toast('Loaded ' + inv.invoiceNo, 'success');
 }
 
@@ -4463,6 +4517,7 @@ function newInvoice(skipConfirm) {
   if (!skipConfirm && isDirty && items.length && !confirm('Start a new invoice? Unsaved changes will be lost.')) return;
   items = [];
   currentId = null;
+  scCloudVerifiedInvoiceId = null;
   isDirty = false;
   editingIndex = -1;
   refreshInvoiceNoDisplay();
@@ -4489,6 +4544,16 @@ function markDirty() {
 }
 
 function updateStatus() {
+  // No share, image export, or printing of unsaved/modified invoices.
+  const canShare = scInvoiceCanShare();
+  // Hide Save once this exact invoice has been successfully saved and verified.
+  // It reappears for a new draft or if an Admin changes a saved invoice.
+  const saveBtn = document.getElementById('scInvoiceSaveBtn');
+  if (saveBtn) saveBtn.style.display = canShare ? 'none' : 'inline-flex';
+  document.querySelectorAll('.sc-saved-invoice-action').forEach(btn => {
+    btn.style.display = canShare ? 'inline-flex' : 'none';
+  });
+  if (!canShare) closeSharePrintMenu();
   const badge = document.getElementById('statusBadge');
   const delBtn = document.getElementById('deleteInvoiceBtn');
   if (delBtn) delBtn.style.display = currentId ? 'inline-flex' : 'none';
@@ -5036,6 +5101,7 @@ window.addEventListener('beforeunload', e => {
 const WA_NUMBER = '923274474414';
 
 async function shareToWhatsApp() {
+  if (!scRequireSavedInvoice()) return;
   if (!items.length) {
     toast('Add products first, then share.', 'error');
     return;
@@ -7180,6 +7246,7 @@ document.addEventListener('keydown', function(e) {
    The Android app fetches a 3-minute signed URL; no POS cookies are shared. */
 let scBluetoothPrintPending = false;
 async function printInvoiceBluetooth() {
+  if (!scRequireSavedInvoice()) return;
   if (scBluetoothPrintPending) return;
   if (!currentRole) { toast('Please log in to POS before printing.', 'error'); return; }
   if (!currentId || isDirty) {
@@ -7219,6 +7286,7 @@ async function printInvoiceBluetooth() {
 }
 
 function openSharePrintMenu() {
+  if (!scRequireSavedInvoice()) return;
   document.getElementById('sharePrintOverlay').classList.add('show');
 }
 function closeSharePrintMenu() {
@@ -7231,6 +7299,7 @@ document.addEventListener('keydown', function(e) {
 
 /* ══════════ DOWNLOAD EXCEL (CSV) ══════════ */
 function downloadInvoiceExcel() {
+  if (!scRequireSavedInvoice()) return;
   if (!items.length) {
     toast('Add products first, then download.', 'error');
     return;
@@ -7295,6 +7364,7 @@ function downloadInvoiceExcel() {
 
 /* ══════════ SAVE PNG ══════════ */
 async function saveAsPNG() {
+  if (!scRequireSavedInvoice()) return;
   if (!items.length) {
     toast('Add products first, then save.', 'error');
     return;
@@ -7359,6 +7429,7 @@ function downloadBlob(blob, fileName) {
 }
 
 async function shareForEdit() {
+  if (!scRequireSavedInvoice()) return;
   if (!items.length) {
     toast('Add products first, then share.', 'error');
     return;
