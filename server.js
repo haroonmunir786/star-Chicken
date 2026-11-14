@@ -535,6 +535,163 @@ app.post('/api/credit/invoices/:id/void',auth,adminOnly,async(req,res)=>{
   finally{client.release();}
 });
 
+
+/* ---------- One-time Admin cleanup for TWO explicitly identified test invoices ----------
+   No changes happen on deployment or preview. This route is deliberately restricted
+   to SC-PC-2400 and SC-PC-2402, their exact customer names, original amounts,
+   and exact later-payment patterns observed in the test screenshots.
+   Cleaned records disappear from active POS and credit ledger; invoice counter is
+   never changed and the cleanup is recorded in the existing Admin activity log.
+   REMOVE THIS ENTIRE BLOCK after the one-time cleanup is finished.
+*/
+const approvedTestCreditCleanup = Object.freeze({
+  'SC-PC-2400': Object.freeze({customer:'K & K Biryani and Fast Food', total:6000, atSale:0, later:[6000]}),
+  'SC-PC-2402': Object.freeze({customer:'Liaqat Ali', total:5000, atSale:1000, later:[2000,2000]})
+});
+const testCreditMoney = v => Math.round(Number(v)*100);
+async function inspectApprovedTestCredit(client, invoiceNo) {
+  const spec=approvedTestCreditCleanup[invoiceNo];
+  if(!spec)return {safe:false,reason:'This invoice is not on the two-invoice cleanup allowlist.'};
+  // The same advisory lock used for credit-payment collection protects the
+  // customer against simultaneous payment/void requests during cleanup.
+  await client.query('select pg_advisory_xact_lock(hashtext(lower($1)))',[spec.customer]);
+  const invoices=await client.query(`select i.id,i.invoice_no,i.invoice_date,i.customer_name,i.shop_name,
+      i.grand_total,i.amount_paid,c.invoice_id,c.invoice_no as credit_no,
+      c.customer_name as credit_customer,c.grand_total as credit_total,
+      c.amount_paid as credit_paid,c.outstanding_at_sale
+    from public.invoices i join public.sc_credit_invoices c on c.invoice_id=i.id
+    where i.invoice_no=$1 for update of i,c`,[invoiceNo]);
+  if(invoices.rowCount!==1)return {safe:false,reason:'Matching original POS invoice and credit entry were not both found.'};
+  const r=invoices.rows[0];
+  const exact=(a,b)=>String(a).trim()===b;
+  if(!exact(r.invoice_no,invoiceNo)||!exact(r.credit_no,invoiceNo)||
+     !exact(r.credit_customer,spec.customer)||!exact(r.shop_name,spec.customer)||
+     testCreditMoney(r.grand_total)!==testCreditMoney(spec.total)||
+     testCreditMoney(r.credit_total)!==testCreditMoney(spec.total)||
+     testCreditMoney(r.amount_paid)!==testCreditMoney(spec.atSale)||
+     testCreditMoney(r.credit_paid)!==testCreditMoney(spec.atSale)||
+     testCreditMoney(r.outstanding_at_sale)!==testCreditMoney(spec.total-spec.atSale))
+    return {safe:false,reason:'Invoice or credit amounts/customer differ from the approved test data.'};
+  // The screenshots show these invoices created on 14 November 2026. This
+  // extra condition prevents an accidental match to a different invoice.
+  const date= r.invoice_date instanceof Date ? r.invoice_date.toISOString().slice(0,10):String(r.invoice_date).slice(0,10);
+  if(date!=='2026-11-14')return {safe:false,reason:'Invoice date is not the expected test date.'};
+  // Prevent deletion when any other real credit invoice uses this customer's
+  // name, since later payments are stored at customer-account level.
+  const other=await client.query(`select count(*)::int as count from public.sc_credit_invoices
+    where lower(trim(customer_name))=lower(trim($1)) and invoice_id<>$2`,[spec.customer,r.id]);
+  if(Number(other.rows[0].count)!==0)return {safe:false,reason:'Another credit invoice exists for this customer. No cleanup permitted.'};
+  const voids=await client.query('select 1 from public.sc_credit_voids where invoice_id=$1',[r.id]);
+  if(voids.rowCount)return {safe:false,reason:'Invoice has already been voided. No automatic cleanup permitted.'};
+  // Lock precisely the customer's payment rows. Guard count, method, and
+  // amount: don't touch a payment if it may belong to real business.
+  const payments=await client.query(`select id,amount,method,created_at from public.sc_credit_payments
+    where lower(trim(customer_name))=lower(trim($1)) for update`,[spec.customer]);
+  const actual=payments.rows.map(p=>testCreditMoney(p.amount)).sort((a,b)=>a-b);
+  const expected=spec.later.map(testCreditMoney).sort((a,b)=>a-b);
+  if(actual.length!==expected.length||actual.some((v,i)=>v!==expected[i])||
+     payments.rows.some(p=>p.method!=='Cash'))
+    return {safe:false,reason:'Saved payments differ from the exact test transactions; none will be deleted.'};
+  // Existing print tracking is a business audit: do not erase or orphan it.
+  const printed=await client.query('select count(*)::int as count from public.pos_print_requests where invoice_id=$1',[r.id]);
+  if(Number(printed.rows[0].count)!==0)return {safe:false,reason:'Print tracking exists for this invoice. Contact developer for reconciled cleanup.'};
+  // Other invoice links may exist; PostgreSQL FKs will also block deletion and
+  // roll everything back rather than deleting unrelated records.
+  return {safe:true,invoiceId:r.id,invoiceNo,customerName:spec.customer,
+    grandTotal:spec.total,amountPaidAtSale:spec.atSale,
+    laterPayments:payments.rows.map(p=>({id:p.id,amount:Number(p.amount),method:p.method})),
+    removeInvoice:true,removeCreditEntry:true,removeLaterPaymentCount:payments.rowCount};
+}
+app.get('/api/admin/test-credit-cleanup/preview',auth,adminOnly,async(req,res)=>{
+  const invoiceNo=String(req.query.invoiceNo||'').trim();
+  if(!Object.hasOwn(approvedTestCreditCleanup,invoiceNo))return res.status(400).json({error:'Only SC-PC-2400 and SC-PC-2402 are eligible.'});
+  const client=await pool.connect();
+  try{
+    await client.query('begin');
+    const result=await inspectApprovedTestCredit(client,invoiceNo);
+    await client.query('rollback');
+    res.setHeader('Cache-Control','no-store');
+    return res.json(result);
+  }catch(e){try{await client.query('rollback')}catch(_){}console.error('Test cleanup preview error',e);return res.status(503).json({error:'Cannot verify all required database records. No records changed.'});}
+  finally{client.release();}
+});
+app.post('/api/admin/test-credit-cleanup',auth,adminOnly,async(req,res)=>{
+  // Require an explicit same-origin JSON POST; the admin login session is
+  // mandatory, and the exact invoice number must be typed twice.
+  const origin=req.get('origin')||'';
+  let matchingOrigin=false;
+  try{matchingOrigin=new URL(origin).host===req.get('host')&&
+    ['https:','http:'].includes(new URL(origin).protocol);}catch(_){}
+  if(!matchingOrigin||!req.is('application/json'))return res.status(403).json({error:'Open the cleanup page on the Star Chicken website.'});
+  const invoiceNo=String(req.body?.invoiceNo||'').trim();
+  const confirmation=String(req.body?.confirmation||'').trim();
+  if(!Object.hasOwn(approvedTestCreditCleanup,invoiceNo)||confirmation!==`DELETE TEST ${invoiceNo}`)
+    return res.status(400).json({error:'Incorrect confirmation or invoice not eligible.'});
+  const client=await pool.connect();
+  try{
+    await client.query('begin');
+    const result=await inspectApprovedTestCredit(client,invoiceNo);
+    if(!result.safe){await client.query('rollback');return res.status(409).json({error:result.reason});}
+    // Delete only the identified payment IDs; check exact affected row counts.
+    for(const p of result.laterPayments){
+      const d=await client.query('delete from public.sc_credit_payments where id=$1',[p.id]);
+      if(d.rowCount!==1)throw new Error('Payment deletion count mismatch');
+    }
+    const credit=await client.query('delete from public.sc_credit_invoices where invoice_id=$1',[result.invoiceId]);
+    if(credit.rowCount!==1)throw new Error('Credit deletion count mismatch');
+    const invoice=await client.query('delete from public.invoices where id=$1',[result.invoiceId]);
+    if(invoice.rowCount!==1)throw new Error('Invoice deletion count mismatch');
+    // Keep admin identity and cleanup details in the audit trail only.
+    await writeAudit(client,req,'admin.test_credit_cleanup',result.invoiceId,result.invoiceNo,{
+      customerName:result.customerName,invoiceTotal:result.grandTotal,
+      atSale:result.amountPaidAtSale,laterPaymentsDeleted:result.laterPayments.map(p=>p.amount),
+      reason:'User-confirmed removal of November 14 test records'});
+    await client.query('commit');
+    res.setHeader('Cache-Control','no-store');
+    return res.json({ok:true,invoiceNo,customerName:result.customerName,
+      deletedLaterPayments:result.removeLaterPaymentCount,
+      invoiceCounterUnchanged:true});
+  }catch(e){try{await client.query('rollback')}catch(_){}console.error('Admin test cleanup failed',e);
+    return res.status(503).json({error:'Cleanup aborted and transaction rolled back. No partial deletion. Check Render logs before retrying.'});}
+  finally{client.release();}
+});
+app.get('/admin/test-credit-cleanup',auth,adminOnly,(req,res)=>{
+  res.setHeader('Cache-Control','no-store');
+  res.type('html').send(`<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Star Chicken — Test Credit Cleanup</title>
+<style>body{font:16px system-ui,Arial;background:#fff8e8;color:#242424;margin:0;padding:24px}
+main{max-width:750px;margin:auto;background:white;border:1px solid #edd7b6;border-radius:14px;padding:24px;box-shadow:0 4px 20px #0001}
+h1{color:#b71c1c;font-size:1.4rem}label{font-weight:700;display:block;margin:18px 0 6px}select,input,button{font:inherit;padding:12px;border:1px solid #bbb;border-radius:8px;max-width:100%;box-sizing:border-box}
+select,input{width:100%}button{background:#bb1c24;color:white;border:0;cursor:pointer;margin-top:12px}button:disabled{opacity:.5;cursor:not-allowed}pre{white-space:pre-wrap;word-break:break-word;background:#f7f7f7;padding:15px;border-radius:8px}
+small,.hint{color:#555}#status{font-weight:700;margin-top:20px}a{color:#b71c1c}</style></head><body><main>
+<h1>Star Chicken — Remove TWO known test invoices</h1><p>This Admin-only tool is strictly limited to <strong>SC-PC-2400 (K & K Biryani and Fast Food)</strong> and <strong>SC-PC-2402 (Liaqat Ali)</strong>.</p>
+<p>Choose one invoice, check its exact saved details, then type the confirmation. This permanently deletes the selected original invoice, its credit entry, and its exact later test payments. It does <strong>not</strong> delete the customer or reuse the invoice number. An Admin audit record is retained.</p>
+<label for="which">Test invoice to review</label><select id="which"><option value="SC-PC-2400">SC-PC-2400 — K & K Biryani and Fast Food</option><option value="SC-PC-2402">SC-PC-2402 — Liaqat Ali</option></select>
+<button id="preview" type="button">Review saved records</button><pre id="details">Click Review saved records.</pre>
+<label for="confirm">Type the exact confirmation displayed after review</label><input id="confirm" autocomplete="off" spellcheck="false" placeholder="Review first" disabled>
+<button id="remove" type="button" disabled>Permanently delete this test invoice and payments</button>
+<p class="hint">If the real database has any different amounts, other credit invoices, other payments, voids, or print tracking, cleanup will be blocked. No database setup SQL is needed.</p>
+<div id="status" role="status"></div><p><a href="/">Return to Star Chicken POS</a></p></main>
+<script>
+const which=document.getElementById('which'),preview=document.getElementById('preview'),details=document.getElementById('details'),confirmInput=document.getElementById('confirm'),remove=document.getElementById('remove'),status=document.getElementById('status');
+let approved='';function reset(){approved='';confirmInput.value='';confirmInput.disabled=true;remove.disabled=true;details.textContent='Click Review saved records.';status.textContent='';}
+which.addEventListener('change',reset);
+preview.addEventListener('click',async()=>{reset();preview.disabled=true;status.textContent='Checking cloud records…';
+try{const r=await fetch('/api/admin/test-credit-cleanup/preview?invoiceNo='+encodeURIComponent(which.value),{credentials:'same-origin',cache:'no-store'});const d=await r.json();
+if(!r.ok)throw new Error(d.error||'Preview failed');if(!d.safe){details.textContent='Blocked: '+d.reason;status.textContent='NOT SAFE TO DELETE';return;}
+approved=d.invoiceNo;details.textContent='Invoice: '+d.invoiceNo+'\\nCustomer: '+d.customerName+'\\nInvoice total: Rs '+d.grandTotal+'\\nPaid at sale: Rs '+d.amountPaidAtSale+'\\nLater payments: '+d.laterPayments.map(p=>'Rs '+p.amount+' ('+p.method+')').join(', ')+'\\n\\nType: DELETE TEST '+approved;
+confirmInput.disabled=false;remove.disabled=false;status.textContent='Verified. Review before confirming.';
+}catch(e){status.textContent='Error: '+e.message;}finally{preview.disabled=false;}});
+remove.addEventListener('click',async()=>{if(!approved||approved!==which.value){reset();return;}
+if(confirmInput.value.trim()!=='DELETE TEST '+approved){status.textContent='Confirmation text does not match';return;}
+if(!window.confirm('PERMANENTLY DELETE '+approved+' and its exact test payments? This cannot be undone.'))return;
+remove.disabled=true;status.textContent='Deleting verified test records…';
+try{const r=await fetch('/api/admin/test-credit-cleanup',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({invoiceNo:approved,confirmation:confirmInput.value.trim()})});const d=await r.json();
+if(!r.ok)throw new Error(d.error||'Cleanup failed');status.textContent='DONE: '+d.invoiceNo+' and '+d.deletedLaterPayments+' later payments removed. Invoice numbering unchanged. Now refresh the POS ledger.';details.textContent=JSON.stringify(d,null,2);confirmInput.disabled=true;approved='';
+}catch(e){status.textContent='CLEANUP NOT COMPLETED: '+e.message;remove.disabled=false;}});
+</script></body></html>`);
+});
+
 /* ---------- Invoice numbering ---------- */
 // Preview-only: shows what the NEXT number would be, without consuming it.
 // The number is only actually assigned (atomically) when an invoice is saved.
