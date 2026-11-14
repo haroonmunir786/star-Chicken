@@ -1136,6 +1136,7 @@ function bluetoothReceipt(row) {
   add('Date: ' + invoiceDate + '  ' + bluetoothPlain(row.invoice_time, 30));
   if (row.customer_name) add('Customer: ' + bluetoothPlain(row.customer_name));
   if (row.shop_name) add('Party: ' + bluetoothPlain(row.shop_name));
+  add('Payment Type: ' + (row.is_credit ? 'CREDIT' : 'CASH'), {bold:true});
   if (row.customer_phone) add('Phone: ' + bluetoothPlain(row.customer_phone, 40));
   rule();
   add('ITEMS', {bold:true});
@@ -1204,7 +1205,9 @@ app.get('/api/print/bluetooth/receipt/:token', async (req, res) => {
   try {
     const found = await pool.query(`select invoice_no, invoice_date, invoice_time, customer_name,
       shop_name, customer_phone, bill_maker, items, discount, subtotal, grand_total,
-      amount_paid, balance from public.invoices i where id=$1
+      amount_paid, balance,
+      exists(select 1 from public.sc_credit_invoices c where c.invoice_id=i.id) as is_credit
+      from public.invoices i where id=$1
       and not exists(select 1 from public.sc_credit_voids v where v.invoice_id=i.id)`,[payload.invoiceId]);
     if (!found.rowCount) return res.status(404).json({error:'Invoice no longer exists'});
     // This means the app fetched the JSON, NOT that the printer produced paper.

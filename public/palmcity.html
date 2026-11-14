@@ -2390,7 +2390,7 @@ select[multiple] {
             </div>
             <div class="form-group" id="invoicePaymentTypeGroup">
               <label for="invoicePaymentType">Payment Type</label>
-              <select id="invoicePaymentType" onchange="onInvoicePaymentTypeChange(); markDirty()">
+              <select id="invoicePaymentType" onchange="onInvoicePaymentTypeChange(); markDirty(); updatePrintMeta()">
                 <option value="cash">Cash</option>
                 <option value="credit">Credit (Party Customers only)</option>
               </select>
@@ -5083,6 +5083,7 @@ function updatePrintMeta() {
   const cust = document.getElementById('customerName').value || '—';
   const shop = document.getElementById('shopName').value || '—';
   const maker = document.getElementById('billMaker').value || '—';
+  const paymentType = document.getElementById('invoicePaymentType')?.value === 'credit' ? 'Credit' : 'Cash';
   const phone = document.getElementById('customerPhone').value;
   document.getElementById('printMeta').innerHTML = `
     <div><div class="label">Invoice No</div><div class="value">${esc(inv)}</div></div>
@@ -5091,6 +5092,7 @@ function updatePrintMeta() {
     <div><div class="label">Customer</div><div class="value">${esc(cust)}</div></div>
     <div><div class="label">Shop</div><div class="value">${esc(shop)}</div></div>
     <div><div class="label">Prepared By</div><div class="value">${esc(maker)}</div></div>
+    <div><div class="label">Payment Type</div><div class="value">${esc(paymentType)}</div></div>
     <div>${phone ? '<div class="label">Phone</div><div class="value">'+esc(phone)+'</div>' : ''}</div>`;
   document.getElementById('printFooter').textContent = 'Prepared by: ' + (maker !== '—' ? maker : 'Star Chicken') + (time && time !== '—' ? ' · ' + time + ' PKT' : '');
 }
