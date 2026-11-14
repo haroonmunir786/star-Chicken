@@ -158,6 +158,8 @@ function cleanInvoice(raw) {
     grandTotal: num(raw.grandTotal),
     amountPaid: num(raw.amountPaid),
     balance: num(raw.balance),
+    partyType: String(raw.partyType||'').trim(),
+    paymentType: String(raw.paymentType||'cash').trim(),
     savedAt: Number(raw.savedAt) || Date.now()
   };
 }
@@ -178,6 +180,7 @@ function dbRowToInvoice(row) {
     grandTotal: Number(row.grand_total) || 0,
     amountPaid: Number(row.amount_paid) || 0,
     balance: Number(row.balance) || 0,
+    paymentType: row.credit_invoice_id ? 'credit' : 'cash',
     savedAt: Number(row.saved_at) || 0
   };
 }
@@ -436,6 +439,59 @@ app.put('/api/customers/:id', auth, async (req,res)=>{
 });
 app.delete('/api/customers/:id', auth, adminOnly, async (req,res)=>{try{const r=await pool.query('delete from public.customers where id=$1',[req.params.id]);if(!r.rowCount)return res.status(404).json({error:'Customer not found'});res.json({ok:true});}catch(e){console.error('Could not delete customer:',e);res.status(500).json({error:'Could not delete customer'});}});
 
+
+/* ---------- Party Customer Credit Ledger (Admin + Staff) ----------
+   Only credit invoices posted AFTER installation have entries here.
+   Existing invoices are never imported and are considered settled.
+*/
+app.get('/api/credit/ledger',auth,async(req,res)=>{
+  if(!readRoleIdentity(req))return res.status(403).json({error:'Sign in as Staff or Admin'});
+  try{
+    const a=await pool.query(`select invoice_id,invoice_no,customer_name,grand_total,amount_paid,outstanding_at_sale,prepared_by,created_at
+      from public.sc_credit_invoices order by created_at desc`);
+    const b=await pool.query(`select id,customer_name,amount,method,note,received_by,created_at
+      from public.sc_credit_payments order by created_at desc`);
+    const accounts=new Map();
+    function get(name){const key=String(name).trim().toLowerCase();if(!accounts.has(key))accounts.set(key,{customerName:name,creditSales:0,received:0,outstanding:0});return accounts.get(key)}
+    for(const r of a.rows){let x=get(r.customer_name);x.creditSales+=Number(r.grand_total);x.received+=Number(r.amount_paid);x.outstanding+=Number(r.outstanding_at_sale)}
+    for(const r of b.rows){let x=get(r.customer_name);x.received+=Number(r.amount);x.outstanding-=Number(r.amount)}
+    const round=n=>Math.round(n*100)/100;
+    res.setHeader('Cache-Control','no-store');
+    res.json({accounts:[...accounts.values()].map(a=>({...a,creditSales:round(a.creditSales),received:round(a.received),outstanding:round(a.outstanding)})).sort((a,b)=>a.customerName.localeCompare(b.customerName)),
+      invoices:a.rows.map(r=>({invoiceId:r.invoice_id,invoiceNo:r.invoice_no,customerName:r.customer_name,grandTotal:Number(r.grand_total),amountPaid:Number(r.amount_paid),outstandingAtSale:Number(r.outstanding_at_sale),preparedBy:r.prepared_by,createdAt:Date.parse(r.created_at)})),
+      payments:b.rows.map(r=>({id:r.id,customerName:r.customer_name,amount:Number(r.amount),method:r.method,note:r.note,receivedBy:r.received_by,createdAt:Date.parse(r.created_at)}))});
+  }catch(e){console.error('Credit ledger read failed',e);res.status(503).json({error:'Credit ledger unavailable. Install credit_ledger.sql first.'});}
+});
+app.post('/api/credit/payments',auth,async(req,res)=>{
+  const identity=readRoleIdentity(req);
+  if(!identity)return res.status(403).json({error:'Staff or Admin login required'});
+  const name=String(req.body?.customerName||'').replace(/\s+/g,' ').trim();
+  const amount=Number(req.body?.amount);
+  const method=String(req.body?.method||'Cash');
+  const note=String(req.body?.note||'').trim();
+  if(!name||name.length>150||!Number.isFinite(amount)||amount<=0||Math.round(amount*100)!==amount*100||amount>1e9||!['Cash','Bank Transfer','Other'].includes(method)||note.length>180)
+    return res.status(400).json({error:'Invalid payment details'});
+  const client=await pool.connect();
+  try{
+    await client.query('begin');
+    await client.query('select pg_advisory_xact_lock(hashtext(lower($1)))',[name]);
+    const credit=await client.query(`select coalesce(sum(outstanding_at_sale),0)::numeric as due,min(customer_name) as canonical
+      from public.sc_credit_invoices where lower(trim(customer_name))=lower($1)`,[name]);
+    const paid=await client.query(`select coalesce(sum(amount),0)::numeric as amount from public.sc_credit_payments
+      where lower(trim(customer_name))=lower($1)`,[name]);
+    const outstanding=Math.round((Number(credit.rows[0].due)-Number(paid.rows[0].amount))*100)/100;
+    if(!credit.rows[0].canonical||amount>outstanding+0.005){await client.query('rollback');return res.status(409).json({error:'Customer credit balance is insufficient. Refresh ledger.'});}
+    const by=identity.role==='admin'?'Admin':(identity.staffId||'Shared Staff');
+    const id=crypto.randomUUID();
+    await client.query(`insert into public.sc_credit_payments(id,customer_name,amount,method,note,received_by)
+      values($1,$2,$3,$4,$5,$6)`,[id,credit.rows[0].canonical,amount,method,note,by]);
+    await writeAudit(client,req,'credit.payment.received',id,'',{customerName:credit.rows[0].canonical,amount,method});
+    await client.query('commit');
+    res.status(201).json({ok:true,paymentId:id,outstanding:Math.round((outstanding-amount)*100)/100});
+  }catch(e){await client.query('rollback');console.error('Credit payment save failed',e);res.status(503).json({error:'Payment not saved. Check ledger installation.'});}
+  finally{client.release()}
+});
+
 /* ---------- Invoice numbering ---------- */
 // Preview-only: shows what the NEXT number would be, without consuming it.
 // The number is only actually assigned (atomically) when an invoice is saved.
@@ -457,12 +513,13 @@ app.get('/api/invoices/next-number', auth, async (req, res) => {
 app.get('/api/invoices', auth, async (req, res) => {
   try {
     const result = await pool.query(`
-      select id, invoice_no, invoice_date, invoice_time,
-             customer_name, shop_name, bill_maker, customer_phone,
-             items, discount, subtotal, grand_total, amount_paid,
-             balance, saved_at
-      from public.invoices
-      order by saved_at desc, updated_at desc
+      select i.id, i.invoice_no, i.invoice_date, i.invoice_time,
+             i.customer_name, i.shop_name, i.bill_maker, i.customer_phone,
+             i.items, i.discount, i.subtotal, i.grand_total, i.amount_paid,
+             i.balance, i.saved_at, c.invoice_id as credit_invoice_id
+      from public.invoices i
+      left join public.sc_credit_invoices c on c.invoice_id=i.id
+      order by i.saved_at desc, i.updated_at desc
     `);
     res.json(result.rows.map(dbRowToInvoice));
   } catch (e) {
@@ -474,12 +531,13 @@ app.get('/api/invoices', auth, async (req, res) => {
 app.get('/api/invoices/:id', auth, async (req, res) => {
   try {
     const result = await pool.query(`
-      select id, invoice_no, invoice_date, invoice_time,
-             customer_name, shop_name, bill_maker, customer_phone,
-             items, discount, subtotal, grand_total, amount_paid,
-             balance, saved_at
-      from public.invoices
-      where id = $1
+      select i.id, i.invoice_no, i.invoice_date, i.invoice_time,
+             i.customer_name, i.shop_name, i.bill_maker, i.customer_phone,
+             i.items, i.discount, i.subtotal, i.grand_total, i.amount_paid,
+             i.balance, i.saved_at, c.invoice_id as credit_invoice_id
+      from public.invoices i
+      left join public.sc_credit_invoices c on c.invoice_id=i.id
+      where i.id = $1
     `, [req.params.id]);
 
     if (!result.rowCount) return res.status(404).json({ error: 'Invoice not found' });
@@ -508,6 +566,9 @@ app.post('/api/invoices', auth, async (req, res) => {
     );
 
     if (existing.rowCount) {
+      // Once a new credit invoice is posted, keep its invoice/ledger consistent.
+      const protectedCredit=await client.query('select 1 from public.sc_credit_invoices where invoice_id=$1',[inv.id]);
+      if(protectedCredit.rowCount){await client.query('rollback');return res.status(409).json({error:'Credit invoice is locked to protect the ledger; contact Admin for adjustments.'});}
       inv.invoiceNo = existing.rows[0].invoice_no;
       // Preserve original preparer on edits: older invoices are not reassigned.
       inv.billMaker = existing.rows[0].bill_maker || '';
@@ -520,6 +581,16 @@ app.post('/api/invoices', auth, async (req, res) => {
       } else if(identity?.role==='admin') inv.billMaker='Admin';
       else if(identity?.role==='staff') inv.billMaker='Shared Staff';
       else {await client.query('rollback');return res.status(403).json({error:'Please sign in to POS before saving an invoice'});}
+    }
+    if(!existing.rowCount) {
+      if(!['cash','credit'].includes(inv.paymentType)) {await client.query('rollback');return res.status(400).json({error:'Choose Cash or Credit'});}
+      if(inv.paymentType==='credit' && inv.partyType!=='party') {await client.query('rollback');return res.status(400).json({error:'Credit only allowed for Party Customers'});}
+      if(!Number.isFinite(inv.grandTotal)||inv.grandTotal<0||inv.amountPaid<0||inv.amountPaid>inv.grandTotal+0.005){await client.query('rollback');return res.status(400).json({error:'Invalid amount paid'});}
+      // Explicit new invoices with a category must follow full cash settlement.
+      if(inv.partyType && inv.paymentType==='cash' && Math.abs(inv.grandTotal-inv.amountPaid)>0.005){await client.query('rollback');return res.status(400).json({error:'Cash invoices must be fully paid'});}
+      // Names of Star Chicken branches must never be treated as credit customers.
+      const branches=['Hatchery','Kasur','Gajjumatta','Gajjumata','Mustafabad','Gulshan Ravi','Murghzar','Link Road'];
+      if(inv.paymentType==='credit' && branches.some(b=>b.toLowerCase()===inv.shopName.toLowerCase())){await client.query('rollback');return res.status(400).json({error:'Star Chicken branches are cash-only'});}
     }
     if (!existing.rowCount) {
       const counterResult = await client.query(
@@ -566,9 +637,19 @@ app.post('/api/invoices', auth, async (req, res) => {
       inv.balance, inv.savedAt
     ]);
 
+    if(!existing.rowCount && inv.paymentType==='credit') {
+      const owed=Math.round((inv.grandTotal-inv.amountPaid)*100)/100;
+      if(owed>0) {
+        const creditName=inv.shopName.replace(/\s+/g,' ').trim();
+        if(!creditName) {await client.query('rollback');return res.status(400).json({error:'Choose Party Customer for credit'});}
+        await client.query('select pg_advisory_xact_lock(hashtext(lower($1)))',[creditName]);
+        await client.query(`insert into public.sc_credit_invoices(invoice_id,invoice_no,customer_name,grand_total,amount_paid,outstanding_at_sale,prepared_by)
+          values($1,$2,$3,$4,$5,$6,$7)`,[inv.id,inv.invoiceNo,creditName,inv.grandTotal,inv.amountPaid,owed,inv.billMaker]);
+      }
+    }
     await writeAudit(client,req,existing.rowCount?'invoice.updated':'invoice.created',inv.id,inv.invoiceNo,{grandTotal:inv.grandTotal});
     await client.query('commit');
-    res.status(201).json(dbRowToInvoice(result.rows[0]));
+    res.status(201).json({...dbRowToInvoice(result.rows[0]),paymentType:existing.rowCount?'cash':inv.paymentType});
   } catch (e) {
     await client.query('rollback');
     console.error(e);
@@ -582,6 +663,11 @@ app.post('/api/invoices', auth, async (req, res) => {
 });
 
 app.delete('/api/invoices/:id', auth, adminOnly, async (req, res) => {
+  // Do not allow deletion to orphan credit ledger records.
+  try {const credit=await pool.query('select 1 from public.sc_credit_invoices where invoice_id=$1',[req.params.id]);
+    if(credit.rowCount)return res.status(409).json({error:'Credit invoice has a ledger entry and cannot be deleted'});
+  } catch(e){console.error('Credit deletion guard error',e);return res.status(503).json({error:'Could not verify credit ledger; invoice not deleted'});}
+
   const client=await pool.connect();
   try {
     await client.query('begin');

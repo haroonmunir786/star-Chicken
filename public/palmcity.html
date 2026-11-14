@@ -12,7 +12,79 @@
   
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js">
+/* ═════ Shared cloud Customer Credit Ledger ═════ */
+let scCreditLedgerData={invoices:[],payments:[],accounts:[]};
+function scCreditMoney(n){return 'Rs '+Number(n||0).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function scCreditSafe(s){return String(s??'').replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));}
+function closeCustomerCreditLedger(){document.getElementById('scCreditOverlay')?.classList.remove('show');}
+function openCustomerCreditLedger(){
+  closeReportsMenu();
+  document.getElementById('scCreditOverlay')?.classList.add('show');
+  loadCustomerCreditLedger();
+}
+async function loadCustomerCreditLedger(){
+  const status=document.getElementById('scCreditStatus');
+  status.textContent='Loading shared ledger…';
+  try{
+    const r=await fetch('/api/credit/ledger',{credentials:'same-origin',cache:'no-store'});
+    const data=await r.json();
+    if(!r.ok)throw new Error(data.error||'Could not load ledger');
+    scCreditLedgerData=data;
+    const accounts=data.accounts||[];
+    for(const id of ['scCreditCustomer','scCreditPayCustomer']){
+      const sel=document.getElementById(id), prev=sel.value;
+      const placeholder=id==='scCreditCustomer'?'All Party Customers':'Choose credit customer';
+      sel.replaceChildren(new Option(placeholder,''));
+      accounts.forEach(a=>{if(id==='scCreditCustomer'||Number(a.outstanding)>0.005)sel.add(new Option(a.customerName,a.customerName));});
+      if([...sel.options].some(o=>o.value===prev))sel.value=prev;
+    }
+    status.textContent='Cloud ledger · Existing invoices excluded · '+new Date().toLocaleString('en-PK');
+    renderCustomerCreditLedger();showCreditPaymentBalance();
+  }catch(e){status.textContent='Error: '+e.message;toast(e.message,'error');}
+}
+function renderCustomerCreditLedger(){
+  const data=scCreditLedgerData, name=document.getElementById('scCreditCustomer').value;
+  if(name && [...document.getElementById('scCreditPayCustomer').options].some(o=>o.value===name))document.getElementById('scCreditPayCustomer').value=name;
+  showCreditPaymentBalance();
+  const key=x=>String(x||'').toLocaleLowerCase('en').trim();
+  const accounts=(data.accounts||[]).filter(a=>!name||key(a.customerName)===key(name));
+  const sum=k=>accounts.reduce((s,a)=>s+Number(a[k]||0),0);
+  document.getElementById('scCreditSales').textContent=scCreditMoney(sum('creditSales'));
+  document.getElementById('scCreditReceived').textContent=scCreditMoney(sum('received'));
+  document.getElementById('scCreditOutstanding').textContent=scCreditMoney(sum('outstanding'));
+  const entries=[];
+  (data.invoices||[]).filter(x=>!name||key(x.customerName)===key(name)).forEach(x=>{
+    entries.push({at:x.createdAt||0,customer:x.customerName,type:'Credit Invoice '+x.invoiceNo,deb:Number(x.grandTotal)||0,cred:0,by:x.preparedBy||''});
+    if(Number(x.amountPaid)>0)entries.push({at:x.createdAt||0,customer:x.customerName,type:'Received at sale · '+x.invoiceNo,deb:0,cred:Number(x.amountPaid)||0,by:x.preparedBy||''});
+  });
+  (data.payments||[]).filter(x=>!name||key(x.customerName)===key(name)).forEach(x=>entries.push({at:x.createdAt||0,customer:x.customerName,type:'Later payment · '+(x.method||'Cash')+(x.note?' · '+x.note:''),deb:0,cred:Number(x.amount)||0,by:x.receivedBy||''}));
+  entries.sort((a,b)=>b.at-a.at);
+  const tbody=document.getElementById('scCreditRows');
+  tbody.innerHTML=entries.length?entries.map(e=>'<tr><td>'+scCreditSafe(new Date(e.at).toLocaleDateString('en-PK'))+'</td><td>'+scCreditSafe(e.customer)+'</td><td>'+scCreditSafe(e.type)+'</td><td>'+ (e.deb?scCreditMoney(e.deb):'—')+'</td><td>'+(e.cred?scCreditMoney(e.cred):'—')+'</td><td>'+scCreditSafe(e.by)+'</td></tr>').join(''):'<tr><td colspan="6">No credit transactions in this view.</td></tr>';
+}
+function showCreditPaymentBalance(){
+  const name=document.getElementById('scCreditPayCustomer').value;
+  const acct=(scCreditLedgerData.accounts||[]).find(a=>a.customerName===name);
+  document.getElementById('scCreditPayBalance').textContent=acct?'Outstanding before payment: '+scCreditMoney(acct.outstanding):'';
+}
+async function submitCustomerCreditPayment(){
+  const customerName=document.getElementById('scCreditPayCustomer').value;
+  const amount=Number(document.getElementById('scCreditPayAmount').value);
+  const method=document.getElementById('scCreditPayMethod').value;
+  const note=document.getElementById('scCreditPayNote').value.trim();
+  const account=(scCreditLedgerData.accounts||[]).find(a=>a.customerName===customerName);
+  if(!account||!Number.isFinite(amount)||amount<=0||amount>Number(account.outstanding)+0.005){toast('Choose customer and enter amount up to outstanding balance','error');return;}
+  if(!confirm('Record payment of '+scCreditMoney(amount)+' from '+customerName+'?'))return;
+  const btn=document.getElementById('scCreditPaySubmit');btn.disabled=true;
+  try{
+    const r=await fetch('/api/credit/payments',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({customerName,amount,method,note})});
+    const data=await r.json();if(!r.ok)throw new Error(data.error||'Payment not saved');
+    document.getElementById('scCreditPayAmount').value='';document.getElementById('scCreditPayNote').value='';
+    toast('Payment recorded successfully','success');await loadCustomerCreditLedger();
+  }catch(e){toast(e.message||'Payment failed','error')}finally{btn.disabled=false;}
+}
+</script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
 <style>
 :root {
@@ -277,6 +349,21 @@ body {
 .add-party-dialog input:focus { outline:2px solid #F9A825; }
 .party-dialog-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; flex-wrap:wrap; }
 
+/* Shared customer credit account modal */
+.sc-credit-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:3900; padding:16px; align-items:center; justify-content:center; }
+.sc-credit-overlay.show { display:flex; }
+.sc-credit-modal { background:#fff; color:#222; border-radius:16px; width:min(850px,100%); max-height:92vh; overflow:auto; padding:18px; box-shadow:0 15px 55px #0003; }
+.sc-credit-row { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+.sc-credit-modal select,.sc-credit-modal input { height:40px; border:1px solid #ddd; border-radius:8px; padding:8px; font:inherit; max-width:100%; }
+.sc-credit-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:12px 0; }
+.sc-credit-summary>div {background:#fff8ed;border:1px solid #f7deb6;border-radius:10px;padding:12px;}
+.sc-credit-summary strong {display:block;font-size:1.15rem;margin-top:5px;}
+.sc-credit-table {width:100%;min-width:610px;}
+.sc-credit-table th,.sc-credit-table td {padding:8px;text-align:left;}
+.sc-credit-list-wrap {max-height:310px;overflow:auto;border:1px solid #eee;border-radius:8px;}
+.sc-credit-paybox {background:#f8f9fb;padding:12px;border-radius:10px;margin-top:12px;}
+@media(max-width:550px){.sc-credit-summary{grid-template-columns:1fr}.sc-credit-modal{padding:12px}}
+@media print {.sc-credit-overlay{display:none!important}}
 /* Customer name autocomplete */
 .customer-wrap { position: relative; width: 100%; }
 #customerDropdown {
@@ -1991,6 +2078,36 @@ select[multiple] {
 
 </div>
 
+<!-- Credit Ledger: available to Admin AND Staff. Cloud-only accounting. -->
+<div id="scCreditOverlay" class="sc-credit-overlay no-print" onclick="if(event.target===this)closeCustomerCreditLedger()">
+  <div class="sc-credit-modal" role="dialog" aria-modal="true" aria-labelledby="scCreditHeading">
+    <div class="sc-credit-row"><h2 id="scCreditHeading">💳 Party Customer Credit Ledger</h2><button class="btn btn-ghost" type="button" onclick="closeCustomerCreditLedger()">✕ Close</button></div>
+    <p style="font-size:.8rem;color:#777">New credit invoices only. All invoices saved before this feature are considered settled. Star Chicken branches are cash-only.</p>
+    <div class="sc-credit-row" style="margin-top:12px">
+      <select id="scCreditCustomer" aria-label="Select customer" onchange="renderCustomerCreditLedger()"><option value="">All Party Customers</option></select>
+      <button class="btn btn-ghost btn-sm" type="button" onclick="loadCustomerCreditLedger()">↻ Refresh</button>
+    </div>
+    <div id="scCreditStatus" style="font-size:.8rem;color:#777" aria-live="polite"></div>
+    <div class="sc-credit-summary">
+      <div><span>Credit Sales</span><strong id="scCreditSales">Rs 0</strong></div>
+      <div><span>Payments Received</span><strong id="scCreditReceived">Rs 0</strong></div>
+      <div><span>Outstanding Balance</span><strong id="scCreditOutstanding" style="color:#B71C1C">Rs 0</strong></div>
+    </div>
+    <div class="sc-credit-list-wrap"><table class="sc-credit-table"><thead><tr><th>Date</th><th>Customer</th><th>Transaction</th><th>Debit (Rs)</th><th>Credit (Rs)</th><th>Entered By</th></tr></thead><tbody id="scCreditRows"></tbody></table></div>
+    <form id="scCreditPaymentForm" class="sc-credit-paybox" onsubmit="event.preventDefault(); submitCustomerCreditPayment()">
+      <h3 style="font-size:.95rem;margin-bottom:8px">Receive Customer Payment</h3>
+      <div class="sc-credit-row">
+        <select id="scCreditPayCustomer" required aria-label="Customer to receive from" onchange="showCreditPaymentBalance()"><option value="">Choose credit customer</option></select>
+        <input type="number" id="scCreditPayAmount" min="0.01" step="0.01" placeholder="Amount (Rs)" required>
+        <select id="scCreditPayMethod"><option>Cash</option><option>Bank Transfer</option><option>Other</option></select>
+        <input type="text" id="scCreditPayNote" maxlength="180" placeholder="Reference / notes (optional)">
+      </div>
+      <p id="scCreditPayBalance" style="font-size:.78rem;margin:6px 0;color:#555"></p>
+      <button type="submit" id="scCreditPaySubmit" class="btn btn-primary">Save Payment</button>
+    </form>
+  </div>
+</div>
+
 <!-- Menu Sidebar (opens from left when Menu is clicked) -->
 <div class="menu-sidebar-overlay no-print" id="reportsMenuOverlay" onclick="if(event.target===this)closeReportsMenu()">
   <aside class="menu-sidebar" role="navigation" aria-label="App menu">
@@ -2047,6 +2164,10 @@ select[multiple] {
           <strong>Inventory Management</strong>
           <small>Stock sheet · Branches · Daily balance</small>
         </span>
+      </button>
+      <button type="button" class="menu-nav-item" onclick="closeReportsMenu(); openCustomerCreditLedger()">
+        <span class="mn-icon">💳</span>
+        <span class="mn-text"><strong>Customer Credit Ledger</strong><small>Cash / credit accounts · Receive payments</small></span>
       </button>
       <button type="button" class="menu-nav-item" onclick="closeReportsMenu(); openCustomerDetailsModal()">
         <span class="mn-icon">👤</span>
@@ -2230,6 +2351,14 @@ select[multiple] {
                 <option value="">— Select Party —</option>
               </select>
               <button type="button" id="addPartyCustomerBtn" class="btn btn-ghost party-add-button" onclick="openAddPartyCustomerDialog()" style="display:none">＋ Add New Party Customer</button>
+            </div>
+            <div class="form-group" id="invoicePaymentTypeGroup">
+              <label for="invoicePaymentType">Payment Type</label>
+              <select id="invoicePaymentType" onchange="onInvoicePaymentTypeChange(); markDirty()">
+                <option value="cash">Cash</option>
+                <option value="credit">Credit (Party Customers only)</option>
+              </select>
+              <small id="invoicePaymentHint" style="color:#777;font-size:0.72rem">Star Chicken branches are cash-only.</small>
             </div>
             <div class="form-group">
               <label>Bill Prepared By</label>
@@ -3474,6 +3603,24 @@ function onPartyTypeChange() {
   fillSelectOptions(document.getElementById('shopName'), names, '— Select Party —', false);
   const addBtn = document.getElementById('addPartyCustomerBtn');
   if (addBtn) addBtn.style.display = type === 'party' ? 'inline-flex' : 'none';
+  onInvoicePaymentTypeChange();
+}
+function onInvoicePaymentTypeChange() {
+  const type=document.getElementById('partyType')?.value || 'star';
+  const sel=document.getElementById('invoicePaymentType');
+  if(!sel)return;
+  const credit=sel.querySelector('option[value="credit"]');
+  if(credit) credit.disabled=type!=='party';
+  if(type!=='party')sel.value='cash';
+  const hint=document.getElementById('invoicePaymentHint');
+  if(hint)hint.textContent=type==='party' ? 'Choose Cash or Credit for this invoice. Unpaid credit enters the shared ledger.' : 'Star Chicken branches are cash-only.';
+  const amt=document.getElementById('amountPaid');
+  if(amt && !currentId) {
+    const sub=items.reduce((sum,it)=>sum+(Number(it.amount)||0),0);
+    const total=Math.max(0,sub-(Number(document.getElementById('discount')?.value)||0));
+    amt.value=sel.value==='cash' ? total.toFixed(2) : '0';
+  }
+  if(typeof calcTotals==='function') calcTotals();
 }
 function setPartyFilter(screen, mode) {
   partyFilters[screen] = mode;
@@ -4107,6 +4254,7 @@ function collectInvoice() {
     time: timeVal || (prev && prev.time) || '',
     customerName: document.getElementById('customerName').value.trim(),
     partyType: (document.getElementById('partyType') && document.getElementById('partyType').value) || 'star',
+    paymentType: document.getElementById('invoicePaymentType')?.value || 'cash',
     shopName: document.getElementById('shopName').value.trim(),
     billMaker: document.getElementById('billMaker').value.trim(),
     customerPhone: document.getElementById('customerPhone').value.trim(),
@@ -4133,6 +4281,16 @@ async function saveInvoice() {
     document.getElementById('shopName').focus();
     return;
   }
+  if(!currentId) {
+    const payType=document.getElementById('invoicePaymentType')?.value || 'cash';
+    const type=document.getElementById('partyType')?.value || 'star';
+    if(payType==='credit' && type!=='party') {toast('Credit is only for Party Customers','error');return;}
+    if(payType==='credit' && !cloudOnline) {toast('Internet connection required for credit invoices. Nothing saved.','error');return;}
+    const grand=Math.max(0,items.reduce((s,it)=>s+(Number(it.amount)||0),0)-(Number(document.getElementById('discount').value)||0));
+    const paid=Number(document.getElementById('amountPaid').value)||0;
+    if(paid<0 || paid>grand+0.005) {toast('Paid amount must be between zero and invoice total','error');return;}
+    if(payType==='cash' && Math.abs(grand-paid)>0.005) {toast('Cash invoice must be fully paid','error');return;}
+  }
   // Only set live time for brand-new invoices.
   // Editing an old bill must keep its original date (and time) so dashboard
   // sales stay on that bill's date — not today's date.
@@ -4146,6 +4304,7 @@ async function saveInvoice() {
   }
   stopPktLiveClock();
   const inv = collectInvoice();
+  if(currentId && document.getElementById('invoicePaymentType')?.value==='credit') {toast('Saved credit invoice is locked; record later payments in Customer Credit Ledger','error');return;}
   try {
     const saved = await putInvoice(inv);
     currentId = saved.id;
@@ -4217,6 +4376,8 @@ async function loadInvoice(id) {
   document.getElementById('customerPhone').value = inv.customerPhone || '';
   document.getElementById('discount').value = inv.discount || 0;
   document.getElementById('amountPaid').value = inv.amountPaid != null ? inv.amountPaid : 0;
+  const paymentSelect=document.getElementById('invoicePaymentType');
+  if(paymentSelect) {paymentSelect.value=inv.paymentType==='credit'?'credit':'cash';paymentSelect.disabled=true;}
   render();
   updateStatus();
   renderHistory();
@@ -4270,6 +4431,8 @@ function newInvoice(skipConfirm) {
   autoSetBillMaker();
   const pt = document.getElementById('partyType');
   if (pt) pt.value = 'star';
+  const paySel=document.getElementById('invoicePaymentType');
+  if(paySel){paySel.disabled=false;paySel.value='cash';}
   onPartyTypeChange();
   document.getElementById('discount').value = '0';
   document.getElementById('amountPaid').value = '0';
@@ -4754,7 +4917,12 @@ function calcTotals() {
   const sub = items.reduce((s, it) => s + it.amount, 0);
   const disc = parseFloat(document.getElementById('discount').value) || 0;
   const grand = Math.max(0, sub - disc);
-  const paid = parseFloat(document.getElementById('amountPaid').value) || 0;
+  const amountEl=document.getElementById('amountPaid');
+  if(!currentId && document.getElementById('invoicePaymentType')?.value === 'cash') {
+    // Cash-only invoices must be fully settled at sale.
+    amountEl.value=grand.toFixed(2);
+  }
+  const paid = parseFloat(amountEl.value) || 0;
   const balance = grand - paid;
   document.getElementById('subTotal').textContent = 'Rs. ' + fmt(sub);
   document.getElementById('grandTotal').textContent = 'Rs. ' + fmt(grand);
