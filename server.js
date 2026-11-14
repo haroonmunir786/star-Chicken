@@ -337,6 +337,7 @@ app.get('/api/reports/staff-sales', auth, requireManagedAdmin, async (req,res)=>
         from public.invoices i
         join first_creator c on c.invoice_id=i.id
         where i.invoice_date >= $1::date and i.invoice_date <= $2::date
+        and not exists(select 1 from public.sc_credit_voids v where v.invoice_id=i.id)
         group by c.actor_id
       )
       select t.actor_id as "staffId",
@@ -447,18 +448,21 @@ app.delete('/api/customers/:id', auth, adminOnly, async (req,res)=>{try{const r=
 app.get('/api/credit/ledger',auth,async(req,res)=>{
   if(!readRoleIdentity(req))return res.status(403).json({error:'Sign in as Staff or Admin'});
   try{
-    const a=await pool.query(`select invoice_id,invoice_no,customer_name,grand_total,amount_paid,outstanding_at_sale,prepared_by,created_at
-      from public.sc_credit_invoices order by created_at desc`);
+    const a=await pool.query(`select c.invoice_id,c.invoice_no,c.customer_name,c.grand_total,c.amount_paid,
+      c.outstanding_at_sale,c.prepared_by,c.created_at,v.voided_at,v.voided_by,v.reason as void_reason
+      from public.sc_credit_invoices c
+      left join public.sc_credit_voids v on v.invoice_id=c.invoice_id
+      order by c.created_at desc`);
     const b=await pool.query(`select id,customer_name,amount,method,note,received_by,created_at
       from public.sc_credit_payments order by created_at desc`);
     const accounts=new Map();
     function get(name){const key=String(name).trim().toLowerCase();if(!accounts.has(key))accounts.set(key,{customerName:name,creditSales:0,received:0,outstanding:0});return accounts.get(key)}
-    for(const r of a.rows){let x=get(r.customer_name);x.creditSales+=Number(r.grand_total);x.received+=Number(r.amount_paid);x.outstanding+=Number(r.outstanding_at_sale)}
+    for(const r of a.rows){let x=get(r.customer_name);if(r.voided_at)continue;x.creditSales+=Number(r.grand_total);x.received+=Number(r.amount_paid);x.outstanding+=Number(r.outstanding_at_sale)}
     for(const r of b.rows){let x=get(r.customer_name);x.received+=Number(r.amount);x.outstanding-=Number(r.amount)}
     const round=n=>Math.round(n*100)/100;
     res.setHeader('Cache-Control','no-store');
     res.json({accounts:[...accounts.values()].map(a=>({...a,creditSales:round(a.creditSales),received:round(a.received),outstanding:round(a.outstanding)})).sort((a,b)=>a.customerName.localeCompare(b.customerName)),
-      invoices:a.rows.map(r=>({invoiceId:r.invoice_id,invoiceNo:r.invoice_no,customerName:r.customer_name,grandTotal:Number(r.grand_total),amountPaid:Number(r.amount_paid),outstandingAtSale:Number(r.outstanding_at_sale),preparedBy:r.prepared_by,createdAt:Date.parse(r.created_at)})),
+      invoices:a.rows.map(r=>({invoiceId:r.invoice_id,invoiceNo:r.invoice_no,customerName:r.customer_name,grandTotal:Number(r.grand_total),amountPaid:Number(r.amount_paid),outstandingAtSale:Number(r.outstanding_at_sale),preparedBy:r.prepared_by,createdAt:Date.parse(r.created_at),voided:!!r.voided_at,voidedAt:r.voided_at?Date.parse(r.voided_at):null,voidedBy:r.voided_by||'',voidReason:r.void_reason||''})),
       payments:b.rows.map(r=>({id:r.id,customerName:r.customer_name,amount:Number(r.amount),method:r.method,note:r.note,receivedBy:r.received_by,createdAt:Date.parse(r.created_at)}))});
   }catch(e){console.error('Credit ledger read failed',e);res.status(503).json({error:'Credit ledger unavailable. Install credit_ledger.sql first.'});}
 });
@@ -476,7 +480,8 @@ app.post('/api/credit/payments',auth,async(req,res)=>{
     await client.query('begin');
     await client.query('select pg_advisory_xact_lock(hashtext(lower($1)))',[name]);
     const credit=await client.query(`select coalesce(sum(outstanding_at_sale),0)::numeric as due,min(customer_name) as canonical
-      from public.sc_credit_invoices where lower(trim(customer_name))=lower($1)`,[name]);
+      from public.sc_credit_invoices c where lower(trim(c.customer_name))=lower($1)
+      and not exists(select 1 from public.sc_credit_voids v where v.invoice_id=c.invoice_id)`,[name]);
     const paid=await client.query(`select coalesce(sum(amount),0)::numeric as amount from public.sc_credit_payments
       where lower(trim(customer_name))=lower($1)`,[name]);
     const outstanding=Math.round((Number(credit.rows[0].due)-Number(paid.rows[0].amount))*100)/100;
@@ -490,6 +495,44 @@ app.post('/api/credit/payments',auth,async(req,res)=>{
     res.status(201).json({ok:true,paymentId:id,outstanding:Math.round((outstanding-amount)*100)/100});
   }catch(e){await client.query('rollback');console.error('Credit payment save failed',e);res.status(503).json({error:'Payment not saved. Check ledger installation.'});}
   finally{client.release()}
+});
+
+/* ---------- Admin-only, audited credit invoice void ----------
+   The original invoice + credit record remain unchanged for audit. A separate
+   void marker excludes it from active sales/stock and credit totals. Later
+   customer-level payments are never erased or silently reallocated.
+*/
+app.post('/api/credit/invoices/:id/void',auth,adminOnly,async(req,res)=>{
+  const id=String(req.params.id||'');
+  const reason=String(req.body?.reason||'').trim();
+  if(!id||id.length>150||reason.length<5||reason.length>300)
+    return res.status(400).json({error:'Enter a reason (5 to 300 characters) for voiding this invoice.'});
+  const client=await pool.connect();
+  try{
+    await client.query('begin');
+    const found=await client.query('select invoice_id,invoice_no,customer_name,outstanding_at_sale from public.sc_credit_invoices where invoice_id=$1',[id]);
+    if(!found.rowCount){await client.query('rollback');return res.status(404).json({error:'This is not a new credit invoice.'});}
+    const customer=found.rows[0].customer_name;
+    await client.query('select pg_advisory_xact_lock(hashtext(lower($1)))',[customer]);
+    const already=await client.query('select 1 from public.sc_credit_voids where invoice_id=$1',[id]);
+    if(already.rowCount){await client.query('rollback');return res.status(409).json({error:'This invoice has already been voided.'});}
+    // Serialized with payment collection for the same customer.
+    const active=await client.query(`select coalesce(sum(c.outstanding_at_sale),0)::numeric as due
+      from public.sc_credit_invoices c
+      where lower(trim(c.customer_name))=lower(trim($1))
+      and not exists(select 1 from public.sc_credit_voids v where v.invoice_id=c.invoice_id)`,[customer]);
+    const paid=await client.query(`select coalesce(sum(amount),0)::numeric as paid
+      from public.sc_credit_payments where lower(trim(customer_name))=lower(trim($1))`,[customer]);
+    const balance=Math.round((Number(active.rows[0].due)-Number(paid.rows[0].paid))*100)/100;
+    const remove=Number(found.rows[0].outstanding_at_sale);
+    if(balance+0.005<remove){await client.query('rollback');return res.status(409).json({error:'Cannot void: this customer already has later payments covering part of the invoice. Payments cannot be reassigned automatically. Contact Admin to reconcile refunds or allocations first.'});}
+    const by=readRoleIdentity(req)?.staffId||'Admin';
+    await client.query(`insert into public.sc_credit_voids(invoice_id,reason,voided_by) values($1,$2,$3)`,[id,reason,by]);
+    await writeAudit(client,req,'credit.invoice.voided',id,found.rows[0].invoice_no,{customerName:customer,reason,outstandingReversed:remove});
+    await client.query('commit');
+    res.json({ok:true,invoiceNo:found.rows[0].invoice_no,customerName:customer,outstandingReversed:remove,newCustomerBalance:Math.round((balance-remove)*100)/100});
+  }catch(e){try{await client.query('rollback')}catch(_){}console.error('Credit invoice void failed',e);res.status(503).json({error:'Could not void the invoice. Confirm credit_voids.sql was installed.'});}
+  finally{client.release();}
 });
 
 /* ---------- Invoice numbering ---------- */
@@ -519,6 +562,7 @@ app.get('/api/invoices', auth, async (req, res) => {
              i.balance, i.saved_at, c.invoice_id as credit_invoice_id
       from public.invoices i
       left join public.sc_credit_invoices c on c.invoice_id=i.id
+      where not exists(select 1 from public.sc_credit_voids v where v.invoice_id=i.id)
       order by i.saved_at desc, i.updated_at desc
     `);
     res.json(result.rows.map(dbRowToInvoice));
@@ -538,6 +582,7 @@ app.get('/api/invoices/:id', auth, async (req, res) => {
       from public.invoices i
       left join public.sc_credit_invoices c on c.invoice_id=i.id
       where i.id = $1
+      and not exists(select 1 from public.sc_credit_voids v where v.invoice_id=i.id)
     `, [req.params.id]);
 
     if (!result.rowCount) return res.status(404).json({ error: 'Invoice not found' });
@@ -870,7 +915,8 @@ app.post('/api/print/bluetooth/link', auth, async (req, res) => {
   const id = req.body && typeof req.body.id === 'string' ? req.body.id.trim() : '';
   if (!id || id.length > 150) return res.status(400).json({error:'Saved invoice ID required'});
   try {
-    const found = await pool.query('select id,invoice_no from public.invoices where id=$1',[id]);
+    const found = await pool.query(`select id,invoice_no from public.invoices i where id=$1
+      and not exists(select 1 from public.sc_credit_voids v where v.invoice_id=i.id)`,[id]);
     if (!found.rowCount) return res.status(404).json({error:'This invoice is not saved in the cloud. Save it first.'});
     const actor=auditIdentity(req);
     // Record a print request BEFORE returning the link. The app can fail to print,
@@ -904,7 +950,8 @@ app.get('/api/print/bluetooth/receipt/:token', async (req, res) => {
   try {
     const found = await pool.query(`select invoice_no, invoice_date, invoice_time, customer_name,
       shop_name, customer_phone, bill_maker, items, discount, subtotal, grand_total,
-      amount_paid, balance from public.invoices where id=$1`,[payload.invoiceId]);
+      amount_paid, balance from public.invoices i where id=$1
+      and not exists(select 1 from public.sc_credit_voids v where v.invoice_id=i.id)`,[payload.invoiceId]);
     if (!found.rowCount) return res.status(404).json({error:'Invoice no longer exists'});
     // This means the app fetched the JSON, NOT that the printer produced paper.
     // Printing should still work if this secondary status update fails.

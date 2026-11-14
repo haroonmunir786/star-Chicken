@@ -56,14 +56,42 @@ function renderCustomerCreditLedger(){
   document.getElementById('scCreditOutstanding').textContent=scCreditMoney(sum('outstanding'));
   const entries=[];
   (data.invoices||[]).filter(x=>!name||key(x.customerName)===key(name)).forEach(x=>{
-    entries.push({at:x.createdAt||0,customer:x.customerName,type:'Credit Invoice '+x.invoiceNo,deb:Number(x.grandTotal)||0,cred:0,by:x.preparedBy||''});
-    if(Number(x.amountPaid)>0)entries.push({at:x.createdAt||0,customer:x.customerName,type:'Received at sale · '+x.invoiceNo,deb:0,cred:Number(x.amountPaid)||0,by:x.preparedBy||''});
+    entries.push({at:x.createdAt||0,customer:x.customerName,type:'Credit Invoice '+x.invoiceNo+(x.voided?' [VOIDED]':''),deb:Number(x.grandTotal)||0,cred:0,by:x.preparedBy||'',voided:!!x.voided,invoiceId:x.invoiceId,invoiceNo:x.invoiceNo});
+    if(Number(x.amountPaid)>0)entries.push({at:x.createdAt||0,customer:x.customerName,type:'Received at sale · '+x.invoiceNo,deb:0,cred:Number(x.amountPaid)||0,by:x.preparedBy||'',voided:!!x.voided});
+    if(x.voided){
+      entries.push({at:x.voidedAt||x.createdAt||0,customer:x.customerName,type:'VOIDED · '+x.invoiceNo+(x.voidReason?' · '+x.voidReason:''),deb:-Number(x.grandTotal)||0,cred:-Number(x.amountPaid)||0,by:x.voidedBy||'Admin',isVoid:true});
+    }
   });
   (data.payments||[]).filter(x=>!name||key(x.customerName)===key(name)).forEach(x=>entries.push({at:x.createdAt||0,customer:x.customerName,type:'Later payment · '+(x.method||'Cash')+(x.note?' · '+x.note:''),deb:0,cred:Number(x.amount)||0,by:x.receivedBy||''}));
   entries.sort((a,b)=>b.at-a.at);
   const tbody=document.getElementById('scCreditRows');
-  tbody.innerHTML=entries.length?entries.map(e=>'<tr><td>'+scCreditSafe(new Date(e.at).toLocaleDateString('en-PK'))+'</td><td>'+scCreditSafe(e.customer)+'</td><td>'+scCreditSafe(e.type)+'</td><td>'+ (e.deb?scCreditMoney(e.deb):'—')+'</td><td>'+(e.cred?scCreditMoney(e.cred):'—')+'</td><td>'+scCreditSafe(e.by)+'</td></tr>').join(''):'<tr><td colspan="6">No credit transactions in this view.</td></tr>';
+  tbody.innerHTML=entries.length?entries.map(e=>'<tr'+(e.isVoid?' style="background:#fff0f0"':'')+'><td>'+scCreditSafe(new Date(e.at).toLocaleDateString('en-PK'))+'</td><td>'+scCreditSafe(e.customer)+'</td><td>'+scCreditSafe(e.type)+(e.invoiceId&&!e.voided&&currentRole==='admin'?' <button type="button" class="btn btn-danger btn-xs" data-credit-void="'+scCreditSafe(e.invoiceId)+'" style="margin-left:7px">Void</button>':'')+'</td><td>'+ (e.deb?scCreditMoney(e.deb):'—')+'</td><td>'+(e.cred?scCreditMoney(e.cred):'—')+'</td><td>'+scCreditSafe(e.by)+'</td></tr>').join(''):'<tr><td colspan="6">No credit transactions in this view.</td></tr>';
 }
+async function voidCreditInvoice(invoiceId){
+  if(currentRole!=='admin'){toast('Only Admin can void credit invoices','error');return;}
+  const inv=(scCreditLedgerData.invoices||[]).find(x=>x.invoiceId===invoiceId);
+  if(!inv||inv.voided){toast('Credit invoice is not available to void','error');return;}
+  const reason=prompt('ADMIN — VOID CREDIT INVOICE '+inv.invoiceNo+'\n\nReason (minimum 5 characters):','Test invoice');
+  if(reason===null)return;
+  if(reason.trim().length<5){toast('Enter a reason of at least 5 characters','error');return;}
+  if(!confirm('VOID '+inv.invoiceNo+' for '+inv.customerName+'?\n\nThis removes this invoice from active sales, stock calculations and credit balances. The original invoice and payment history remain in the database. This cannot be undone.'))return;
+  try{
+    const r=await fetch('/api/credit/invoices/'+encodeURIComponent(invoiceId)+'/void',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:reason.trim()})});
+    const data=await r.json();if(!r.ok)throw new Error(data.error||'Void failed');
+    toast('Invoice '+inv.invoiceNo+' voided. Ledger updated.','success');
+    await deleteLocalInvoice(invoiceId);
+    if(currentId===invoiceId)newInvoice(true);
+    await loadCustomerCreditLedger();
+    await refreshHistory();
+    try{await syncPosSalesToInventory()}catch(e){console.warn('Inventory sync after void failed',e)}
+  }catch(e){toast(e.message||'Void failed','error');alert(e.message||'Invoice not voided');}
+}
+document.addEventListener('DOMContentLoaded',()=>{
+  document.getElementById('scCreditRows')?.addEventListener('click',e=>{
+    const button=e.target.closest('button[data-credit-void]');
+    if(button)voidCreditInvoice(button.dataset.creditVoid);
+  });
+});
 function showCreditPaymentBalance(){
   const name=document.getElementById('scCreditPayCustomer').value;
   const acct=(scCreditLedgerData.accounts||[]).find(a=>a.customerName===name);
@@ -2083,7 +2111,7 @@ select[multiple] {
 <div id="scCreditOverlay" class="sc-credit-overlay no-print" onclick="if(event.target===this)closeCustomerCreditLedger()">
   <div class="sc-credit-modal" role="dialog" aria-modal="true" aria-labelledby="scCreditHeading">
     <div class="sc-credit-row"><h2 id="scCreditHeading">💳 Party Customer Credit Ledger</h2><button class="btn btn-ghost" type="button" onclick="closeCustomerCreditLedger()">✕ Close</button></div>
-    <p style="font-size:.8rem;color:#777">New credit invoices only. All invoices saved before this feature are considered settled. Star Chicken branches are cash-only.</p>
+    <p style="font-size:.8rem;color:#777">New credit invoices only. Existing older invoices are considered settled. Star Chicken branches are cash-only. <strong>Admin:</strong> use Void next to a credit invoice to cancel it safely. Voided entries remain visible here for auditing.</p>
     <div class="sc-credit-row" style="margin-top:12px">
       <select id="scCreditCustomer" aria-label="Select customer" onchange="renderCustomerCreditLedger()"><option value="">All Party Customers</option></select>
       <button class="btn btn-ghost btn-sm" type="button" onclick="loadCustomerCreditLedger()">↻ Refresh</button>
@@ -4399,6 +4427,12 @@ function askDeletePin(label) {return askAppPin(label||'Delete');}
 async function deleteCurrentInvoice() {
   if (!currentId) { toast('No saved invoice selected.', 'error'); return; }
   const no = document.getElementById('invoiceNo').value || 'this invoice';
+  const existing=(allHistory||[]).find(x=>x.id===currentId);
+  if(existing?.paymentType==='credit'){
+    openCustomerCreditLedger();
+    toast('Use Admin Void in the Credit Ledger for this credit invoice','error');
+    return;
+  }
   if (!askDeletePin('Delete ' + no + ' permanently?')) return;
   await deleteInvoiceDB(currentId);
   toast('Invoice deleted.', 'success');
@@ -4409,6 +4443,12 @@ async function deleteCurrentInvoice() {
 
 async function deleteInvoiceById(id, invNo) {
   if (!id) return;
+  const existing=(allHistory||[]).find(x=>x.id===id);
+  if(existing?.paymentType==='credit'){
+    openCustomerCreditLedger();
+    toast('Use Admin Void in the Credit Ledger for '+(invNo||'this invoice'),'error');
+    return;
+  }
   if (!askDeletePin('Delete invoice ' + (invNo || '') + ' permanently?')) return;
   await deleteInvoiceDB(id);
   if (currentId === id) {
