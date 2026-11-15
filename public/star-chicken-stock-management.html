@@ -139,7 +139,7 @@ $("tb").addEventListener("focusin",e=>{const tr=e.target.closest("tr");if(tr)$("
 $("tb").addEventListener("focusout",e=>{const tr=e.target.closest("tr");if(tr)setTimeout(()=>{if(!tr.contains(document.activeElement))tr.classList.remove("row-active")},0)});
 $("tb").addEventListener("keydown",e=>{if(!["Enter","ArrowDown","ArrowUp"].includes(e.key))return;e.preventDefault();let tr=e.target.closest("tr"),d=e.key==="ArrowUp"?-1:1;
 do{tr=d>0?tr.nextElementSibling:tr.previousElementSibling}while(tr&&tr.style.display==="none");if(tr){const x=tr.querySelector(`input[data-c="${e.target.dataset.c}"]`);x.focus();x.select()}});
-async function save(){draft.r=applyPosSales(cur,date,draft.r);(DB[cur]=DB[cur]||{})[date]={r:JSON.parse(JSON.stringify(draft.r))};try{await persist();dirty=false;toast("Saved to Supabase: "+cur+" – "+fd(date));sheet()}catch(e){toast(e.message||"Cloud save failed");}}
+async function save(){draft.r=applyPosSales(cur,date,draft.r);(DB[cur]=DB[cur]||{})[date]={r:JSON.parse(JSON.stringify(draft.r))};try{await persist();dirty=false;toast("Saved to Supabase: "+cur+" – "+fd(date));sheet();if(scStockCatchup)scStockEventRefresh()}catch(e){toast(e.message||"Cloud save failed");}}
 function reopen(){const p=prev(cur,date);if(!p)return toast("No earlier saved day for this branch");if(!confirm("Replace Bal column with the previous day's closing balance?"))return;p.forEach((v,i)=>draft.r[i][0]=v);dirty=true;sheet()}
 /* ---------- reports ---------- */
 function preset(t){const d=new Date(date+"T00:00");let f=new Date(d);if(t==="w")f.setDate(d.getDate()-((d.getDay()+6)%7));if(t==="m")f.setDate(1);$("rf").value=ymd(f);$("rt").value=date;report()}
@@ -213,7 +213,7 @@ async function initializeCloudStock(){
       try{POS_SALES=JSON.parse(localStorage.getItem('starChickenPosSalesV1')||'{}')||{};}catch(_){POS_SALES={};}
       if(Object.keys(DB).length||Object.keys(POS_SALES).length){const m=await fetch('/api/stock/state',{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:{stockDB:DB,posSales:POS_SALES}})});if(!m.ok)throw new Error('Could not migrate existing browser stock data to Supabase');}
     }
-    await refreshPosSalesFromInvoices();cloudReady=true;render();const note=document.createElement('div');note.className='note';note.style.cssText='padding:6px 16px;color:#17653a;font-weight:700';note.textContent='Connected · stock records are stored in Supabase';document.querySelector('header')?.after(note);
+    await refreshPosSalesFromInvoices();cloudReady=true;scStartStockInvoiceEvents();render();const note=document.createElement('div');note.className='note';note.style.cssText='padding:6px 16px;color:#17653a;font-weight:700';note.textContent='Connected · stock records are stored in Supabase';document.querySelector('header')?.after(note);
   }catch(e){console.error(e);toast('Cannot connect to Supabase. Stock editing is disabled.');}}
 /* STAR_CHICKEN_INVOICE_DERIVED_SALES_V2
    Cloud invoices are the authoritative sales source. Stock entries remain unchanged. */
@@ -296,8 +296,28 @@ async function scRefreshStockDisplay(){
   } catch(e){console.warn('[Stock background refresh]', e.message);}
   finally {scStockRefreshBusy=false;}
 }
-setInterval(scRefreshStockDisplay,20000);
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)scRefreshStockDisplay();});
+/* Inventory sales follow committed invoice events instead of polling every 20s.
+   Never overwrite an unsaved stock-sheet edit. */
+let scStockInvoiceEvents=null,scStockEventsConnectedBefore=false,scStockCatchup=false;
+function scStockEventRefresh(){
+  if (dirty || document.hidden || !cloudReady) { scStockCatchup=true; return; }
+  scStockCatchup=false;
+  scRefreshStockDisplay();
+}
+function scStartStockInvoiceEvents(){
+  if (scStockInvoiceEvents || !window.EventSource) return;
+  scStockInvoiceEvents=new EventSource('/api/invoices/events');
+  scStockInvoiceEvents.addEventListener('invoice-change',scStockEventRefresh);
+  scStockInvoiceEvents.addEventListener('open',()=>{
+    if(scStockEventsConnectedBefore) scStockEventRefresh();
+    scStockEventsConnectedBefore=true;
+  });
+}
+document.addEventListener('visibilitychange',()=>{
+  if (!document.hidden) { scStockEventRefresh(); scStartStockInvoiceEvents(); }
+});
+// Observe when the existing inventory initialization finishes; no periodic DB reads.
+
 
 initializeCloudStock().then(() => {
   try {

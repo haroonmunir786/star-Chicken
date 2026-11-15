@@ -627,6 +627,7 @@ app.post('/api/credit/invoices/:id/void',auth,adminOnly,async(req,res)=>{
     await client.query(`insert into public.sc_credit_voids(invoice_id,reason,voided_by) values($1,$2,$3)`,[id,reason,by]);
     await writeAudit(client,req,'credit.invoice.voided',id,found.rows[0].invoice_no,{customerName:customer,reason,outstandingReversed:remove});
     await client.query('commit');
+    scPublishInvoiceChange('voided',found.rows[0].invoice_no);
     res.json({ok:true,invoiceNo:found.rows[0].invoice_no,customerName:customer,outstandingReversed:remove,newCustomerBalance:Math.round((balance-remove)*100)/100});
   }catch(e){try{await client.query('rollback')}catch(_){}console.error('Credit invoice void failed',e);res.status(503).json({error:'Could not void the invoice. Confirm credit_voids.sql was installed.'});}
   finally{client.release();}
@@ -744,6 +745,7 @@ app.post('/api/admin/test-credit-cleanup',auth,adminOnly,async(req,res)=>{
       atSale:result.amountPaidAtSale,laterPaymentsDeleted:result.laterPayments.map(p=>p.amount),
       reason:'User-confirmed removal of November 14 test records'});
     await client.query('commit');
+    scPublishInvoiceChange('deleted',invoiceNo);
     res.setHeader('Cache-Control','no-store');
     return res.json({ok:true,invoiceNo,customerName:result.customerName,
       deletedLaterPayments:result.removeLaterPaymentCount,
@@ -787,6 +789,39 @@ try{const r=await fetch('/api/admin/test-credit-cleanup',{method:'POST',credenti
 if(!r.ok)throw new Error(d.error||'Cleanup failed');status.textContent='DONE: '+d.invoiceNo+' and '+d.deletedLaterPayments+' later payments removed. Invoice numbering unchanged. Now refresh the POS ledger.';details.textContent=JSON.stringify(d,null,2);confirmInput.disabled=true;approved='';
 }catch(e){status.textContent='CLEANUP NOT COMPLETED: '+e.message;remove.disabled=false;}});
 </script></body></html>`);
+});
+
+/* ---------- Instant invoice change notifications (Server-Sent Events) ----------
+   Runs in this Node process. It does not poll Supabase or download invoices.
+   Notify only AFTER a successful invoice transaction commit. The client
+   reloads invoice data when it receives a change event.
+   NOTE: for multiple Render instances, use a shared broker such as Redis.
+*/
+const scInvoiceEventClients = new Set();
+let scInvoiceEventVersion = 0;
+function scPublishInvoiceChange(action, invoiceNo) {
+  scInvoiceEventVersion += 1;
+  const payload = JSON.stringify({version:scInvoiceEventVersion,action,invoiceNo:String(invoiceNo||'')});
+  for (const response of scInvoiceEventClients) {
+    try { response.write('event: invoice-change\ndata: '+payload+'\n\n'); }
+    catch (_) { scInvoiceEventClients.delete(response); }
+  }
+}
+app.get('/api/invoices/events', auth, (req,res) => {
+  if (!readRoleIdentity(req)) return res.status(403).json({error:'POS Staff or Admin login required'});
+  res.status(200);
+  res.setHeader('Content-Type','text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control','no-cache, no-transform');
+  res.setHeader('Connection','keep-alive');
+  res.setHeader('X-Accel-Buffering','no');
+  res.flushHeaders?.();
+  res.write(': connected\n\n');
+  scInvoiceEventClients.add(res);
+  const heartbeat = setInterval(() => {
+    try { res.write(': heartbeat\n\n'); }
+    catch (_) { clearInterval(heartbeat); scInvoiceEventClients.delete(res); }
+  }, 45000);
+  req.on('close',()=>{clearInterval(heartbeat);scInvoiceEventClients.delete(res);});
 });
 
 /* ---------- Invoice numbering ---------- */
@@ -948,6 +983,7 @@ app.post('/api/invoices', auth, async (req, res) => {
     }
     await writeAudit(client,req,existing.rowCount?'invoice.updated':'invoice.created',inv.id,inv.invoiceNo,{grandTotal:inv.grandTotal});
     await client.query('commit');
+    scPublishInvoiceChange(existing.rowCount?'updated':'created',inv.invoiceNo);
     res.status(201).json({...dbRowToInvoice(result.rows[0]),paymentType:existing.rowCount?'cash':inv.paymentType});
   } catch (e) {
     await client.query('rollback');
@@ -975,6 +1011,7 @@ app.delete('/api/invoices/:id', auth, adminOnly, async (req, res) => {
     await client.query('delete from public.invoices where id=$1',[req.params.id]);
     await writeAudit(client,req,'invoice.deleted',req.params.id,found.rows[0].invoice_no);
     await client.query('commit');
+    scPublishInvoiceChange('deleted',found.rows[0].invoice_no);
     res.status(204).end();
   } catch(e) {
     try{await client.query('rollback')}catch(_){}

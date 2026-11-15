@@ -3430,12 +3430,14 @@ async function attemptLogin() {
     // Admin starts on the full-screen dashboard; Staff stays on the invoice form.
     if(currentRole==='admin') openDashboard();
     else closeDashboard();
+    scConnectInvoiceEvents();
     refreshDashboardFromCloud();
     toast(currentRole==='admin'?'Welcome, Admin':'Welcome, Sale Staff','success');
   } catch(e){console.warn('Role login failed:',e.message);if(err)err.classList.add('show');if(pinEl){pinEl.value='';pinEl.focus();} toast(e.message,'error');}
 }
 async function logoutUser() {
   try{await fetch('/api/role/logout',{method:'POST',credentials:'same-origin'});}catch(e){console.warn(e)}
+  scStopInvoiceEvents();
   setStoredRole(null);currentRole=null;currentStaffId=null;currentStaffName=null;applyRoleUI();
   document.getElementById('reportsMenuOverlay')?.classList.remove('show');
   try{closeDashboard()}catch(e){}
@@ -3447,7 +3449,7 @@ async function initAuth() {
   showLogin(); // Never trust sessionStorage to grant a role.
   try {
     const r=await fetch('/api/role/me',{credentials:'same-origin'});
-    if(r.ok){const data=await r.json();if(data.role==='admin'||data.role==='staff'){currentRole=data.role;currentStaffId=data.staffId||null;currentStaffName=data.staffName||null;hideLogin();applyRoleUI();autoSetBillMaker();if(currentRole==='admin')openDashboard();else closeDashboard();refreshDashboardFromCloud();}}
+    if(r.ok){const data=await r.json();if(data.role==='admin'||data.role==='staff'){currentRole=data.role;currentStaffId=data.staffId||null;currentStaffName=data.staffName||null;hideLogin();applyRoleUI();autoSetBillMaker();if(currentRole==='admin')openDashboard();else closeDashboard();scConnectInvoiceEvents();refreshDashboardFromCloud();}}
   }catch(e){console.warn('Role check failed',e)}
   const pin=document.getElementById('loginPin');
   if(pin)pin.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();attemptLogin();}});
@@ -4107,14 +4109,53 @@ async function refreshDashboardFromCloud() {
       renderDashboard(); // Refresh Today/date figures even when no new invoice arrived.
     }
   } catch (e) { console.warn('[POS background refresh]', e.message); }
-  finally { scInvoiceRefreshBusy = false; }
+  finally { scInvoiceRefreshBusy = false; if (scInvoiceEventsPending && !document.hidden) scQueueInvoiceChangeRefresh(); }
 }
-setInterval(() => {
-  if (!document.hidden && currentRole && cloudOnline) refreshDashboardFromCloud();
-}, 20000);
+/* One lightweight push connection replaces the 20-second full-invoice polling.
+   Server sends notifications AFTER committed invoice creates/edits/deletes/voids.
+   If phone reconnects after lost network, make one catch-up request. */
+let scInvoiceEvents = null;
+let scInvoiceEventsConnectedBefore = false;
+let scInvoiceEventsPending = false;
+let scInvoiceEventsRefreshTimer = null;
+function scQueueInvoiceChangeRefresh() {
+  scInvoiceEventsPending = true;
+  if (document.hidden || !cloudOnline || !currentRole) return;
+  clearTimeout(scInvoiceEventsRefreshTimer);
+  // Coalesce a cluster of events into one invoice download.
+  scInvoiceEventsRefreshTimer = setTimeout(async () => {
+    if (document.hidden || !cloudOnline || !currentRole) return;
+    scInvoiceEventsPending = false;
+    await refreshDashboardFromCloud();
+    // If the event arrived while another refresh was running, catch up.
+    if (scInvoiceRefreshBusy) scInvoiceEventsPending = true;
+  }, 650);
+}
+function scConnectInvoiceEvents() {
+  if (!cloudOnline || !currentRole || scInvoiceEvents || !window.EventSource) return;
+  scInvoiceEvents = new EventSource('/api/invoices/events');
+  scInvoiceEvents.addEventListener('invoice-change', () => scQueueInvoiceChangeRefresh());
+  scInvoiceEvents.addEventListener('open', () => {
+    if (scInvoiceEventsConnectedBefore) scQueueInvoiceChangeRefresh();
+    scInvoiceEventsConnectedBefore = true;
+  });
+  scInvoiceEvents.addEventListener('error', () => {
+    // EventSource retries automatically; no rapid repeated database queries.
+  });
+}
+function scStopInvoiceEvents() {
+  scInvoiceEvents?.close(); scInvoiceEvents=null;
+  clearTimeout(scInvoiceEventsRefreshTimer); scInvoiceEventsPending=false;
+  scInvoiceEventsConnectedBefore=false;
+}
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && currentRole && cloudOnline) refreshDashboardFromCloud();
+  if (!document.hidden && currentRole && cloudOnline) {
+    // One catch-up refresh on returning to a tab; no repeating timer.
+    scQueueInvoiceChangeRefresh();
+    scConnectInvoiceEvents();
+  }
 });
+
 
 /* ══════════ HISTORY UI ══════════ */
 async function refreshHistory() {
