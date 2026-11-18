@@ -372,7 +372,7 @@ function scOrderPublic(row){const dt=x=>x instanceof Date?x.toISOString().slice(
 app.get('/api/shop-orders/catalog',auth,(req,res)=>{if(!readRoleIdentity(req))return res.status(403).json({error:'POS Staff or Admin login required'});res.json({branches:SC_ORDER_BRANCHES,items:SC_ORDER_ITEMS});});
 app.get('/api/shop-orders',auth,async(req,res)=>{
   if(!readRoleIdentity(req))return res.status(403).json({error:'POS Staff or Admin login required'});
-  try{const r=await pool.query('select * from public.sc_shop_orders order by created_at desc limit 2000');res.set('Cache-Control','no-store');res.json(r.rows.map(scOrderPublic));}
+  try{const rows=await scShopOrdersCache.get(async()=>{const r=await pool.query('select * from public.sc_shop_orders order by created_at desc limit 2000');return r.rows.map(scOrderPublic);});res.set('Cache-Control','no-store');res.json(rows);}
   catch(e){console.error('Shop order listing failed',e);res.status(503).json({error:'Order tables unavailable. Run shop_orders.sql first.'});}
 });
 app.post('/api/shop-orders',auth,async(req,res)=>{
@@ -387,7 +387,7 @@ app.post('/api/shop-orders',auth,async(req,res)=>{
   const client=await pool.connect();
   try{await client.query('begin');const counter=await client.query("select nextval('public.sc_shop_order_numbers') as n");const number='ORD-'+String(counter.rows[0].n).padStart(6,'0');
     const inserted=await client.query('insert into public.sc_shop_orders(order_no,branch,order_date,expected_date,items,notes,created_by) values($1,$2,$3,$4,$5::jsonb,$6,$7) returning *',[number,branch,day,expected,JSON.stringify(clean),notes,by]);
-    await writeAudit(client,req,'shop.order.created',null,number,{branch,items:clean.length});await client.query('commit');res.status(201).json(scOrderPublic(inserted.rows[0]));
+    await writeAudit(client,req,'shop.order.created',null,number,{branch,items:clean.length});await client.query('commit');scShopOrdersCache.invalidate();res.status(201).json(scOrderPublic(inserted.rows[0]));
   }catch(e){await client.query('rollback').catch(()=>{});console.error('Order create failed',e);res.status(503).json({error:'Could not save order to Supabase'});}finally{client.release();}
 });
 /* Admin-only order cleanup. Stock sheets and invoice records are NEVER changed. */
@@ -414,6 +414,7 @@ app.delete('/api/shop-orders/:id',auth,adminOnly,async(req,res)=>{
     });
     await client.query('delete from public.sc_shop_orders where id=$1',[id]);
     await client.query('commit');
+    scShopOrdersCache.invalidate();
     res.json({ok:true,orderNo:order.order_no,stockUnchanged:true});
   }catch(e){try{await client.query('rollback')}catch(_){}console.error('Admin order deletion failed',e);res.status(503).json({error:'Order not deleted. Check Activity Log and server logs.'});}
   finally{client.release();}
@@ -455,7 +456,7 @@ app.post('/api/shop-orders/:id/complete',auth,async(req,res)=>{
     const receipts=[];for(const p of preview.products){const qty=requested.get(p.index);if(qty>p.receivedAvailable+0.0001){await client.query('rollback');return res.status(409).json({error:p.name+': received quantity exceeds available unallocated stock-sheet receipts. Refresh and check Inventory Management.'});}receipts.push({index:p.index,qty,deliveryDate});}
     const completedBy=auditIdentity(req).id;
     const changed=await client.query("update public.sc_shop_orders set status='completed',delivery_date=$2,receipts=$3::jsonb,completed_at=now(),completed_by=$4 where id=$1 returning *",[order.id,deliveryDate,JSON.stringify(receipts),completedBy]);
-    await writeAudit(client,req,'shop.order.completed',null,order.order_no,{branch:order.branch,deliveryDate,receipts});await client.query('commit');res.json(scOrderPublic(changed.rows[0]));
+    await writeAudit(client,req,'shop.order.completed',null,order.order_no,{branch:order.branch,deliveryDate,receipts});await client.query('commit');scShopOrdersCache.invalidate();res.json(scOrderPublic(changed.rows[0]));
   }catch(e){await client.query('rollback').catch(()=>{});console.error('Completing order failed',e);res.status(503).json({error:'Could not complete order. No changes saved.'});}finally{client.release();}
 });
 
@@ -506,16 +507,46 @@ app.put('/api/ordering/state', auth, async (req, res) => {
 });
 
 
+/* ---------- Shared in-process query cache (Supabase egress reduction) ----------
+   This caches READ responses on Render, not in Supabase or in a staff browser.
+   A concurrent burst shares one PostgreSQL query. Successful writes invalidate
+   immediately. Failed DB reads are NEVER cached. No cross-instance cache is used.
+*/
+function scReadCache(ttlMs) {
+  let value, expiresAt=0, inFlight=null, generation=0;
+  return {
+    async get(loader) {
+      if (value !== undefined && Date.now() < expiresAt) return value;
+      if (inFlight && inFlight.generation === generation) return inFlight.promise;
+      const observed = generation;
+      const promise = (async () => {
+        const loaded = await loader();
+        if (generation === observed) { value=loaded; expiresAt=Date.now()+ttlMs; }
+        return loaded;
+      })();
+      inFlight={promise,generation:observed};
+      try { return await promise; }
+      finally { if (inFlight?.promise === promise) inFlight=null; }
+    },
+    invalidate() { generation++; value=undefined; expiresAt=0; inFlight=null; }
+  };
+}
+// The full invoice query is deliberately unchanged: Dashboard, reports, stock
+// and old invoice screens all require the complete (including items) dataset.
+const scInvoiceListCache=scReadCache(3*60*1000);
+const scStockStateCache=scReadCache(30*1000);
+const scShopOrdersCache=scReadCache(60*1000);
+
 /* ---------- Shared stock / POS inventory state ---------- */
 app.get('/api/stock/state', auth, async (req, res) => {
-  try { const r = await pool.query('select state, updated_at from public.stock_app_state where id=1'); res.json({state:r.rowCount?r.rows[0].state:null,updatedAt:r.rowCount?r.rows[0].updated_at:null}); }
+  try { const result=await scStockStateCache.get(async()=>{const r=await pool.query('select state, updated_at from public.stock_app_state where id=1');return {state:r.rowCount?r.rows[0].state:null,updatedAt:r.rowCount?r.rows[0].updated_at:null};});res.set('Cache-Control','no-store');res.json(result); }
   catch(e){ console.error('Could not load stock state:',e); res.status(500).json({error:'Could not load stock data. Run schema_additions.sql in Supabase SQL Editor.'}); }
 });
 app.put('/api/stock/state', auth, async (req, res) => {
   const state=req.body?.state;
   if(!state||typeof state!=='object'||Array.isArray(state)) return res.status(400).json({error:'A valid stock state object is required'});
   if(JSON.stringify(state).length>1_800_000) return res.status(413).json({error:'Stock data is too large to save'});
-  try { const r=await pool.query(`insert into public.stock_app_state(id,state,updated_at) values(1,$1::jsonb,now()) on conflict(id) do update set state=excluded.state,updated_at=now() returning updated_at`,[JSON.stringify(state)]);res.json({ok:true,updatedAt:r.rows[0].updated_at}); }
+  try { const r=await pool.query(`insert into public.stock_app_state(id,state,updated_at) values(1,$1::jsonb,now()) on conflict(id) do update set state=excluded.state,updated_at=now() returning updated_at`,[JSON.stringify(state)]);scStockStateCache.invalidate();res.json({ok:true,updatedAt:r.rows[0].updated_at}); }
   catch(e){console.error('Could not save stock state:',e);res.status(500).json({error:'Could not save stock data. Run schema_additions.sql in Supabase SQL Editor.'});}
 });
 
@@ -800,6 +831,7 @@ if(!r.ok)throw new Error(d.error||'Cleanup failed');status.textContent='DONE: '+
 const scInvoiceEventClients = new Set();
 let scInvoiceEventVersion = 0;
 function scPublishInvoiceChange(action, invoiceNo) {
+  scInvoiceListCache.invalidate();
   scInvoiceEventVersion += 1;
   const payload = JSON.stringify({version:scInvoiceEventVersion,action,invoiceNo:String(invoiceNo||'')});
   for (const response of scInvoiceEventClients) {
@@ -844,7 +876,8 @@ app.get('/api/invoices/next-number', auth, async (req, res) => {
 /* ---------- Invoice API ---------- */
 app.get('/api/invoices', auth, async (req, res) => {
   try {
-    const result = await pool.query(`
+    const invoices=await scInvoiceListCache.get(async()=>{
+      const result = await pool.query(`
       select i.id, i.invoice_no, i.invoice_date, i.invoice_time,
              i.customer_name, i.shop_name, i.bill_maker, i.customer_phone,
              i.items, i.discount, i.subtotal, i.grand_total, i.amount_paid,
@@ -854,7 +887,10 @@ app.get('/api/invoices', auth, async (req, res) => {
       where not exists(select 1 from public.sc_credit_voids v where v.invoice_id=i.id)
       order by i.saved_at desc, i.updated_at desc
     `);
-    res.json(result.rows.map(dbRowToInvoice));
+    return result.rows.map(dbRowToInvoice);
+    });
+    res.setHeader('Cache-Control','no-store');
+    res.json(invoices);
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Could not load invoices' });
@@ -1078,6 +1114,7 @@ app.post('/api/invoices/bulk', auth, adminOnly, async (req, res) => {
     }
 
     await client.query('commit');
+    scPublishInvoiceChange('bulk-import','');
     res.json({ uploaded });
   } catch (e) {
     await client.query('rollback');

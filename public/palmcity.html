@@ -6935,6 +6935,12 @@ async function syncPosSalesToInventory() {
     });
   });
 
+  // Avoid re-writing the entire shared stock document when the computed
+  // invoice sales and stock rows are already identical (common on opening
+  // Inventory Management with no new invoices).
+  const nextStockState = {stockDB, posSales:compact};
+  if (JSON.stringify(nextStockState) === JSON.stringify({stockDB:cloudState.stockDB || {},posSales:cloudState.posSales || {}})) return sales;
+
   // Save both POS sales and stock balances in one Supabase state document.
   try {
     const putRes = await fetch('/api/stock/state', {method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:{stockDB, posSales:compact}})});
