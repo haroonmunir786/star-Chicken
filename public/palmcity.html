@@ -2177,6 +2177,17 @@ body.sc-price-staff #discount{pointer-events:none;background:#f0f0f5}
    <a class="btn btn-ghost" href="https://lahore.punjab.gov.pk/poultry-rate-list" target="_blank" rel="noopener noreferrer">Check Government Notice ↗</a>
   </div>
   <div id="scPriceStatus" style="font-size:12px;color:#666;margin:8px 0"></div>
+  <div id="scProductAdmin" hidden style="border:1px solid #eadbb8;border-radius:12px;background:#fffbf0;padding:12px;margin:12px 0">
+   <h3 style="font-size:15px;margin-bottom:8px">📦 Manage Products — Admin Only</h3>
+   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end">
+    <label style="flex:2 1 180px;font-size:12px">New product name<input id="scNewProductName" maxlength="120" placeholder="Product name" style="width:100%;min-height:40px"></label>
+    <label style="flex:1 1 170px;font-size:12px">Category<select id="scNewProductCategory" style="width:100%;min-height:40px"><option>Main Products</option><option>By Parts Products</option><option>Marinated Products</option><option>Further Products</option><option>Youngs & National</option><option>Grocery</option></select></label>
+    <label style="flex:1 1 115px;font-size:12px">KG per packet/unit<input id="scNewProductPack" type="number" step="0.001" min="0.001" value="1" style="width:100%;min-height:40px"></label>
+    <button type="button" class="btn btn-primary" onclick="scAddCatalogProduct()">＋ Add Product</button>
+   </div>
+   <p style="font-size:12px;margin:8px 0 0;color:#8c5638">Products added to chicken categories appear in Invoice, Inventory and Orders. Grocery/masala products appear in Invoice and Price List. Archive hides products from NEW selections; existing invoices and stock history stay intact.</p>
+   <label style="display:block;font-size:12px;margin-top:8px"><input id="scShowArchived" type="checkbox" onchange="scRenderPriceRows()"> Show archived products (Restore)</label>
+  </div>
   <button class="btn btn-gold" id="scPriceActivation" onclick="scTogglePriceEnforcement()" style="margin-bottom:10px"></button>
   <p style="font-size:12px;color:#7b4d00;margin-bottom:10px">Set the fixed prices and factors first. Invoice price-locking stays OFF until Admin activates it. After activation, any product without a configured price cannot be invoiced.</p>
   <div style="margin-bottom:10px"><input id="scPriceSearch" type="search" placeholder="Search products..." oninput="scRenderPriceRows()" style="width:min(420px,100%)"></div>
@@ -5016,6 +5027,50 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
+
+let scProductCatalog=[];
+async function scLoadUnifiedProducts(){
+ const r=await fetch('/api/products/catalog',{credentials:'same-origin',cache:'no-store'});
+ const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'Product catalog unavailable');
+ scProductCatalog=d.products||[];
+ const activeNames=new Set(scProductCatalog.filter(p=>p.active).map(p=>p.name));
+ // Keep category mappings for archived historical invoices; only hide from NEW dropdowns.
+ for(const group of allProducts){for(let i=group.items.length-1;i>=0;i--){
+  if(!activeNames.has(group.items[i]))group.items.splice(i,1);
+ }}
+ for(const p of scProductCatalog){
+  if(!p.active)continue;
+  const group=allProducts.find(g=>g.cat===p.category)||allProducts[0];
+  if(!group.items.includes(p.name))group.items.push(p.name);
+  productCategoryMap[p.name]=p.category;productCategoryMap[p.name.toLowerCase().trim()]=p.category;
+  SC_NEW_PRODUCT_PACK_KG[p.name]=p.packKg;
+  if(p.stockIndex!=null){
+   while(SC_INVENTORY_STOCK_ITEMS.length<=p.stockIndex)SC_INVENTORY_STOCK_ITEMS.push(null);
+   SC_INVENTORY_STOCK_ITEMS[p.stockIndex]=p.name;
+   SC_INVENTORY_ITEM_INDEX.set(SC_INVENTORY_NORMALIZE(p.name),p.stockIndex);
+  }
+  if(p.stockIndex!=null && typeof DASH_STOCK_PRODUCTS!=='undefined'){
+   while(DASH_STOCK_PRODUCTS.length<=p.stockIndex)DASH_STOCK_PRODUCTS.push(['',1]);
+   DASH_STOCK_PRODUCTS[p.stockIndex]=[p.name,p.packKg];
+  }
+ }
+ if(document.getElementById('productSearch')?.value)renderProductSuggestions();
+}
+async function scAddCatalogProduct(){
+ if(currentRole!=='admin')return;
+ const name=document.getElementById('scNewProductName').value.trim();
+ const category=document.getElementById('scNewProductCategory').value;
+ const packKg=Number(document.getElementById('scNewProductPack').value);
+ if(!name||!Number.isFinite(packKg)||packKg<=0){toast('Enter product name and valid KG/packet','error');return;}
+ if(!confirm('Add '+name+' to the shared product catalog?'))return;
+ try{const r=await fetch('/api/products',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,category,packKg})});const d=await r.json();if(!r.ok)throw Error(d.error||'Add failed');document.getElementById('scNewProductName').value='';await scFetchPrices();toast(name+' added. Set its price or factor before invoicing.','success');}catch(e){toast(e.message,'error');}
+}
+async function scChangeProductActive(name,active){
+ if(currentRole!=='admin')return;
+ if(!confirm((active?'RESTORE':'ARCHIVE')+' product '+name+'? Historical invoices, orders and stock will NOT be removed.'))return;
+ try{const r=await fetch('/api/products/archive',{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,active})});const d=await r.json();if(!r.ok)throw Error(d.error||'Update failed');await scFetchPrices();toast(name+(active?' restored':' archived')+' across active POS modules.','success');}catch(e){toast(e.message,'error');}
+}
+
 /* Shared Price List: no browser-authoritative rates. The backend always validates new invoices. */
 let scPriceData=null,scPriceConn=null;
 let scMarinatedWeightEdited=false;
@@ -5030,6 +5085,7 @@ async function scFetchPrices(){
    if(p.name==='Chicken Kofta')p.packKg=1;
  }
  scPriceData=d;
+ await scLoadUnifiedProducts();
  const base=document.getElementById('scBasePrice');if(base)base.value=d.baseRate;
  const day=document.getElementById('scBaseDay');if(day)day.value=d.rateDate;
  scRenderPriceRows();scApplyPriceFormMode();scApplySelectedRate();return d;
@@ -5068,14 +5124,17 @@ function closePriceList(){document.getElementById('scPriceOverlay')?.classList.r
 function scRenderPriceRows(){
  const body=document.getElementById('scPriceRows');if(!body||!scPriceData)return;
  const admin=currentRole==='admin',q=(document.getElementById('scPriceSearch')?.value||'').toLowerCase();
+ const archivedOn=!!document.getElementById('scShowArchived')?.checked;
+ const archived=archivedOn?scProductCatalog.filter(p=>!p.active&&p.name.toLowerCase().includes(q)):[];
  const rows=scPriceData.products.filter(x=>x.name.toLowerCase().includes(q));
+ document.getElementById('scProductAdmin').hidden=!admin;
  const missing=scPriceData.products.filter(x=>x.rate==null).length;
  const status=document.getElementById('scPriceStatus');if(status)status.textContent=`${scPriceData.enforced?'PRICE LOCK ACTIVE':'SETUP MODE — manual prices still permitted'} · Rate date: ${scPriceData.rateDate} · ${missing} products need Admin prices · ${scPriceData.products.length} total`;
  const activation=document.getElementById('scPriceActivation');if(activation){activation.hidden=!admin;activation.textContent=scPriceData.enforced?'Deactivate Price Lock (Admin)':'Activate Automatic Price Lock (Admin)';}
  document.getElementById('scApproveRate').hidden=!admin;
  document.getElementById('scBasePrice').readOnly=!admin;
  document.getElementById('scBaseDay').readOnly=!admin;
- body.innerHTML=rows.map((x)=>`<tr><td>${scPriceEsc(x.name)}<div style="font-size:11px;color:#777">${x.packKg} ${x.name.includes('kg')?'':'kg / packet or unit'}</div></td><td>${x.type==='factor'?'Factor':'Fixed'}</td><td>${admin?`<input type="number" min="0.000001" step="0.001" id="scPv-${scPriceData.products.indexOf(x)}" value="${x.type==='factor'?(x.factor??''):(x.fixed??'')}" placeholder="Not set">`:(x.type==='factor'?(x.factor==null?'—':'× '+x.factor):(x.fixed==null?'—':x.fixed))}</td><td class="${x.rate==null?'missing':'ready'}">${x.rate==null?'NOT SET':'Rs '+x.rate.toLocaleString('en-PK')}</td><td>${admin?`<button class="btn btn-primary btn-sm" onclick="scSaveProductPrice(${scPriceData.products.indexOf(x)})">Save</button>`:'View only'}</td></tr>`).join('');
+ body.innerHTML=rows.map((x)=>`<tr><td>${scPriceEsc(x.name)}<div style="font-size:11px;color:#777">${x.packKg} ${x.name.includes('kg')?'':'kg / packet or unit'}</div></td><td>${x.type==='factor'?'Factor':'Fixed'}</td><td>${admin?`<input type="number" min="0.000001" step="0.001" id="scPv-${scPriceData.products.indexOf(x)}" value="${x.type==='factor'?(x.factor??''):(x.fixed??'')}" placeholder="Not set">`:(x.type==='factor'?(x.factor==null?'—':'× '+x.factor):(x.fixed==null?'—':x.fixed))}</td><td class="${x.rate==null?'missing':'ready'}">${x.rate==null?'NOT SET':'Rs '+x.rate.toLocaleString('en-PK')}</td><td>${admin?`<button class="btn btn-primary btn-sm" onclick="scSaveProductPrice(${scPriceData.products.indexOf(x)})">Save</button> <button class="btn btn-ghost btn-sm" onclick="scChangeProductActive(decodeURIComponent('${encodeURIComponent(x.name)}'),false)">Archive</button>`:'View only'}</td></tr>`).join('')+(admin?archived.map(p=>`<tr style="opacity:.7"><td>${scPriceEsc(p.name)}<div style="font-size:11px">Archived · historical records retained</div></td><td>${scPriceEsc(p.category)}</td><td>—</td><td>ARCHIVED</td><td><button class="btn btn-primary btn-sm" onclick="scChangeProductActive(decodeURIComponent('${encodeURIComponent(p.name)}'),true)">Restore</button></td></tr>`).join(''):'');
 }
 async function scPricePut(url,data){const r=await fetch(url,{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'Price update failed');return d;}
 async function scSaveProductPrice(index){

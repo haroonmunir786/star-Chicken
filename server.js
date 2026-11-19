@@ -389,7 +389,7 @@ function scPriceValue(row,base){
 async function scGetPrices(db){
   const [s,p]=await Promise.all([
     db.query('select base_rate,rate_date,source_name,updated_at,updated_by,enforcement_enabled from public.sc_price_settings where id=1'),
-    db.query('select product_name,pricing_type,kg_per_packet,fixed_price,factor,updated_at,updated_by from public.sc_price_products order by product_name')
+    db.query('select p.product_name,p.pricing_type,p.kg_per_packet,p.fixed_price,p.factor,p.updated_at,p.updated_by from public.sc_price_products p join public.sc_product_catalog c on c.product_name=p.product_name where c.is_active=true order by p.product_name')
   ]);
   if(!s.rowCount)throw new Error('Price setup missing: run price_list.sql');
   const settings=s.rows[0],base=Number(settings.base_rate);
@@ -440,7 +440,12 @@ app.put('/api/prices/product',auth,adminOnly,async(req,res)=>{
 /* On NEW invoices, trust only catalog prices held in Supabase, never the browser's rate/weight/amount. */
 async function scEnforceNewInvoicePrices(client,inv,identity){
   const priceList=await scGetPrices(client);
-  if(!priceList.enforced)return; // Stage rollout: preserve legacy invoicing until Admin activates pricing.
+  // Archived products cannot be sold on NEW invoices, even during Setup Mode.
+  // Existing invoice edits are handled separately and keep their historical items.
+  if(!Array.isArray(inv.items)||!inv.items.length)throw new Error('Add at least one product');
+  const allowed=new Set(priceList.products.map(x=>x.name));
+  for(const x of inv.items)if(!allowed.has(String(x.name||'').trim()))throw new Error('Product is archived or not in the approved catalog: '+String(x.name||''));
+  if(!priceList.enforced)return; // Setup Mode retains legacy rates only for active catalog products.
   const catalog=new Map(priceList.products.map(p=>[p.name,p]));
   if(!Array.isArray(inv.items)||!inv.items.length||inv.items.length>150)throw new Error('Add valid products from the Price List');
   let subtotal=0;
@@ -469,13 +474,70 @@ async function scEnforceNewInvoicePrices(client,inv,identity){
   inv.balance=Math.round((inv.grandTotal-inv.amountPaid)*100)/100;
 }
 
+
+/* ---------- Unified product catalog: soft archive, never re-index historical stock/orders ---------- */
+const SC_TRACKED_CATEGORIES = new Set(['Main Products','By Parts Products','Marinated Products','Further Products','Inventory Products']);
+const SC_PRODUCT_CATEGORIES=['Main Products','By Parts Products','Marinated Products','Further Products','Youngs & National','Grocery'];
+function scProductDTO(r){return {name:r.product_name,category:r.category,packKg:Number(r.kg_per_packet),active:r.is_active,stockIndex:r.stock_index,orderIndex:r.order_index};}
+app.get('/api/products/catalog',auth,async(req,res)=>{
+ if(!readRoleIdentity(req))return res.status(403).json({error:'POS login required'});
+ try{const r=await pool.query('select product_name,category,kg_per_packet,is_active,stock_index,order_index from public.sc_product_catalog order by created_at,product_name');res.set('Cache-Control','no-store');res.json({products:r.rows.map(scProductDTO),categories:SC_PRODUCT_CATEGORIES});}
+ catch(e){console.error('Unified product catalog read failed',e);res.status(503).json({error:'Unified catalog not installed. Run unified_products.sql in Supabase.'});}
+});
+app.post('/api/products',auth,adminOnly,async(req,res)=>{
+ const name=String(req.body?.name||'').replace(/\s+/g,' ').trim();
+ const category=String(req.body?.category||'');
+ const packKg=Number(req.body?.packKg);
+ if(name.length<2||name.length>120||!SC_PRODUCT_CATEGORIES.includes(category)||!Number.isFinite(packKg)||packKg<=0||packKg>100)return res.status(400).json({error:'Enter a valid product name, category and kg/packet'});
+ const type=category==='Marinated Products'?'factor':'fixed';
+ const tracked=SC_TRACKED_CATEGORIES.has(category);
+ const db=await pool.connect();
+ try{
+  await db.query('begin');
+  await db.query("select pg_advisory_xact_lock(hashtext('sc-products-add'))");
+  const exists=await db.query('select 1 from public.sc_product_catalog where lower(trim(product_name))=lower($1)',[name]);
+  if(exists.rowCount){await db.query('rollback');return res.status(409).json({error:'Product already exists (possibly archived). Use Restore for archived products.'});}
+  let stockIndex=null,orderIndex=null;
+  if(tracked){
+   const mx=await db.query('select coalesce(max(stock_index),$1)::integer+1 as s,coalesce(max(order_index),$2)::integer+1 as o from public.sc_product_catalog',[SC_STOCK_BASE_LENGTH-1,SC_ORDER_ITEMS.length-1]);
+   stockIndex=Math.max(SC_STOCK_BASE_LENGTH,Number(mx.rows[0].s));
+   orderIndex=Math.max(SC_ORDER_ITEMS.length,Number(mx.rows[0].o));
+  }
+  const row=await db.query('insert into public.sc_product_catalog(product_name,category,kg_per_packet,stock_index,order_index,changed_by) values($1,$2,$3,$4,$5,$6) returning *',[name,category,packKg,stockIndex,orderIndex,auditIdentity(req).id]);
+  await db.query('insert into public.sc_price_products(product_name,pricing_type,kg_per_packet) values($1,$2,$3)',[name,type,packKg]);
+  await writeAudit(db,req,'product.created',null,null,{product:name,category,packKg,stockIndex,orderIndex});
+  await db.query('commit');scNotifyPriceChanged();res.status(201).json(scProductDTO(row.rows[0]));
+ }catch(e){await db.query('rollback').catch(()=>{});console.error('Product add failed',e);res.status(503).json({error:'Could not add product; no changes saved.'});}
+ finally{db.release();}
+});
+app.put('/api/products/archive',auth,adminOnly,async(req,res)=>{
+ const name=String(req.body?.name||'');const active=req.body?.active;
+ if(!name||typeof active!=='boolean')return res.status(400).json({error:'Choose product and archive/restore action'});
+ const db=await pool.connect();try{
+  await db.query('begin');
+  const result=await db.query('update public.sc_product_catalog set is_active=$2,changed_at=now(),changed_by=$3 where product_name=$1 returning *',[name,active,auditIdentity(req).id]);
+  if(!result.rowCount){await db.query('rollback');return res.status(404).json({error:'Product not found'});}
+  await writeAudit(db,req,active?'product.restored':'product.archived',null,null,{product:name,stockIndex:result.rows[0].stock_index,orderIndex:result.rows[0].order_index});
+  await db.query('commit');scNotifyPriceChanged();res.json(scProductDTO(result.rows[0]));
+ }catch(e){await db.query('rollback').catch(()=>{});console.error('Product archive failed',e);res.status(503).json({error:'Product update failed'});}finally{db.release();}
+});
+// Order+stock legacy arrays retain their original indexes. New tracked items append ONLY.
+const SC_STOCK_BASE_LENGTH = 90;
+async function scOrderCurrentCatalog(db){
+ const r=await db.query('select product_name,kg_per_packet,is_active,order_index from public.sc_product_catalog where order_index is not null order by order_index');
+ const items=SC_ORDER_ITEMS.map(x=>x.slice());const active=[];
+ for(const p of r.rows){const index=Number(p.order_index);if(index>=items.length)while(items.length<=index)items.push(null);
+  items[index]=[p.product_name,Number(p.kg_per_packet)];if(p.is_active)active.push(index);}
+ return {items,active};
+}
+
 /* ---------- Shop orders: read-only inventory reconciliation (never changes stock) ---------- */
 const SC_ORDER_BRANCHES=['Hatchery','Kasur','Gajjumatta','Mustafabad','Gulshan Ravi','Murghzar'];
 const SC_ORDER_ITEMS=[["SBB Trimming",2],["SBB Slice",2],["Skinless Breast",1],["Boneless Handi",1],["Boneless Breast",2],["Breast RS",2],["Breast Yum",2],["Premium Mince",1],["Zinger CP S/O",2],["Zinger CP S/L",2],["Zinger S/L JC/RS",2],["Drumstick S/O",1],["Drumstick S/L",1],["Karahi Cut",1],["2 Pcs Cut/Combo Cut",1],["Whole Bird S/O",1],["Whole Bird S/L",1],["Inner Fillet",2],["Thigh Trimming",2],["Trimming Bone",2],["Whole Leg",2],["Drummet A",2],["Drummet B",2],["Niblet A",2],["Niblet B",2],["Wing Tip",2],["3 Joint Wings",2],["2 Joint Wings S/O",2],["2 Joint Wings S/L",1],["D Trimming",2],["Neck",1],["Carcass",4],["Skin",2],["Tail",2],["Heart",1],["Liver",1],["Gizzard",1],["Shanks",1],["MDM Mince",1],["Marinated ButterFly JC",2],["Marinated ButterFly LC",2],["Marinated Niblet 1kg",1],["Marinated Niblet",2],["Marinated Drummet 1kg",1],["Marinated Drummet",2],["Marinated 5 cut",2],["Injected Chicken Pieces",3.5],["Marinated Zinger CP",2],["Marinated Zinger SBL",2],["Marinated Zinger S/O",2],["Marinated Zinger S/L",2],["Marinated Drumstick",1],["Marinated Strips",1],["Marinated Strips 2kg",2],["Marinated Crispy",1],["Kebab",0.5],["Nuggets",1],["Chicken Fries",1],["Burger Patty 12 Pcs",0.96],["Burger Patty 8 Pcs",0.48],["Chicken Samosa 12 pcs",0.3],["Chicken Samosa 24 pcs",0.6],["Fried Samosa",0.5],["Fried Spring Roll",0.5],["Chicken Roll 12 pcs",0.42],["Chicken Roll 24 pcs",0.84],["Breading Flour",1],["Chapli Kabab",0.5],["Chicken Kofta",1],["Pizza Topping Tikka",1],["Pizza Topping Fajita",1],["Boneless Breast (110-140)",2],["Zinger Skinless 70-100",2],["Marinated Thigh",2],["Fajita Topping",0.5],["Innerfillet",2],["Boneless Breast RS (120-130)",2],["3 Joined Wings",2],["2 Pc Cut",1],["Breading flour",3],["Tikka Topping",0.5],["Malai Boti Topping",0.5],["Liver & Heart",1],["Marinated Butterfly",2],["Marinade Injected Chicken Pieces",3],["D-Triming",2],["Marinated SBB Crispy",1.5],["Skinless Breast Star Chicken",1],["Extra",1],["Shanks (kg)",1],["SBB Triming/B Grade Trimming",2],["Quarter Cut/4 cut",1]];
 const scOrderMoney=n=>Math.round(Number(n||0)*100)/100;
 const scOrderDateValid=s=>typeof s==='string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s+'T00:00:00Z')) && new Date(s+'T00:00:00Z').toISOString().slice(0,10)===s;
 function scOrderPublic(row){const dt=x=>x instanceof Date?x.toISOString().slice(0,10):String(x).slice(0,10);return {id:row.id,orderNo:row.order_no,branch:row.branch,orderDate:dt(row.order_date),expectedDate:dt(row.expected_date),deliveryDate:row.delivery_date?dt(row.delivery_date):null,status:row.status,items:row.items,receipts:row.receipts||[],notes:row.notes||'',createdBy:row.created_by,completedBy:row.completed_by||'',createdAt:row.created_at,completedAt:row.completed_at};}
-app.get('/api/shop-orders/catalog',auth,(req,res)=>{if(!readRoleIdentity(req))return res.status(403).json({error:'POS Staff or Admin login required'});res.json({branches:SC_ORDER_BRANCHES,items:SC_ORDER_ITEMS});});
+app.get('/api/shop-orders/catalog',auth,async(req,res)=>{if(!readRoleIdentity(req))return res.status(403).json({error:'POS Staff or Admin login required'});try{const catalog=await scOrderCurrentCatalog(pool);res.json({branches:SC_ORDER_BRANCHES,...catalog});}catch(e){console.error(e);res.status(503).json({error:'Cannot load product catalog'});}});
 app.get('/api/shop-orders',auth,async(req,res)=>{
   if(!readRoleIdentity(req))return res.status(403).json({error:'POS Staff or Admin login required'});
   try{const rows=await scShopOrdersCache.get(async()=>{const r=await pool.query('select * from public.sc_shop_orders order by created_at desc limit 2000');return r.rows.map(scOrderPublic);});res.set('Cache-Control','no-store');res.json(rows);}
@@ -486,9 +548,9 @@ app.post('/api/shop-orders',auth,async(req,res)=>{
   const x=req.body||{},branch=String(x.branch||''),day=String(x.orderDate||''),expected=String(x.expectedDate||''),notes=String(x.notes||'').trim();
   if(!SC_ORDER_BRANCHES.includes(branch)||!scOrderDateValid(day)||!scOrderDateValid(expected)||notes.length>400)return res.status(400).json({error:'Choose a valid branch and dates'});
   const input=Array.isArray(x.items)?x.items:[];
-  if(!input.length||input.length>SC_ORDER_ITEMS.length)return res.status(400).json({error:'Add products to the order'});
+  const liveOrderCatalog=await scOrderCurrentCatalog(pool);if(!input.length||input.length>liveOrderCatalog.active.length)return res.status(400).json({error:'Add products to the order'});
   const used=new Set(),clean=[];
-  for(const it of input){const i=Number(it.index),q=Number(it.qty);if(!Number.isInteger(i)||i<0||i>=SC_ORDER_ITEMS.length||used.has(i)||!Number.isFinite(q)||q<=0||q>100000||Math.round(q*1000)!==q*1000)return res.status(400).json({error:'Invalid product or packet quantity'});used.add(i);clean.push({index:i,name:SC_ORDER_ITEMS[i][0],kgPerPacket:SC_ORDER_ITEMS[i][1],qty:q});}
+  for(const it of input){const i=Number(it.index),q=Number(it.qty);if(!Number.isInteger(i)||i<0||!liveOrderCatalog.active.includes(i)||used.has(i)||!Number.isFinite(q)||q<=0||q>100000||Math.round(q*1000)!==q*1000)return res.status(400).json({error:'Invalid product or packet quantity'});used.add(i);clean.push({index:i,name:liveOrderCatalog.items[i][0],kgPerPacket:liveOrderCatalog.items[i][1],qty:q});}
   const by=auditIdentity(req).id;
   const client=await pool.connect();
   try{await client.query('begin');const counter=await client.query("select nextval('public.sc_shop_order_numbers') as n");const number='ORD-'+String(counter.rows[0].n).padStart(6,'0');

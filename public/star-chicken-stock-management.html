@@ -164,7 +164,7 @@ function pick(b){if(!chk())return;cur=b;draft=null;sheet()}
 function rowCalc(i){const td=$("tb").children[i].lastChild,v=bal(draft.r[i]);td.textContent=f2(v);td.classList.toggle("neg",v<0)}
 function totals(){let h="";const K=[0,1,2,3,4],P=K.map(c=>draft.r.reduce((t,a)=>t+(c<4?n(a[c]):bal(a)),0)),W=K.map(c=>draft.r.reduce((t,a,i)=>t+(c<4?n(a[c]):bal(a))*ITEMS[i][1],0));
 $("tf").innerHTML=`<tr><td colspan="3">Total (Pkts)</td>${P.map(v=>`<td>${f2(v)}</td>`).join("")}</tr><tr><td colspan="3">Total (Kg)</td>${W.map(v=>`<td>${f2(v)}</td>`).join("")}</tr>`}
-function filter(){const q=$("q").value.toLowerCase();[...$("tb").children].forEach((tr,i)=>tr.style.display=ITEMS[i][0].toLowerCase().includes(q)?"":"none")}
+function filter(){const q=$("q").value.toLowerCase();[...$("tb").children].forEach((tr,i)=>tr.style.display=scStockShowRow(i)&&ITEMS[i][0].toLowerCase().includes(q)?"":"none")}
 $("q").oninput=filter;
 $("tb").addEventListener("input",e=>{const tr=e.target.closest("tr");if(!tr)return;const i=+tr.dataset.i;draft.r[i][e.target.dataset.c]=e.target.value;dirty=true;rowCalc(i);totals()});
 $("tb").addEventListener("focusin",e=>{const tr=e.target.closest("tr");if(tr)$("tb").querySelectorAll("tr.row-active").forEach(r=>r.classList.remove("row-active")),tr.classList.add("row-active")});
@@ -351,7 +351,26 @@ document.addEventListener('visibilitychange',()=>{
 // Observe when the existing inventory initialization finishes; no periodic DB reads.
 
 
-initializeCloudStock().then(() => {
+
+let scInventoryCatalog=[];
+async function scLoadInventoryCatalog(){
+ const r=await fetch('/api/products/catalog',{credentials:'same-origin',cache:'no-store'});
+ if(!r.ok)throw Error('Product catalog unavailable');
+ const data=await r.json();scInventoryCatalog=data.products||[];
+ for(const p of scInventoryCatalog){if(p.stockIndex==null)continue;
+   const i=Number(p.stockIndex);while(ITEMS.length<=i)ITEMS.push(['',1]);
+   ITEMS[i]=[p.name,p.packKg];
+ }
+}
+function scStockRowHasHistory(i){
+ for(const branch of Object.values(DB||{}))for(const record of Object.values(branch||{})){
+  const row=record?.r?.[i];if(Array.isArray(row)&&row.some(x=>Number(x)!==0))return true;
+ }
+ return false;
+}
+function scStockShowRow(i){const p=scInventoryCatalog.find(x=>x.stockIndex===i);if(!p||p.active)return true;const row=DB?.[cur]?.[date]?.r?.[i];return Array.isArray(row)&&row.some(x=>Number(x)!==0);}
+
+scLoadInventoryCatalog().then(()=>initializeCloudStock()).then(() => {
   try {
     const p = new URLSearchParams(location.search || '');
     const b = (p.get('branch') || p.get('b') || '').trim();
