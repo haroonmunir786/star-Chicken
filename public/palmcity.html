@@ -1873,6 +1873,27 @@ select[multiple] {
     display:block; padding:20px; font-size:16px; color:#000;
   }
 }
+
+/* Price List modal and strict quantity-only invoice pricing */
+.sc-price-overlay{display:none;position:fixed;inset:0;background:#0009;z-index:4800;align-items:center;justify-content:center;padding:12px}
+.sc-price-overlay.show{display:flex}
+.sc-price-modal{background:#fff;border-radius:15px;width:min(980px,100%);max-height:94vh;overflow:auto;padding:18px;box-shadow:0 16px 60px #0004}
+.sc-price-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.sc-price-fields{display:flex;gap:10px;align-items:end;flex-wrap:wrap;background:#fff8ed;padding:12px;border-radius:12px;margin-bottom:12px}
+.sc-price-fields label{display:flex;flex-direction:column;gap:3px;font-size:12px;font-weight:700}
+.sc-price-modal input{height:40px;padding:8px;border:1px solid #ddd;border-radius:8px;max-width:100%}
+.sc-price-table-wrap{overflow:auto;max-height:55vh}
+.sc-price-table{border-collapse:collapse;width:100%;min-width:680px;font-size:13px}
+.sc-price-table th{background:#282020;color:white;position:sticky;top:0;padding:10px;text-align:left}
+.sc-price-table td{border-bottom:1px solid #eee;padding:7px 10px}
+.sc-price-table input{width:100px}
+.sc-price-table .missing{color:#b42318;font-weight:700}
+.sc-price-table .ready{color:#157347;font-weight:700}
+#rate[readonly],#weight[readonly]{background:#f0f0f5;cursor:not-allowed;font-weight:700}
+body.sc-price-staff .custom-link,body.sc-price-staff #customFields{display:none!important}
+body.sc-price-staff #discount{pointer-events:none;background:#f0f0f5}
+@media(max-width:600px){.sc-price-modal{padding:10px}.sc-price-fields{display:grid;grid-template-columns:1fr 1fr}.sc-price-fields label{min-width:0}.sc-price-table th,.sc-price-table td{padding:6px}}
+@media print{.sc-price-overlay{display:none!important}}
 </style>
 <style>
 /* Desktop Admin: persistent sidebar and dashboard sharing the screen. */
@@ -2144,6 +2165,25 @@ select[multiple] {
   </div>
 </div>
 
+<!-- Shared Admin-maintained product Price List -->
+<div class="sc-price-overlay no-print" id="scPriceOverlay" onclick="if(event.target===this)closePriceList()">
+ <section class="sc-price-modal" aria-label="Star Chicken Price List" role="dialog" aria-modal="true">
+  <div class="sc-price-head"><h2>💰 Star Chicken — Price List</h2><button class="btn btn-ghost" onclick="closePriceList()">✕ Close</button></div>
+  <p style="font-size:12px;color:#666;margin-bottom:8px">Factor products use the approved Lahore live broiler wholesale rate (second row). Fixed prices do not change with the base rate. Prices are in Rs/kg for chicken and per unit for other products.</p>
+  <div class="sc-price-fields">
+   <label>Announced Rate (Rs/kg)<input id="scBasePrice" type="number" min="1" step="0.01"></label>
+   <label>Published Date<input id="scBaseDay" type="date"></label>
+   <button type="button" id="scApproveRate" class="btn btn-primary" onclick="scApproveBaseRate()">Approve Base Rate</button>
+   <a class="btn btn-ghost" href="https://lahore.punjab.gov.pk/poultry-rate-list" target="_blank" rel="noopener noreferrer">Check Government Notice ↗</a>
+  </div>
+  <div id="scPriceStatus" style="font-size:12px;color:#666;margin:8px 0"></div>
+  <button class="btn btn-gold" id="scPriceActivation" onclick="scTogglePriceEnforcement()" style="margin-bottom:10px"></button>
+  <p style="font-size:12px;color:#7b4d00;margin-bottom:10px">Set the fixed prices and factors first. Invoice price-locking stays OFF until Admin activates it. After activation, any product without a configured price cannot be invoiced.</p>
+  <div style="margin-bottom:10px"><input id="scPriceSearch" type="search" placeholder="Search products..." oninput="scRenderPriceRows()" style="width:min(420px,100%)"></div>
+  <div class="sc-price-table-wrap"><table class="sc-price-table"><thead><tr><th>Product</th><th>Type</th><th>Fixed Rs or factor ×</th><th>Current Rs</th><th>Action</th></tr></thead><tbody id="scPriceRows"></tbody></table></div>
+ </section>
+</div>
+
 <!-- Menu Sidebar (opens from left when Menu is clicked) -->
 <div class="menu-sidebar-overlay no-print" id="reportsMenuOverlay" onclick="if(event.target===this)closeReportsMenu()">
   <aside class="menu-sidebar" role="navigation" aria-label="App menu">
@@ -2193,6 +2233,9 @@ select[multiple] {
           <strong>Order</strong>
           <small>Branch order · Master · Stock Transfer</small>
         </span>
+      </button>
+      <button type="button" class="menu-nav-item" onclick="closeReportsMenu(); openPriceList()">
+        <span class="mn-icon">💰</span><span class="mn-text"><strong>Price List</strong><small>Approved prices and factors · Admin editing</small></span>
       </button>
       <button type="button" class="menu-nav-item" onclick="closeReportsMenu(); openInventorySystem()">
         <span class="mn-icon">📋</span>
@@ -2447,11 +2490,11 @@ select[multiple] {
               </div>
               <div class="form-group">
                 <label>Weight (kg)</label>
-                <input type="number" id="weight" min="0" step="0.01" placeholder="0.00">
+                <input type="number" id="weight" min="0" step="0.01" placeholder="Auto from Qty">
               </div>
               <div class="form-group">
                 <label>Rate (Rs)</label>
-                <input type="number" id="rate" min="0" step="0.01" placeholder="0.00">
+                <input type="number" id="rate" min="0" step="0.01" placeholder="From Price List">
               </div>
               <div class="form-group">
                 <label>&nbsp;</label>
@@ -3370,6 +3413,8 @@ function requireAdmin(actionName) {
 }
 
 function applyRoleUI() {
+  document.body.classList.toggle('sc-price-staff',currentRole==='staff');
+  const discEl=document.getElementById('discount');if(discEl){discEl.readOnly=currentRole==='staff';if(currentRole==='staff'&&!currentId){discEl.value='0';if(typeof calcTotals==='function')calcTotals();}}
   document.body.classList.toggle('admin-workspace', currentRole === 'admin');
   const badge = document.getElementById('roleBadge');
   const menuRole = document.getElementById('menuRoleLabel');
@@ -3430,14 +3475,14 @@ async function attemptLogin() {
     // Admin starts on the full-screen dashboard; Staff stays on the invoice form.
     if(currentRole==='admin') openDashboard();
     else closeDashboard();
-    scConnectInvoiceEvents();
+    scConnectInvoiceEvents();scStartPrices();
     refreshDashboardFromCloud();
     toast(currentRole==='admin'?'Welcome, Admin':'Welcome, Sale Staff','success');
   } catch(e){console.warn('Role login failed:',e.message);if(err)err.classList.add('show');if(pinEl){pinEl.value='';pinEl.focus();} toast(e.message,'error');}
 }
 async function logoutUser() {
   try{await fetch('/api/role/logout',{method:'POST',credentials:'same-origin'});}catch(e){console.warn(e)}
-  scStopInvoiceEvents();
+  scStopInvoiceEvents();scPriceConn?.close();scPriceConn=null;scPriceData=null;closePriceList();
   setStoredRole(null);currentRole=null;currentStaffId=null;currentStaffName=null;applyRoleUI();
   document.getElementById('reportsMenuOverlay')?.classList.remove('show');
   try{closeDashboard()}catch(e){}
@@ -3449,7 +3494,7 @@ async function initAuth() {
   showLogin(); // Never trust sessionStorage to grant a role.
   try {
     const r=await fetch('/api/role/me',{credentials:'same-origin'});
-    if(r.ok){const data=await r.json();if(data.role==='admin'||data.role==='staff'){currentRole=data.role;currentStaffId=data.staffId||null;currentStaffName=data.staffName||null;hideLogin();applyRoleUI();autoSetBillMaker();if(currentRole==='admin')openDashboard();else closeDashboard();scConnectInvoiceEvents();refreshDashboardFromCloud();}}
+    if(r.ok){const data=await r.json();if(data.role==='admin'||data.role==='staff'){currentRole=data.role;currentStaffId=data.staffId||null;currentStaffName=data.staffName||null;hideLogin();applyRoleUI();autoSetBillMaker();if(currentRole==='admin')openDashboard();else closeDashboard();scConnectInvoiceEvents();scStartPrices();refreshDashboardFromCloud();}}
   }catch(e){console.warn('Role check failed',e)}
   const pin=document.getElementById('loginPin');
   if(pin)pin.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();attemptLogin();}});
@@ -3863,6 +3908,7 @@ async function getAllInvoices() {
 }
 
 async function putInvoice(inv) {
+  if(!cloudOnline)throw new Error('Internet required: invoices must be saved and verified on the server');
   if (cloudOnline) {
     try {
       const saved = await cloudFetch('/api/invoices', {
@@ -4425,6 +4471,15 @@ async function saveInvoice() {
     const dateEl = document.getElementById('invoiceDate');
     if (dateEl && !dateEl.value) dateEl.value = getPakistanDateISO();
   }
+  if(!currentId){
+    try{await scFetchPrices();}
+    catch(e){toast('Cannot verify approved prices: '+e.message,'error');return;}
+    for(const it of items){
+      const p=scPriceFor(it.name);
+      if(!p||p.rate==null){toast('Price missing for '+it.name,'error');return;}
+      if(Math.abs(Number(it.rate)-p.rate)>0.005){toast('Price changed for '+it.name+'. Remove and re-add the item using the current rate.','error');return;}
+    }
+  }
   stopPktLiveClock();
   const inv = collectInvoice();
   if(currentId && document.getElementById('invoicePaymentType')?.value==='credit') {toast('Saved credit invoice is locked; record later payments in Customer Credit Ledger','error');return;}
@@ -4458,7 +4513,7 @@ async function saveInvoice() {
     }
     // Stay on the saved invoice on phones; history opens only when requested from Menu.
   } catch (e) {
-    toast('Could not save. Try again.', 'error');
+    toast('Could not save: ' + (e?.message || 'Try again.'), 'error');
   }
 }
 
@@ -4955,12 +5010,97 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('qty')?.addEventListener('input', () => {
     const name = document.getElementById('selectedProduct')?.value || '';
     const packKg = SC_NEW_PRODUCT_PACK_KG[name];
-    if (!packKg) return;
+    if (!packKg || (scPriceData?.enforced && scPriceFor(name)?.type==='factor')) return;
     const count = Number(document.getElementById('qty').value) || 0;
     document.getElementById('weight').value = Math.round(count * packKg * 1000) / 1000;
   });
 });
+
+/* Shared Price List: no browser-authoritative rates. The backend always validates new invoices. */
+let scPriceData=null,scPriceConn=null;
+let scMarinatedWeightEdited=false;
+function scPriceEsc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+async function scFetchPrices(){
+ const r=await fetch('/api/prices',{credentials:'same-origin',cache:'no-store'});
+ const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'Price List unavailable');
+ scPriceData=d;
+ const base=document.getElementById('scBasePrice');if(base)base.value=d.baseRate;
+ const day=document.getElementById('scBaseDay');if(day)day.value=d.rateDate;
+ scRenderPriceRows();scApplyPriceFormMode();scApplySelectedRate();return d;
+}
+function scApplyPriceFormMode(){
+ const enforced=!!scPriceData?.enforced;
+ const product=scPriceFor(document.getElementById('selectedProduct')?.value||'');
+ const weight=document.getElementById('weight'),rate=document.getElementById('rate');
+ if(weight){weight.readOnly=enforced && product?.type!=='factor';weight.title=enforced?(product?.type==='factor'?'Enter actual weight for this marinated product':'Weight calculated from approved packing size'):'';}
+ if(rate)rate.readOnly=enforced;
+ document.body.classList.toggle('sc-pricing-enforced',enforced);
+}
+function scPriceFor(name){return scPriceData?.products?.find(x=>x.name===name)||null;}
+function scApplySelectedRate(){
+ scApplyPriceFormMode();
+ if(currentId)return;
+ const name=document.getElementById('selectedProduct')?.value||'';
+ const p=scPriceFor(name),qty=Number(document.getElementById('qty')?.value||0);
+ const weight=document.getElementById('weight'),rate=document.getElementById('rate');
+ if(!scPriceData?.enforced)return;
+ if(weight && (p?.type!=='factor' || !scMarinatedWeightEdited))weight.value=p?(Math.round(qty*p.packKg*1000)/1000):'';
+ if(rate)rate.value=p?.rate==null?'':p.rate;
+}
+function scConnectPriceEvents(){
+ if(!currentRole||scPriceConn||!window.EventSource)return;
+ scPriceConn=new EventSource('/api/prices/events');
+ scPriceConn.addEventListener('price-change',()=>scFetchPrices().catch(e=>console.warn(e)));
+}
+function scStartPrices(){scFetchPrices().catch(e=>toast(e.message,'error'));scConnectPriceEvents();}
+function openPriceList(){
+ if(!currentRole){toast('Login required','error');return;}
+ document.getElementById('scPriceOverlay')?.classList.add('show');
+ scFetchPrices().catch(e=>{document.getElementById('scPriceStatus').textContent=e.message;toast(e.message,'error')});
+}
+function closePriceList(){document.getElementById('scPriceOverlay')?.classList.remove('show');}
+function scRenderPriceRows(){
+ const body=document.getElementById('scPriceRows');if(!body||!scPriceData)return;
+ const admin=currentRole==='admin',q=(document.getElementById('scPriceSearch')?.value||'').toLowerCase();
+ const rows=scPriceData.products.filter(x=>x.name.toLowerCase().includes(q));
+ const missing=scPriceData.products.filter(x=>x.rate==null).length;
+ const status=document.getElementById('scPriceStatus');if(status)status.textContent=`${scPriceData.enforced?'PRICE LOCK ACTIVE':'SETUP MODE — manual prices still permitted'} · Rate date: ${scPriceData.rateDate} · ${missing} products need Admin prices · ${scPriceData.products.length} total`;
+ const activation=document.getElementById('scPriceActivation');if(activation){activation.hidden=!admin;activation.textContent=scPriceData.enforced?'Deactivate Price Lock (Admin)':'Activate Automatic Price Lock (Admin)';}
+ document.getElementById('scApproveRate').hidden=!admin;
+ document.getElementById('scBasePrice').readOnly=!admin;
+ document.getElementById('scBaseDay').readOnly=!admin;
+ body.innerHTML=rows.map((x)=>`<tr><td>${scPriceEsc(x.name)}<div style="font-size:11px;color:#777">${x.packKg} ${x.name.includes('kg')?'':'kg / packet or unit'}</div></td><td>${x.type==='factor'?'Factor':'Fixed'}</td><td>${admin?`<input type="number" min="0.000001" step="0.001" id="scPv-${scPriceData.products.indexOf(x)}" value="${x.type==='factor'?(x.factor??''):(x.fixed??'')}" placeholder="Not set">`:(x.type==='factor'?(x.factor==null?'—':'× '+x.factor):(x.fixed==null?'—':x.fixed))}</td><td class="${x.rate==null?'missing':'ready'}">${x.rate==null?'NOT SET':'Rs '+x.rate.toLocaleString('en-PK')}</td><td>${admin?`<button class="btn btn-primary btn-sm" onclick="scSaveProductPrice(${scPriceData.products.indexOf(x)})">Save</button>`:'View only'}</td></tr>`).join('');
+}
+async function scPricePut(url,data){const r=await fetch(url,{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'Price update failed');return d;}
+async function scSaveProductPrice(index){
+ if(currentRole!=='admin')return;
+ const item=scPriceData?.products?.[index];if(!item)return;
+ const value=Number(document.getElementById('scPv-'+index)?.value||0);
+ if(!Number.isFinite(value)||value<=0)return toast('Enter a positive fixed price or factor','error');
+ try{await scPricePut('/api/prices/product',{name:item.name,type:item.type,value});await scFetchPrices();toast(item.name+' price saved','success');}catch(e){toast(e.message,'error');}
+}
+async function scTogglePriceEnforcement(){
+ if(currentRole!=='admin'||!scPriceData)return;
+ const activate=!scPriceData.enforced;
+ const missing=scPriceData.products.filter(x=>x.rate==null).length;
+ if(!confirm(activate?`Activate PRICE LOCK now? ${missing} products have no price and will be blocked until configured. All new invoices will require server-approved rates.`:'Deactivate PRICE LOCK? Salespersons will again be able to enter manual prices until reactivated.'))return;
+ try{await scPricePut('/api/prices/enforcement',{enabled:activate});await scFetchPrices();toast(activate?'Automatic price lock ACTIVE':'Setup mode active','success');}catch(e){toast(e.message,'error');}
+}
+async function scApproveBaseRate(){
+ if(currentRole!=='admin')return;
+ const baseRate=Number(document.getElementById('scBasePrice').value),rateDate=document.getElementById('scBaseDay').value;
+ if(!Number.isFinite(baseRate)||baseRate<=0||!rateDate)return toast('Enter rate and official notice date','error');
+ if(!confirm(`Approve Rs ${baseRate}/kg dated ${rateDate}? All factor prices change immediately for NEW invoices. Check the second row of the official Lahore poultry notice first.`))return;
+ try{await scPricePut('/api/prices/base',{baseRate,rateDate});await scFetchPrices();toast('Approved base rate updated','success');}catch(e){toast(e.message,'error');}
+}
+document.addEventListener('DOMContentLoaded',()=>{
+ document.getElementById('qty')?.addEventListener('input',scApplySelectedRate);
+ document.getElementById('weight')?.addEventListener('input',()=>{if(scPriceData?.enforced && scPriceFor(document.getElementById('selectedProduct')?.value||'')?.type==='factor')scMarinatedWeightEdited=true;});
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden&&currentRole)scFetchPrices().catch(()=>{});});
+});
+
 function selectProduct(name) {
+  scMarinatedWeightEdited=false;
   document.getElementById('productSearch').value = name;
   document.getElementById('selectedProduct').value = name;
   document.getElementById('productDropdown').style.display = 'none';
@@ -4973,10 +5113,12 @@ function selectProduct(name) {
     const count = Number(document.getElementById('qty').value) || 0;
     document.getElementById('weight').value = Math.round(count * packKg * 1000) / 1000;
   }
+  scApplySelectedRate();
   document.getElementById('qty').focus();
   document.getElementById('qty').select();
 }
 function toggleCustom() {
+  if(scPriceData?.enforced){toast('Only approved products may be invoiced. Ask Admin to add the product to the catalog.','error');return;}
   const box = document.getElementById('customFields');
   box.classList.toggle('show');
   if (box.classList.contains('show')) {
@@ -4993,9 +5135,13 @@ function addItem() {
   if (custom) name = custom;
   name = (name || '').trim();
   if (!name) { toast('Enter a product name.', 'error'); return; }
+  if(scPriceData?.enforced && !currentId && !scPriceFor(name)){toast('Choose a product from the approved Price List','error');return;}
+  if(scPriceData?.enforced && !currentId && scPriceFor(name)?.rate==null){toast('Admin has not configured this product price','error');return;}
+  if(!currentId)scApplySelectedRate();
   const qty = parseFloat(document.getElementById('qty').value) || 0;
   const weight = parseFloat(document.getElementById('weight').value) || 0;
   const rate = parseFloat(document.getElementById('rate').value) || 0;
+  if(qty<=0){toast('Enter a positive quantity','error');return;}
   if (weight <= 0) { toast('Enter Weight.', 'error'); return; }
   if (rate <= 0) { toast('Enter Rate.', 'error'); return; }
   const amount = Math.round(weight * rate);
@@ -5011,6 +5157,7 @@ function addItem() {
   clearForm();
 }
 function clearForm() {
+  scMarinatedWeightEdited=false;
   editingIndex = -1;
   document.getElementById('productSearch').value = '';
   document.getElementById('selectedProduct').value = '';
@@ -5038,6 +5185,7 @@ function editItem(i) {
   if (i < 0 || i >= items.length) return;
   const it = items[i];
   editingIndex = i;
+  scMarinatedWeightEdited=true; // Preserve manually entered weight during an edit.
   document.getElementById('productSearch').value = it.name || '';
   document.getElementById('selectedProduct').value = it.name || '';
   document.getElementById('customName').value = '';
@@ -5047,7 +5195,8 @@ function editItem(i) {
   document.getElementById('rate').value = it.rate != null ? it.rate : '';
   const addBtn = document.querySelector('button[onclick="addItem()"]');
   if (addBtn) addBtn.textContent = '✓ Update';
-  document.getElementById('rate').focus();
+  if(!currentId)scApplySelectedRate();
+  document.getElementById('qty').focus();
   toast('Editing: ' + (it.name || ''), 'success');
   document.getElementById('productSearch')?.closest('.card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }

@@ -363,6 +363,112 @@ app.get('/api/health', async (req, res) => {
 });
 
 
+
+/* ---------- Cloud Price List: Admin-managed, enforced at invoice save ---------- */
+const SC_PRICE_SOURCE_URL='https://lahore.punjab.gov.pk/poultry-rate-list';
+const scPriceEventClients=new Set();
+let scPriceEventVersion=0;
+function scNotifyPriceChanged(){
+  scPriceEventVersion++;
+  for(const response of scPriceEventClients){try{response.write('event: price-change\ndata: '+JSON.stringify({version:scPriceEventVersion})+'\n\n');}catch(_){scPriceEventClients.delete(response);}}
+}
+app.get('/api/prices/events',auth,(req,res)=>{
+  if(!readRoleIdentity(req))return res.status(403).end();
+  res.status(200).set({'Content-Type':'text/event-stream','Cache-Control':'no-cache, no-transform','Connection':'keep-alive','X-Accel-Buffering':'no'});
+  res.flushHeaders?.();res.write('event: connected\ndata: {}\n\n');
+  scPriceEventClients.add(res);
+  const heartbeat=setInterval(()=>{try{res.write(': ping\n\n')}catch(_){}},25000);
+  req.on('close',()=>{clearInterval(heartbeat);scPriceEventClients.delete(res)});
+});
+function scPriceValue(row,base){
+  const factor=row.pricing_type==='factor';
+  const n=Number(factor?row.factor:row.fixed_price);
+  if(!Number.isFinite(n)||n<=0)return null;
+  return Math.round((factor?Number(base)*n:n)*100)/100;
+}
+async function scGetPrices(db){
+  const [s,p]=await Promise.all([
+    db.query('select base_rate,rate_date,source_name,updated_at,updated_by,enforcement_enabled from public.sc_price_settings where id=1'),
+    db.query('select product_name,pricing_type,kg_per_packet,fixed_price,factor,updated_at,updated_by from public.sc_price_products order by product_name')
+  ]);
+  if(!s.rowCount)throw new Error('Price setup missing: run price_list.sql');
+  const settings=s.rows[0],base=Number(settings.base_rate);
+  return {enforced:!!settings.enforcement_enabled,baseRate:base,rateDate:settings.rate_date instanceof Date?settings.rate_date.toISOString().slice(0,10):String(settings.rate_date).slice(0,10),sourceName:settings.source_name,sourceUrl:SC_PRICE_SOURCE_URL,updatedAt:settings.updated_at,updatedBy:settings.updated_by,
+    products:p.rows.map(x=>({name:x.product_name,type:x.pricing_type,packKg:Number(x.kg_per_packet),fixed:x.fixed_price===null?null:Number(x.fixed_price),factor:x.factor===null?null:Number(x.factor),rate:scPriceValue(x,base)}))};
+}
+app.get('/api/prices',auth,async(req,res)=>{
+  if(!readRoleIdentity(req))return res.status(403).json({error:'POS login required'});
+  try{res.set('Cache-Control','no-store');res.json(await scGetPrices(pool));}
+  catch(e){console.error('Prices unavailable',e);res.status(503).json({error:'Price List not ready. Admin must run price_list.sql in Supabase.'});}
+});
+app.put('/api/prices/enforcement',auth,adminOnly,async(req,res)=>{
+  const enabled=req.body?.enabled;if(typeof enabled!=='boolean')return res.status(400).json({error:'Invalid activation setting'});
+  const client=await pool.connect();
+  try{await client.query('begin');
+    if(enabled){
+      const found=await client.query(`select count(*)::int as cnt from public.sc_price_products where (pricing_type='fixed' and fixed_price is not null) or (pricing_type='factor' and factor is not null)`);
+      if(!found.rows[0].cnt){await client.query('rollback');return res.status(400).json({error:'Configure at least one product price first'});}
+    }
+    await client.query('update public.sc_price_settings set enforcement_enabled=$1,updated_at=now(),updated_by=$2 where id=1',[enabled,auditIdentity(req).id]);
+    await writeAudit(client,req,enabled?'prices.enforcement.enabled':'prices.enforcement.disabled',null,null,{});
+    await client.query('commit');scNotifyPriceChanged();res.json({ok:true,enabled});
+  }catch(e){await client.query('rollback').catch(()=>{});console.error(e);res.status(503).json({error:'Cannot change pricing activation'});}finally{client.release();}
+});
+app.put('/api/prices/base',auth,adminOnly,async(req,res)=>{
+  const base=Number(req.body?.baseRate),day=String(req.body?.rateDate||'');
+  if(!Number.isFinite(base)||base<=0||base>100000||!/^\d{4}-\d{2}-\d{2}$/.test(day)||Number.isNaN(Date.parse(day)))return res.status(400).json({error:'Provide a valid announced rate and published date'});
+  const client=await pool.connect();
+  try{await client.query('begin');
+    await client.query('update public.sc_price_settings set base_rate=$1,rate_date=$2,updated_at=now(),updated_by=$3 where id=1',[base,day,auditIdentity(req).id]);
+    await writeAudit(client,req,'prices.base.approved',null,null,{baseRate:base,rateDate:day,category:'Lahore live broiler wholesale, second row'});
+    await client.query('commit');scNotifyPriceChanged();res.json({ok:true});
+  }catch(e){await client.query('rollback').catch(()=>{});console.error(e);res.status(503).json({error:'Could not save approved base rate'});}finally{client.release();}
+});
+app.put('/api/prices/product',auth,adminOnly,async(req,res)=>{
+  const name=String(req.body?.name||'');const type=String(req.body?.type||'');const value=Number(req.body?.value);
+  if(!name||!['fixed','factor'].includes(type)||!Number.isFinite(value)||value<=0||value>1000000)return res.status(400).json({error:'Enter a valid fixed rate or factor'});
+  const client=await pool.connect();
+  try{await client.query('begin');
+    const old=await client.query('select pricing_type from public.sc_price_products where product_name=$1 for update',[name]);
+    if(!old.rowCount){await client.query('rollback');return res.status(404).json({error:'Unknown catalog product'});}
+    if(old.rows[0].pricing_type!==type){await client.query('rollback');return res.status(400).json({error:'Product pricing type is fixed by catalog category'});}
+    await client.query(`update public.sc_price_products set fixed_price=$2,factor=$3,updated_at=now(),updated_by=$4 where product_name=$1`,[name,type==='fixed'?value:null,type==='factor'?value:null,auditIdentity(req).id]);
+    await writeAudit(client,req,'prices.product.updated',null,null,{product:name,type,value});
+    await client.query('commit');scNotifyPriceChanged();res.json({ok:true});
+  }catch(e){await client.query('rollback').catch(()=>{});console.error(e);res.status(503).json({error:'Price update failed'});}finally{client.release();}
+});
+/* On NEW invoices, trust only catalog prices held in Supabase, never the browser's rate/weight/amount. */
+async function scEnforceNewInvoicePrices(client,inv,identity){
+  const priceList=await scGetPrices(client);
+  if(!priceList.enforced)return; // Stage rollout: preserve legacy invoicing until Admin activates pricing.
+  const catalog=new Map(priceList.products.map(p=>[p.name,p]));
+  if(!Array.isArray(inv.items)||!inv.items.length||inv.items.length>150)throw new Error('Add valid products from the Price List');
+  let subtotal=0;
+  const repriced=[];
+  for(const x of inv.items){
+    const name=String(x.name||'').trim(),p=catalog.get(name);
+    if(!p)throw new Error('Product '+name+' is not in the approved Price List');
+    if(p.rate===null)throw new Error('Admin has not set a price for '+name+'. Invoice not saved.');
+    const qty=Number(x.qty);
+    if(!Number.isFinite(qty)||qty<=0||qty>100000||Math.round(qty*1000)!==qty*1000)throw new Error('Invalid quantity for '+name);
+    // Factor-priced (marinated) products use the actual weight entered by Staff.
+    // Fixed-price products always derive weight from the approved packet size.
+    const submittedWeight=Number(x.weight);
+    const weight=p.type==='factor' ? submittedWeight : Math.round(qty*p.packKg*1000)/1000;
+    if(!Number.isFinite(weight)||weight<=0||weight>100000)throw new Error('Enter a valid positive weight for '+name);
+    if(p.type==='factor' && Math.abs(weight-Math.round(weight*1000)/1000)>0.000001)throw new Error('Weight supports up to three decimal places for '+name);
+    const amount=Math.round(weight*p.rate);
+    repriced.push({name,qty,weight,rate:p.rate,amount});subtotal+=amount;
+  }
+  // Staff cannot use discounts to bypass the approved price list.
+  if(identity.role==='staff' && Math.abs(inv.discount)>0.005)throw new Error('Only Admin may apply discounts');
+  if(!Number.isFinite(inv.discount)||inv.discount<0||inv.discount>subtotal)throw new Error('Invalid invoice discount');
+  inv.items=repriced;inv.subTotal=subtotal;inv.grandTotal=Math.max(0,subtotal-inv.discount);
+  if(inv.paymentType==='cash')inv.amountPaid=inv.grandTotal;
+  if(inv.amountPaid<0||inv.amountPaid>inv.grandTotal+0.005)throw new Error('Payment amount is invalid for approved prices');
+  inv.balance=Math.round((inv.grandTotal-inv.amountPaid)*100)/100;
+}
+
 /* ---------- Shop orders: read-only inventory reconciliation (never changes stock) ---------- */
 const SC_ORDER_BRANCHES=['Hatchery','Kasur','Gajjumatta','Mustafabad','Gulshan Ravi','Murghzar'];
 const SC_ORDER_ITEMS=[["SBB Trimming",2],["SBB Slice",2],["Skinless Breast",1],["Boneless Handi",1],["Boneless Breast",2],["Breast RS",2],["Breast Yum",2],["Premium Mince",1],["Zinger CP S/O",2],["Zinger CP S/L",2],["Zinger S/L JC/RS",2],["Drumstick S/O",1],["Drumstick S/L",1],["Karahi Cut",1],["2 Pcs Cut/Combo Cut",1],["Whole Bird S/O",1],["Whole Bird S/L",1],["Inner Fillet",2],["Thigh Trimming",2],["Trimming Bone",2],["Whole Leg",2],["Drummet A",2],["Drummet B",2],["Niblet A",2],["Niblet B",2],["Wing Tip",2],["3 Joint Wings",2],["2 Joint Wings S/O",2],["2 Joint Wings S/L",1],["D Trimming",2],["Neck",1],["Carcass",4],["Skin",2],["Tail",2],["Heart",1],["Liver",1],["Gizzard",1],["Shanks",1],["MDM Mince",1],["Marinated ButterFly JC",2],["Marinated ButterFly LC",2],["Marinated Niblet 1kg",1],["Marinated Niblet",2],["Marinated Drummet 1kg",1],["Marinated Drummet",2],["Marinated 5 cut",2],["Injected Chicken Pieces",3.5],["Marinated Zinger CP",2],["Marinated Zinger SBL",2],["Marinated Zinger S/O",2],["Marinated Zinger S/L",2],["Marinated Drumstick",1],["Marinated Strips",1],["Marinated Strips 2kg",2],["Marinated Crispy",1],["Kebab",0.5],["Nuggets",1],["Chicken Fries",1],["Burger Patty 12 Pcs",0.96],["Burger Patty 8 Pcs",0.48],["Chicken Samosa 12 pcs",0.3],["Chicken Samosa 24 pcs",0.6],["Fried Samosa",0.5],["Fried Spring Roll",0.5],["Chicken Roll 12 pcs",0.42],["Chicken Roll 24 pcs",0.84],["Breading Flour",1],["Chapli Kabab",1],["Chicken Kofta",0.8],["Pizza Topping Tikka",1],["Pizza Topping Fajita",1],["Boneless Breast (110-140)",2],["Zinger Skinless 70-100",2],["Marinated Thigh",2],["Fajita Topping",0.5],["Innerfillet",2],["Boneless Breast RS (120-130)",2],["3 Joined Wings",2],["2 Pc Cut",1],["Breading flour",3],["Tikka Topping",0.5],["Malai Boti Topping",0.5],["Liver & Heart",1],["Marinated Butterfly",2],["Marinade Injected Chicken Pieces",3],["D-Triming",2],["Marinated SBB Crispy",1.5],["Skinless Breast Star Chicken",1],["Extra",1],["Shanks (kg)",1],["SBB Triming/B Grade Trimming",2],["Quarter Cut/4 cut",1]];
@@ -936,6 +1042,7 @@ app.post('/api/invoices', auth, async (req, res) => {
     );
 
     if (existing.rowCount) {
+      if(readRoleIdentity(req)?.role!=='admin'){await client.query('rollback');return res.status(403).json({error:'Only Admin can edit a saved invoice'});}
       // Once a new credit invoice is posted, keep its invoice/ledger consistent.
       const protectedCredit=await client.query('select 1 from public.sc_credit_invoices where invoice_id=$1',[inv.id]);
       if(protectedCredit.rowCount){await client.query('rollback');return res.status(409).json({error:'Credit invoice is locked to protect the ledger; contact Admin for adjustments.'});}
@@ -953,6 +1060,8 @@ app.post('/api/invoices', auth, async (req, res) => {
       else {await client.query('rollback');return res.status(403).json({error:'Please sign in to POS before saving an invoice'});}
     }
     if(!existing.rowCount) {
+      try { await scEnforceNewInvoicePrices(client,inv,readRoleIdentity(req)||{}); }
+      catch(priceError){await client.query('rollback');return res.status(400).json({error:priceError.message});}
       if(!['cash','credit'].includes(inv.paymentType)) {await client.query('rollback');return res.status(400).json({error:'Choose Cash or Credit'});}
       if(inv.paymentType==='credit' && inv.partyType!=='party') {await client.query('rollback');return res.status(400).json({error:'Credit only allowed for Party Customers'});}
       if(!Number.isFinite(inv.grandTotal)||inv.grandTotal<0||inv.amountPaid<0||inv.amountPaid>inv.grandTotal+0.005){await client.query('rollback');return res.status(400).json({error:'Invalid amount paid'});}
