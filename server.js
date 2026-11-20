@@ -445,6 +445,30 @@ async function scEnforceNewInvoicePrices(client,inv,identity){
   if(!Array.isArray(inv.items)||!inv.items.length)throw new Error('Add at least one product');
   const allowed=new Set(priceList.products.map(x=>x.name));
   for(const x of inv.items)if(!allowed.has(String(x.name||'').trim()))throw new Error('Product is archived or not in the approved catalog: '+String(x.name||''));
+  // Party Customers negotiate their own Qty, KG and Rate, independent of Price Lock.
+  // A Star Chicken branch cannot bypass the approved prices by changing partyType in the browser.
+  const starBranches=['Hatchery','Kasur','Gajjumatta','Gajjumata','Mustafabad','Gulshan Ravi','Murghzar','Link Road'];
+  const isStarBranch=starBranches.some(x=>x.toLowerCase()===String(inv.shopName||'').trim().toLowerCase());
+  if(inv.partyType==='party' && isStarBranch)throw new Error('Star Chicken branches must use the approved Price List');
+  if(inv.partyType==='party'){
+    if(inv.items.length>150)throw new Error('Too many invoice products');
+    const repriced=[];let subtotal=0;
+    for(const x of inv.items){
+      const name=String(x.name||'').trim(),qty=Number(x.qty),weight=Number(x.weight),rate=Number(x.rate);
+      if(!name||!Number.isFinite(qty)||qty<=0||qty>100000||Math.abs(qty*1000-Math.round(qty*1000))>0.000001)throw new Error('Invalid quantity for '+name);
+      if(x.weight===null||x.weight===undefined||x.weight===''||!Number.isFinite(weight)||weight<=0||weight>100000||Math.abs(weight*1000-Math.round(weight*1000))>0.000001)throw new Error('Invalid weight for '+name);
+      if(x.rate===null||x.rate===undefined||x.rate===''||!Number.isFinite(rate)||rate<=0||rate>1000000||Math.abs(rate*100-Math.round(rate*100))>0.000001)throw new Error('Invalid rate for '+name);
+      const amount=Math.round(weight*rate);
+      repriced.push({name,qty,weight,rate,amount});subtotal+=amount;
+    }
+    if(identity.role==='staff' && Math.abs(inv.discount)>0.005)throw new Error('Only Admin may apply discounts');
+    if(!Number.isFinite(inv.discount)||inv.discount<0||inv.discount>subtotal)throw new Error('Invalid invoice discount');
+    inv.items=repriced;inv.subTotal=subtotal;inv.grandTotal=Math.max(0,subtotal-inv.discount);
+    if(inv.paymentType==='cash')inv.amountPaid=inv.grandTotal;
+    if(!Number.isFinite(inv.amountPaid)||inv.amountPaid<0||inv.amountPaid>inv.grandTotal+0.005)throw new Error('Invalid payment amount');
+    inv.balance=Math.round((inv.grandTotal-inv.amountPaid)*100)/100;
+    return;
+  }
   if(!priceList.enforced)return; // Setup Mode retains legacy rates only for active catalog products.
   const catalog=new Map(priceList.products.map(p=>[p.name,p]));
   if(!Array.isArray(inv.items)||!inv.items.length||inv.items.length>150)throw new Error('Add valid products from the Price List');

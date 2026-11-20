@@ -2891,7 +2891,7 @@ body.sc-price-staff #discount{pointer-events:none;background:#f0f0f5}
         <div class="dash-card-h dash-card-h-flex">
           <div>
             <div class="dch-title">📦 Available stock by branch</div>
-            <div class="dch-sub">Today’s stock (packets) · Opening + Received − Sold − Return/Transfer = Balance · click branch for sheet</div>
+            <div class="dch-sub">Today’s stock (packets and KG) · Opening + Received − Sold − Return/Transfer = Balance · click branch for sheet</div>
           </div>
           <span class="dch-pill" id="dashStockTotalPill">—</span>
         </div>
@@ -2906,10 +2906,11 @@ body.sc-price-staff #discount{pointer-events:none;background:#f0f0f5}
                   <th>Received qty</th>
                   <th>Return / Transfer</th>
                   <th>Balance qty</th>
+                  <th>Balance KG</th>
                 </tr>
               </thead>
               <tbody id="dashStockBody">
-                <tr><td colspan="6"><div class="dash-empty">No stock data yet</div></td></tr>
+                <tr><td colspan="7"><div class="dash-empty">No stock data yet</div></td></tr>
               </tbody>
             </table>
           </div>
@@ -3713,6 +3714,8 @@ function onPartyTypeChange() {
   const addBtn = document.getElementById('addPartyCustomerBtn');
   if (addBtn) addBtn.style.display = type === 'party' ? 'inline-flex' : 'none';
   onInvoicePaymentTypeChange();
+  // Switching customer types on a NEW invoice immediately applies the correct rate policy.
+  if(typeof scApplyCustomerPriceMode==='function')scApplyCustomerPriceMode(true);
 }
 function onInvoicePaymentTypeChange() {
   const type=document.getElementById('partyType')?.value || 'star';
@@ -4502,8 +4505,11 @@ async function saveInvoice() {
     catch(e){toast('Cannot verify approved prices: '+e.message,'error');return;}
     for(const it of items){
       const p=scPriceFor(it.name);
-      if(!p||p.rate==null){toast('Price missing for '+it.name,'error');return;}
-      if(Math.abs(Number(it.rate)-p.rate)>0.005){toast('Price changed for '+it.name+'. Remove and re-add the item using the current rate.','error');return;}
+      if(!p){toast('Product missing or archived: '+it.name,'error');return;}
+      if(scPriceData?.enforced && document.getElementById('partyType')?.value!=='party'){
+        if(p.rate==null){toast('Price missing for '+it.name,'error');return;}
+        if(Math.abs(Number(it.rate)-p.rate)>0.005){toast('Price changed for '+it.name+'. Remove and re-add the item using the current rate.','error');return;}
+      }
     }
   }
   stopPktLiveClock();
@@ -5105,24 +5111,39 @@ async function scFetchPrices(){
  const day=document.getElementById('scBaseDay');if(day)day.value=d.rateDate;
  scRenderPriceRows();scApplyPriceFormMode();scApplySelectedRate();return d;
 }
+function scIsPartyPricing(){return document.getElementById('partyType')?.value==='party';}
 function scApplyPriceFormMode(){
- const enforced=!!scPriceData?.enforced;
- const product=scPriceFor(document.getElementById('selectedProduct')?.value||'');
+ const priceLocked=!!scPriceData?.enforced && !scIsPartyPricing();
  const weight=document.getElementById('weight'),rate=document.getElementById('rate');
- if(weight){weight.readOnly=false;weight.title=enforced?'Enter actual weight in KG (rate remains Admin-locked)':'';}
- if(rate)rate.readOnly=enforced;
- document.body.classList.toggle('sc-pricing-enforced',enforced);
+ if(weight){weight.readOnly=false;weight.title='Enter the actual weight in KG';}
+ if(rate){rate.readOnly=priceLocked;rate.title=priceLocked?'Star Chicken rate is locked by Admin':'Enter the selling price per KG or unit';}
+ document.body.classList.toggle('sc-pricing-enforced',priceLocked);
 }
 function scPriceFor(name){return scPriceData?.products?.find(x=>x.name===name)||null;}
+function scApplyCustomerPriceMode(refreshItems=false){
+ scApplyPriceFormMode();
+ if(currentId)return;
+ if(refreshItems && scPriceData?.enforced && !scIsPartyPricing()){
+   // When returning from Party Customer to Star Chicken, restore every approved rate.
+   for(const it of items){
+     const p=scPriceFor(it.name);
+     if(p?.rate!=null){it.rate=p.rate;it.amount=Math.round(Number(it.weight||0)*p.rate);}
+   }
+   if(items.length){markDirty();render();}
+ }
+ scApplySelectedRate();
+}
 function scApplySelectedRate(){
  scApplyPriceFormMode();
  if(currentId)return;
  const name=document.getElementById('selectedProduct')?.value||'';
  const p=scPriceFor(name),qty=Number(document.getElementById('qty')?.value||0);
  const weight=document.getElementById('weight'),rate=document.getElementById('rate');
+ if(weight && !scMarinatedWeightEdited && scPriceData?.enforced)weight.value=p?(Math.round(qty*p.packKg*1000)/1000):'';
  if(!scPriceData?.enforced)return;
- if(weight && !scMarinatedWeightEdited)weight.value=p?(Math.round(qty*p.packKg*1000)/1000):'';
- if(rate)rate.value=p?.rate==null?'':p.rate;
+ if(rate && !scIsPartyPricing())rate.value=p?.rate==null?'':p.rate;
+ // Party Customers may use the catalog rate as a starting suggestion, then change it freely.
+ if(rate && scIsPartyPricing() && !rate.value && p?.rate!=null)rate.value=p.rate;
 }
 function scConnectPriceEvents(){
  if(!currentRole||scPriceConn||!window.EventSource)return;
@@ -5181,6 +5202,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 
 function selectProduct(name) {
   scMarinatedWeightEdited=false;
+  if(scIsPartyPricing() && !currentId)document.getElementById('rate').value='';
   document.getElementById('productSearch').value = name;
   document.getElementById('selectedProduct').value = name;
   document.getElementById('productDropdown').style.display = 'none';
@@ -5216,7 +5238,7 @@ function addItem() {
   name = (name || '').trim();
   if (!name) { toast('Enter a product name.', 'error'); return; }
   if(scPriceData?.enforced && !currentId && !scPriceFor(name)){toast('Choose a product from the approved Price List','error');return;}
-  if(scPriceData?.enforced && !currentId && scPriceFor(name)?.rate==null){toast('Admin has not configured this product price','error');return;}
+  if(scPriceData?.enforced && !currentId && !scIsPartyPricing() && scPriceFor(name)?.rate==null){toast('Admin has not configured this product price','error');return;}
   if(!currentId)scApplySelectedRate();
   const qty = parseFloat(document.getElementById('qty').value) || 0;
   const weight = parseFloat(document.getElementById('weight').value) || 0;
@@ -5316,6 +5338,20 @@ function scChangeInvoiceRowWeight(index,input){
   markDirty();render();
 }
 
+function scChangeInvoiceRowRate(index,input){
+  if(index<0||index>=items.length)return;
+  if(currentId && currentRole!=='admin'){toast('Only Admin can change a saved invoice.','error');render();return;}
+  if(!scIsPartyPricing() && scPriceData?.enforced){toast('Star Chicken rates are Admin-locked.','error');render();return;}
+  const rate=Number(input.value);
+  if(!Number.isFinite(rate)||rate<=0||rate>1000000||Math.abs(rate*100-Math.round(rate*100))>0.000001){
+    toast('Enter a positive rate with up to 2 decimals.','error');input.value=items[index].rate;return;
+  }
+  const item=items[index];item.rate=rate;
+  item.amount=Math.round(Number(item.weight||0)*rate);
+  if(editingIndex===index)clearForm();
+  markDirty();render();
+}
+
 function render() {
   const tbody = document.getElementById('itemsBody');
   const count = items.length;
@@ -5333,7 +5369,7 @@ function render() {
       <td class="no-print">${(!currentId || currentRole==='admin') ? `<input type="number" min="0.001" step="any" inputmode="decimal" value="${Number(it.qty)||1}" onchange="scChangeInvoiceRowQty(${i},this)" aria-label="Quantity for ${esc(it.name)}" title="Change packet quantity" class="sc-inline-qty-input">` : esc(String(it.qty ?? '—'))}</td>
       <td class="print-show">${it.qty || '—'}</td>
       <td class="col-weight">${(!currentId || currentRole==='admin') ? `<input type="number" min="0.001" step="any" inputmode="decimal" value="${Number(it.weight)||''}" onchange="scChangeInvoiceRowWeight(${i},this)" aria-label="Actual weight in KG for ${esc(it.name)}" title="Enter actual weight in KG" class="sc-inline-qty-input no-print">` : `<span class="no-print">${it.weight ? Number(it.weight).toFixed(3) : '—'}</span>`}<span class="print-show">${it.weight ? Number(it.weight).toFixed(3) : '—'}</span></td>
-      <td>${fmt(it.rate)}</td>
+      <td>${scIsPartyPricing() && (!currentId || currentRole==='admin') ? `<input type="number" min="0.01" step="0.01" inputmode="decimal" value="${Number(it.rate)||''}" onchange="scChangeInvoiceRowRate(${i},this)" aria-label="Rate for ${esc(it.name)}" title="Party Customer selling rate" class="sc-inline-qty-input no-print"><span class="print-show">${fmt(it.rate)}</span>` : fmt(it.rate)}</td>
       <td class="col-amt">${fmt(it.amount)}</td>
       <td class="no-print"><div class="row-actions">
         <button class="btn btn-edit" onclick="editItem(${i})" title="Edit product">✎</button>
@@ -5937,14 +5973,14 @@ function renderDashboardStockByBranch() {
   const start=startInput || '0000-01-01';
   const end=endInput || today;
   if(start>end){
-    body.innerHTML='<tr><td colspan="6"><div class="dash-empty">From Date must be before or equal to To Date.</div></td></tr>';
+    body.innerHTML='<tr><td colspan="7"><div class="dash-empty">From Date must be before or equal to To Date.</div></td></tr>';
     if(note)note.textContent='Please correct the Branch-wise Sales date range.';
     if(pill)pill.textContent='Invalid dates';
     return;
   }
   if(!dashStockCloud.loading && Date.now()-dashStockCloud.loadedAt>25000)refreshDashboardStockState();
   if(!dashStockCloud.state){
-    body.innerHTML='<tr><td colspan="6"><div class="dash-empty">'+(dashStockCloud.error?'Stock service temporarily unavailable':'Loading stock records…')+'</div></td></tr>';
+    body.innerHTML='<tr><td colspan="7"><div class="dash-empty">'+(dashStockCloud.error?'Stock service temporarily unavailable':'Loading stock records…')+'</div></td></tr>';
     if(note)note.textContent=dashStockCloud.error || 'Reading Inventory Management records from Supabase…';
     if(pill)pill.textContent='Loading stock';
     return;
@@ -5954,10 +5990,17 @@ function renderDashboardStockByBranch() {
   const n=v=>Number(v)||0;
   const f2=v=>Math.round(v*100)/100;
   const indexByName=new Map(DASH_STOCK_PRODUCTS.map((it,i)=>[norm(it[0]),i]));
+  // Packing sizes follow the unified catalog's stable stock row indices.
+  // Historical rows retain their original positions, even for archived products.
+  const packKgAt=i=>{
+    const product=DASH_STOCK_PRODUCTS[i];
+    const kg=Number(product?.[1]);
+    return Number.isFinite(kg)&&kg>0?kg:0;
+  };
   const branchByName=new Map(DASH_STOCK_BRANCHES.map(b=>[norm(b),b]));
   branchByName.set('gajjumata','Gajjumatta');
   const sales={};
-  for(const b of DASH_STOCK_BRANCHES)sales[b]=new Array(DASH_STOCK_PRODUCTS.length).fill(0);
+  for(const b of DASH_STOCK_BRANCHES)sales[b]={qty:new Array(DASH_STOCK_PRODUCTS.length).fill(0),kg:new Array(DASH_STOCK_PRODUCTS.length).fill(0)};
   // The same invoice-date parser already used by Branch-wise Sales supports older invoices.
   const eligible=filterListByDateInputs('dashBranchFrom','dashBranchTo').list;
   for(const inv of eligible){
@@ -5972,39 +6015,51 @@ function renderDashboardStockByBranch() {
       if(idx===undefined&&norm(item.name||item.productName||item.product||item.detail)==='btrimming')idx=indexByName.get('sbbtrimming');
       if(idx===undefined)continue;
       const qty=Number(item.qty??item.quantity??0);
-      if(Number.isFinite(qty)&&qty>=0)sales[branch][idx]+=qty;
+      if(Number.isFinite(qty)&&qty>=0){
+        sales[branch].qty[idx]+=qty;
+        // Invoice weight is actual sold KG (staff may adjust it). Only legacy
+        // invoices without a usable weight fall back to packet size × qty.
+        const actualKg=Number(item.weight);
+        sales[branch].kg[idx]+=(Number.isFinite(actualKg)&&actualKg>0)?actualKg:qty*packKgAt(idx);
+      }
     }
   }
-  let counted=0,totalBalance=0,partial=0;
+  let counted=0,totalBalance=0,totalBalanceKg=0,partial=0;
   const rows=[...DASH_STOCK_BRANCHES,'Link Road'].map(branch=>{
     const source=(branch==='Gajjumatta'?[db.Gajjumatta,db.Gajjumata]:[db[branch]]).find(x=>x&&typeof x==='object')||{};
     const dates=Object.keys(source).filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d)&&d<=end&&Array.isArray(source[d]?.r)).sort();
     const before=dates.filter(d=>d<start);
     const within=dates.filter(d=>d>=start&&d<=end);
-    const totalSold=f2((sales[branch]||[]).reduce((a,v)=>a+v,0));
-    if(!dates.length)return {branch,open:null,sold:branch==='Link Road'?null:totalSold,recv:null,ret:null,bal:null};
+    const totalSold=f2((sales[branch]?.qty||[]).reduce((a,v)=>a+v,0));
+    const soldKg=f2((sales[branch]?.kg||[]).reduce((a,v)=>a+v,0));
+    if(!dates.length)return {branch,open:null,sold:branch==='Link Road'?null:totalSold,recv:null,ret:null,bal:null,balKg:null};
     // Start-of-period opening comes from the saved From-day sheet, or the last
     // saved balance before the period. If only a later sheet exists, flag the
     // estimate as partial instead of pretending to know the earlier opening.
     const first=source[start]?.r && Array.isArray(source[start].r)?start:(before.at(-1)||within[0]);
     const firstRows=source[first].r;
-    let opening=0;
-    for(const row of firstRows){
+    let opening=0,openingKg=0;
+    firstRows.forEach((row,i)=>{
       const a=Array.isArray(row)?row:[];
-      opening += first<start ? n(a[0])+n(a[1])-n(a[2])-n(a[3]):n(a[0]);
-    }
+      const openingPkts=first<start ? n(a[0])+n(a[1])-n(a[2])-n(a[3]):n(a[0]);
+      opening+=openingPkts;
+      openingKg+=openingPkts*packKgAt(i);
+    });
     const missingOpening=first>start;
     if(missingOpening)partial++;
-    let recv=0,ret=0;
+    let recv=0,ret=0,recvKg=0,retKg=0;
     for(const day of within){
-      for(const row of source[day].r){
+      source[day].r.forEach((row,i)=>{
         const a=Array.isArray(row)?row:[];
-        recv+=n(a[1]);ret+=n(a[3]);
-      }
+        const r=n(a[1]),t=n(a[3]);
+        recv+=r;ret+=t;
+        recvKg+=r*packKgAt(i);retKg+=t*packKgAt(i);
+      });
     }
     const balance=opening+recv-totalSold-ret;
-    if(!missingOpening){counted++;totalBalance+=balance;}
-    return {branch,open:missingOpening?null:f2(opening),sold:totalSold,recv:f2(recv),ret:f2(ret),bal:missingOpening?null:f2(balance)};
+    const balanceKg=openingKg+recvKg-soldKg-retKg;
+    if(!missingOpening){counted++;totalBalance+=balance;totalBalanceKg+=balanceKg;}
+    return {branch,open:missingOpening?null:f2(opening),sold:totalSold,recv:f2(recv),ret:f2(ret),bal:missingOpening?null:f2(balance),balKg:missingOpening?null:f2(balanceKg)};
   });
   const fmt=(v,kind)=>{
     if(v==null)return '<span class="ds-cell ds-muted">—</span>';
@@ -6013,15 +6068,15 @@ function renderDashboardStockByBranch() {
   };
   body.innerHTML=rows.map(r=>'<tr class="dash-stock-row" data-branch="'+esc(r.branch)+'" title="Open '+esc(r.branch)+' stock sheet" role="button" tabindex="0">'+
     '<td>'+esc(r.branch)+' <span style="font-size:.7rem;color:var(--muted)">→</span></td>'+
-    '<td>'+fmt(r.open,'open')+'</td><td>'+fmt(r.sold,'sold')+'</td><td>'+fmt(r.recv,'recv')+'</td><td>'+fmt(r.ret,'ret')+'</td><td>'+fmt(r.bal,'bal')+'</td></tr>').join('');
+    '<td>'+fmt(r.open,'open')+'</td><td>'+fmt(r.sold,'sold')+'</td><td>'+fmt(r.recv,'recv')+'</td><td>'+fmt(r.ret,'ret')+'</td><td>'+fmt(r.bal,'bal')+'</td><td>'+fmt(r.balKg,'bal')+'</td></tr>').join('');
   body.querySelectorAll('.dash-stock-row').forEach(tr=>{
     const open=()=>openStockSheetForBranch(tr.getAttribute('data-branch'));
     tr.addEventListener('click',open);
     tr.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}});
   });
   const period=(startInput||'Beginning')+' → '+(endInput||today);
-  if(pill)pill.textContent=counted?f2(totalBalance).toLocaleString('en-PK')+' pkts balance':'No saved stock history';
-  if(note)note.textContent='Period: '+period+' · '+counted+' branches with reliable opening balances · Sold from invoices in this date range · Opening from saved stock sheet · Received/Returned from saved days'+(partial?' · '+partial+' branch(es) have no opening snapshot before From Date (partial opening)':'')+(dashStockCloud.error?' · Refresh error: '+dashStockCloud.error:'');
+  if(pill)pill.textContent=counted?f2(totalBalance).toLocaleString('en-PK')+' pkts · '+f2(totalBalanceKg).toLocaleString('en-PK',{maximumFractionDigits:2})+' KG balance':'No saved stock history';
+  if(note)note.textContent='Period: '+period+' · '+counted+' branches with reliable opening balances · Sold from invoices in this date range · Opening from saved stock sheet · Received/Returned from saved days · KG is based on product packing sizes and actual invoice weights'+(partial?' · '+partial+' branch(es) have no opening snapshot before From Date (partial opening)':'')+(dashStockCloud.error?' · Refresh error: '+dashStockCloud.error:'');
 }
 
 /** Open Stock Management app on the given branch sheet */
