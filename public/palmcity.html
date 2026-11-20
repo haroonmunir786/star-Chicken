@@ -1894,6 +1894,21 @@ body.sc-price-staff .custom-link,body.sc-price-staff #customFields{display:none!
 body.sc-price-staff #discount{pointer-events:none;background:#f0f0f5}
 @media(max-width:600px){.sc-price-modal{padding:10px}.sc-price-fields{display:grid;grid-template-columns:1fr 1fr}.sc-price-fields label{min-width:0}.sc-price-table th,.sc-price-table td{padding:6px}}
 @media print{.sc-price-overlay{display:none!important}}
+
+/* Keep the editable quantity compact on mobile; print only the plain quantity. */
+@media print { #itemsBody td.print-show { display:table-cell !important; } }
+
+/* Inline invoice quantity entry: obvious and touch-friendly for staff. */
+.sc-inline-qty-input { width: 82px; max-width: 100%; min-height: 42px; padding: 7px 5px;
+  border: 2px solid #E9AF3C; background: #FFF9DF; color: #171717;
+  border-radius: 8px; font-size: 16px; font-weight: 700; font-family: inherit; text-align: center; }
+.sc-inline-qty-input:focus { outline: 2px solid #D32F2F; outline-offset: 1px; background: #fff; }
+.sc-qty-column-title { color: #FFE08C; }
+.sc-qty-edit-hint { display:inline-block; color: #9b6316; font-size: 11px; font-weight: 600;
+  background: #fff5d5; border-radius: 6px; padding: 3px 6px; margin-left: 6px; }
+@media(max-width: 600px) { .sc-inline-qty-input { width: 68px; min-width: 61px; }
+  .sc-qty-edit-hint { display:block; margin: 5px 0 0; font-size: 10px; } }
+@media print { .sc-qty-edit-hint { display:none !important; } }
 </style>
 <style>
 /* Desktop Admin: persistent sidebar and dashboard sharing the screen. */
@@ -2497,7 +2512,7 @@ body.sc-price-staff #discount{pointer-events:none;background:#f0f0f5}
             <div class="add-panel-fields">
               <div class="form-group">
                 <label>Qty</label>
-                <input type="number" id="qty" min="0" step="0.01" value="1">
+                <input type="number" id="qty" min="0.001" step="any" inputmode="decimal" value="1" title="Enter any positive packet quantity (up to 3 decimal places)">
               </div>
               <div class="form-group">
                 <label>Weight (kg)</label>
@@ -2527,7 +2542,7 @@ body.sc-price-staff #discount{pointer-events:none;background:#f0f0f5}
     <!-- Invoice Table -->
     <div class="card" id="invoiceCard">
       <div class="card-header no-print">
-        <h2><span class="icon">📄</span> Invoice Items</h2>
+        <h2><span class="icon">📄</span> Invoice Items <small class="sc-qty-edit-hint">Tap Qty ✎ to change packets</small></h2>
         <span class="badge" id="itemCountBadge">0 items</span>
       </div>
 
@@ -2548,7 +2563,7 @@ body.sc-price-staff #discount{pointer-events:none;background:#f0f0f5}
             <tr>
               <th class="col-num">#</th>
               <th>Product </th>
-              <th>Qty</th>
+              <th class="sc-qty-column-title">Qty ✎</th>
               <th class="col-weight">Weight (kg)</th>
               <th>Rate (Rs)</th>
               <th>Amount (Rs)</th>
@@ -5266,6 +5281,43 @@ function editItem(i) {
   document.getElementById('productSearch')?.closest('.card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+/* Salespersons can correct a draft invoice line's packet quantity directly.
+   Existing saved invoices remain Admin-only for modification, as before.
+   Prices are never editable here. Fixed-product weight follows the approved pack;
+   marinated-product actual weight remains the value separately entered by Staff. */
+function scChangeInvoiceRowQty(index, input) {
+  if (index < 0 || index >= items.length) return;
+  if (currentId && currentRole !== 'admin') {
+    toast('Only Admin can change a saved invoice. Start a new invoice to enter quantities.', 'error');
+    render();
+    return;
+  }
+  const qty = Number(input.value);
+  if (!Number.isFinite(qty) || qty <= 0 || qty > 100000 ||
+      Math.abs(qty * 1000 - Math.round(qty * 1000)) > 0.000001) {
+    toast('Enter a positive quantity (maximum 3 decimal places).', 'error');
+    input.value = items[index].qty;
+    return;
+  }
+  const item = items[index];
+  const price = scPriceFor(item.name);
+  // In Price Lock mode the approved packet weight cannot be overridden for fixed products.
+  if (scPriceData?.enforced && price?.type === 'fixed') {
+    item.weight = Math.round(qty * price.packKg * 1000) / 1000;
+  } else if (!scPriceData?.enforced && price?.type === 'fixed' && price.packKg > 0) {
+    item.weight = Math.round(qty * price.packKg * 1000) / 1000;
+  } else if (!scPriceData?.enforced && SC_NEW_PRODUCT_PACK_KG[item.name] > 0) {
+    item.weight = Math.round(qty * SC_NEW_PRODUCT_PACK_KG[item.name] * 1000) / 1000;
+  }
+  // For factor/marinated products, Staff separately controls actual KG via the edit button.
+  item.qty = qty;
+  item.amount = Math.round(Number(item.weight || 0) * Number(item.rate || 0));
+  if (editingIndex === index) clearForm();
+  markDirty();
+  render();
+  toast('Quantity updated. Save the invoice to record the change.', 'success');
+}
+
 function render() {
   const tbody = document.getElementById('itemsBody');
   const count = items.length;
@@ -5280,7 +5332,8 @@ function render() {
     <tr>
       <td class="col-num">${i+1}</td>
       <td>${esc(it.name)}</td>
-      <td>${it.qty || '—'}</td>
+      <td class="no-print">${(!currentId || currentRole==='admin') ? `<input type="number" min="0.001" step="any" inputmode="decimal" value="${Number(it.qty)||1}" onchange="scChangeInvoiceRowQty(${i},this)" aria-label="Quantity for ${esc(it.name)}" title="Change packet quantity" class="sc-inline-qty-input">` : esc(String(it.qty ?? '—'))}</td>
+      <td class="print-show">${it.qty || '—'}</td>
       <td class="col-weight">${it.weight ? it.weight.toFixed(2) : '—'}</td>
       <td>${fmt(it.rate)}</td>
       <td class="col-amt">${fmt(it.amount)}</td>
