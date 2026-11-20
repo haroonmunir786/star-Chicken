@@ -431,9 +431,13 @@ app.put('/api/prices/product',auth,adminOnly,async(req,res)=>{
   try{await client.query('begin');
     const old=await client.query('select pricing_type from public.sc_price_products where product_name=$1 for update',[name]);
     if(!old.rowCount){await client.query('rollback');return res.status(404).json({error:'Unknown catalog product'});}
-    if(old.rows[0].pricing_type!==type){await client.query('rollback');return res.status(400).json({error:'Product pricing type is fixed by catalog category'});}
-    await client.query(`update public.sc_price_products set fixed_price=$2,factor=$3,updated_at=now(),updated_by=$4 where product_name=$1`,[name,type==='fixed'?value:null,type==='factor'?value:null,auditIdentity(req).id]);
-    await writeAudit(client,req,'prices.product.updated',null,null,{product:name,type,value});
+    // Admin may switch any product between fixed and factor pricing.
+    // Clear the inactive column to satisfy the existing sc_price_products CHECK constraint.
+    // Historical invoices store their own rates, so they are not repriced.
+    await client.query(`update public.sc_price_products
+      set pricing_type=$2,fixed_price=$3,factor=$4,updated_at=now(),updated_by=$5
+      where product_name=$1`,[name,type,type==='fixed'?value:null,type==='factor'?value:null,auditIdentity(req).id]);
+    await writeAudit(client,req,'prices.product.updated',null,null,{product:name,oldType:old.rows[0].pricing_type,type,value});
     await client.query('commit');scNotifyPriceChanged();res.json({ok:true});
   }catch(e){await client.query('rollback').catch(()=>{});console.error(e);res.status(503).json({error:'Price update failed'});}finally{client.release();}
 });
