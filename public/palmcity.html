@@ -2542,7 +2542,7 @@ body.sc-price-staff #discount{pointer-events:none;background:#f0f0f5}
     <!-- Invoice Table -->
     <div class="card" id="invoiceCard">
       <div class="card-header no-print">
-        <h2><span class="icon">📄</span> Invoice Items <small class="sc-qty-edit-hint">Tap Qty ✎ to change packets</small></h2>
+        <h2><span class="icon">📄</span> Invoice Items <small class="sc-qty-edit-hint">Tap Qty or Weight to edit</small></h2>
         <span class="badge" id="itemCountBadge">0 items</span>
       </div>
 
@@ -2564,7 +2564,7 @@ body.sc-price-staff #discount{pointer-events:none;background:#f0f0f5}
               <th class="col-num">#</th>
               <th>Product </th>
               <th class="sc-qty-column-title">Qty ✎</th>
-              <th class="col-weight">Weight (kg)</th>
+              <th class="col-weight">Weight (kg) ✎</th>
               <th>Rate (Rs)</th>
               <th>Amount (Rs)</th>
               <th class="no-print" style="width:90px"></th>
@@ -5109,7 +5109,7 @@ function scApplyPriceFormMode(){
  const enforced=!!scPriceData?.enforced;
  const product=scPriceFor(document.getElementById('selectedProduct')?.value||'');
  const weight=document.getElementById('weight'),rate=document.getElementById('rate');
- if(weight){weight.readOnly=enforced && product?.type!=='factor';weight.title=enforced?(product?.type==='factor'?'Enter actual weight for this marinated product':'Weight calculated from approved packing size'):'';}
+ if(weight){weight.readOnly=false;weight.title=enforced?'Enter actual weight in KG (rate remains Admin-locked)':'';}
  if(rate)rate.readOnly=enforced;
  document.body.classList.toggle('sc-pricing-enforced',enforced);
 }
@@ -5121,7 +5121,7 @@ function scApplySelectedRate(){
  const p=scPriceFor(name),qty=Number(document.getElementById('qty')?.value||0);
  const weight=document.getElementById('weight'),rate=document.getElementById('rate');
  if(!scPriceData?.enforced)return;
- if(weight && (p?.type!=='factor' || !scMarinatedWeightEdited))weight.value=p?(Math.round(qty*p.packKg*1000)/1000):'';
+ if(weight && !scMarinatedWeightEdited)weight.value=p?(Math.round(qty*p.packKg*1000)/1000):'';
  if(rate)rate.value=p?.rate==null?'':p.rate;
 }
 function scConnectPriceEvents(){
@@ -5175,7 +5175,7 @@ async function scApproveBaseRate(){
 }
 document.addEventListener('DOMContentLoaded',()=>{
  document.getElementById('qty')?.addEventListener('input',scApplySelectedRate);
- document.getElementById('weight')?.addEventListener('input',()=>{if(scPriceData?.enforced && scPriceFor(document.getElementById('selectedProduct')?.value||'')?.type==='factor')scMarinatedWeightEdited=true;});
+ document.getElementById('weight')?.addEventListener('input',()=>{if(scPriceData?.enforced)scMarinatedWeightEdited=true;});
  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&currentRole)scFetchPrices().catch(()=>{});});
 });
 
@@ -5222,7 +5222,7 @@ function addItem() {
   const weight = parseFloat(document.getElementById('weight').value) || 0;
   const rate = parseFloat(document.getElementById('rate').value) || 0;
   if(qty<=0){toast('Enter a positive quantity','error');return;}
-  if (weight <= 0) { toast('Enter Weight.', 'error'); return; }
+  if (weight <= 0 || weight > 100000 || Math.abs(weight*1000-Math.round(weight*1000))>0.000001) { toast('Enter positive weight (up to 3 decimals).', 'error'); return; }
   if (rate <= 0) { toast('Enter Rate.', 'error'); return; }
   const amount = Math.round(weight * rate);
   const row = { name, qty, weight, rate, amount };
@@ -5265,7 +5265,7 @@ function editItem(i) {
   if (i < 0 || i >= items.length) return;
   const it = items[i];
   editingIndex = i;
-  scMarinatedWeightEdited=true; // Preserve manually entered weight during an edit.
+  scMarinatedWeightEdited=true; // Preserve the entered actual KG on edits for ALL products.
   document.getElementById('productSearch').value = it.name || '';
   document.getElementById('selectedProduct').value = it.name || '';
   document.getElementById('customName').value = '';
@@ -5281,41 +5281,39 @@ function editItem(i) {
   document.getElementById('productSearch')?.closest('.card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-/* Salespersons can correct a draft invoice line's packet quantity directly.
-   Existing saved invoices remain Admin-only for modification, as before.
-   Prices are never editable here. Fixed-product weight follows the approved pack;
-   marinated-product actual weight remains the value separately entered by Staff. */
+/* Staff may change packet Qty and actual KG on a NEW draft invoice.
+   Qty is a packet/count field. KG is independent of Qty after an item is added;
+   the Admin-approved Rs/KG remains locked. Saved invoices remain Admin-only. */
 function scChangeInvoiceRowQty(index, input) {
-  if (index < 0 || index >= items.length) return;
-  if (currentId && currentRole !== 'admin') {
-    toast('Only Admin can change a saved invoice. Start a new invoice to enter quantities.', 'error');
-    render();
-    return;
+  if(index<0||index>=items.length)return;
+  if(currentId && currentRole!=='admin'){
+    toast('Only Admin can change a saved invoice.','error');render();return;
   }
-  const qty = Number(input.value);
-  if (!Number.isFinite(qty) || qty <= 0 || qty > 100000 ||
-      Math.abs(qty * 1000 - Math.round(qty * 1000)) > 0.000001) {
-    toast('Enter a positive quantity (maximum 3 decimal places).', 'error');
-    input.value = items[index].qty;
-    return;
+  const qty=Number(input.value);
+  if(!Number.isFinite(qty)||qty<=0||qty>100000||Math.abs(qty*1000-Math.round(qty*1000))>0.000001){
+    toast('Enter a positive quantity (maximum 3 decimal places).','error');input.value=items[index].qty;return;
   }
-  const item = items[index];
-  const price = scPriceFor(item.name);
-  // In Price Lock mode the approved packet weight cannot be overridden for fixed products.
-  if (scPriceData?.enforced && price?.type === 'fixed') {
-    item.weight = Math.round(qty * price.packKg * 1000) / 1000;
-  } else if (!scPriceData?.enforced && price?.type === 'fixed' && price.packKg > 0) {
-    item.weight = Math.round(qty * price.packKg * 1000) / 1000;
-  } else if (!scPriceData?.enforced && SC_NEW_PRODUCT_PACK_KG[item.name] > 0) {
-    item.weight = Math.round(qty * SC_NEW_PRODUCT_PACK_KG[item.name] * 1000) / 1000;
+  const item=items[index];
+  item.qty=qty;
+  // Do NOT reset item.weight: it is the salesperson's actual entered KG.
+  item.amount=Math.round(Number(item.weight||0)*Number(item.rate||0));
+  if(editingIndex===index)clearForm();
+  markDirty();render();
+}
+function scChangeInvoiceRowWeight(index,input){
+  if(index<0||index>=items.length)return;
+  if(currentId && currentRole!=='admin'){
+    toast('Only Admin can change a saved invoice.','error');render();return;
   }
-  // For factor/marinated products, Staff separately controls actual KG via the edit button.
-  item.qty = qty;
-  item.amount = Math.round(Number(item.weight || 0) * Number(item.rate || 0));
-  if (editingIndex === index) clearForm();
-  markDirty();
-  render();
-  toast('Quantity updated. Save the invoice to record the change.', 'success');
+  const weight=Number(input.value);
+  if(!Number.isFinite(weight)||weight<=0||weight>100000||Math.abs(weight*1000-Math.round(weight*1000))>0.000001){
+    toast('Enter a positive weight in KG (maximum 3 decimal places).','error');input.value=items[index].weight;return;
+  }
+  const item=items[index];
+  item.weight=weight;
+  item.amount=Math.round(weight*Number(item.rate||0));
+  if(editingIndex===index)clearForm();
+  markDirty();render();
 }
 
 function render() {
@@ -5334,7 +5332,7 @@ function render() {
       <td>${esc(it.name)}</td>
       <td class="no-print">${(!currentId || currentRole==='admin') ? `<input type="number" min="0.001" step="any" inputmode="decimal" value="${Number(it.qty)||1}" onchange="scChangeInvoiceRowQty(${i},this)" aria-label="Quantity for ${esc(it.name)}" title="Change packet quantity" class="sc-inline-qty-input">` : esc(String(it.qty ?? '—'))}</td>
       <td class="print-show">${it.qty || '—'}</td>
-      <td class="col-weight">${it.weight ? it.weight.toFixed(2) : '—'}</td>
+      <td class="col-weight">${(!currentId || currentRole==='admin') ? `<input type="number" min="0.001" step="any" inputmode="decimal" value="${Number(it.weight)||''}" onchange="scChangeInvoiceRowWeight(${i},this)" aria-label="Actual weight in KG for ${esc(it.name)}" title="Enter actual weight in KG" class="sc-inline-qty-input no-print">` : `<span class="no-print">${it.weight ? Number(it.weight).toFixed(3) : '—'}</span>`}<span class="print-show">${it.weight ? Number(it.weight).toFixed(3) : '—'}</span></td>
       <td>${fmt(it.rate)}</td>
       <td class="col-amt">${fmt(it.amount)}</td>
       <td class="no-print"><div class="row-actions">

@@ -456,12 +456,14 @@ async function scEnforceNewInvoicePrices(client,inv,identity){
     if(p.rate===null)throw new Error('Admin has not set a price for '+name+'. Invoice not saved.');
     const qty=Number(x.qty);
     if(!Number.isFinite(qty)||qty<=0||qty>100000||Math.round(qty*1000)!==qty*1000)throw new Error('Invalid quantity for '+name);
-    // Factor-priced (marinated) products use the actual weight entered by Staff.
-    // Fixed-price products always derive weight from the approved packet size.
-    const submittedWeight=Number(x.weight);
-    const weight=p.type==='factor' ? submittedWeight : Math.round(qty*p.packKg*1000)/1000;
+    // Both fixed and factor-priced products use actual KG entered by Staff.
+    // The price per KG always comes from the approved catalog, never the browser.
+    // Check raw input strictly: null, absent, or blank weight cannot become zero.
+    const rawWeight=x.weight;
+    if(rawWeight===null||rawWeight===undefined||rawWeight==='')throw new Error('Enter actual weight for '+name);
+    const weight=Number(rawWeight);
     if(!Number.isFinite(weight)||weight<=0||weight>100000)throw new Error('Enter a valid positive weight for '+name);
-    if(p.type==='factor' && Math.abs(weight-Math.round(weight*1000)/1000)>0.000001)throw new Error('Weight supports up to three decimal places for '+name);
+    if(Math.abs(weight-Math.round(weight*1000)/1000)>0.000001)throw new Error('Weight supports up to three decimal places for '+name);
     const amount=Math.round(weight*p.rate);
     repriced.push({name,qty,weight,rate:p.rate,amount});subtotal+=amount;
   }
