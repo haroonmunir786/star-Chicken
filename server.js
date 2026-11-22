@@ -740,12 +740,112 @@ app.get('/api/stock/state', auth, async (req, res) => {
   try { const result=await scStockStateCache.get(async()=>{const r=await pool.query('select state, updated_at from public.stock_app_state where id=1');return {state:r.rowCount?r.rows[0].state:null,updatedAt:r.rowCount?r.rows[0].updated_at:null};});res.set('Cache-Control','no-store');res.json(result); }
   catch(e){ console.error('Could not load stock state:',e); res.status(500).json({error:'Could not load stock data. Run schema_additions.sql in Supabase SQL Editor.'}); }
 });
+/* Stock permissions: Karachi business day; past stock receiving and opening are Admin-only.
+   POS invoice synchronization can still update derived Sale values in older sheets. */
+const scStockToday = () => new Intl.DateTimeFormat('sv-SE', {timeZone:'Asia/Karachi',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+const scStockNumeric = x => { const v=Number(x); return Number.isFinite(v)?v:0; };
+const scStockBal = a => scStockNumeric(a?.[0])+scStockNumeric(a?.[1])-scStockNumeric(a?.[2])-scStockNumeric(a?.[3]);
+const scStockRound = x => Math.round(x*1000)/1000;
+const scStockCanonical = x => JSON.stringify(x??null);
+function scStockProtectedChanges(oldDb={},newDb={},today=scStockToday()) {
+  const branches=new Set([...Object.keys(oldDb||{}),...Object.keys(newDb||{})]);
+  for (const branch of branches) {
+    const oldDays=oldDb?.[branch]||{},newDays=newDb?.[branch]||{};
+    const days=new Set([...Object.keys(oldDays),...Object.keys(newDays)]);
+    for (const day of days) {
+      if(day===today)continue;
+      const before=oldDays[day],after=newDays[day];
+      if(!before&&!after)continue;
+      if(!before||!after)return `${branch}, ${day}: only today's stock sheet can be changed by Staff`;
+      // Existing historical sheets may receive refreshed invoice-derived Sale quantities (index 2).
+      // Never accept historical opening, received, transfer or arbitrary metadata changes from Staff.
+      const oldRows=before.r||[],newRows=after.r||[];
+      const len=Math.max(oldRows.length,newRows.length);
+      for(let i=0;i<len;i++){
+        const a=oldRows[i]||['','','',''],b=newRows[i]||['','','',''];
+        for(const c of [0,1,3])if(scStockCanonical(a[c]??'')!==scStockCanonical(b[c]??'')){
+          // An absent appended row and an explicit empty row are equivalent.
+          if(scStockNumeric(a[c])===0&&scStockNumeric(b[c])===0)continue;
+          return `${branch}, ${day}: historical Opening/Received/Return changes require Admin`;
+        }
+      }
+      const restA={...before};delete restA.r;
+      const restB={...after};delete restB.r;
+      if(scStockCanonical(restA)!==scStockCanonical(restB))return `${branch}, ${day}: historical sheet changes require Admin`;
+    }
+  }
+  return null;
+}
+function scStockOpeningProposal(state,branch,day){
+  if(!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(day)||!branch||branch.length>100)throw new Error('Choose a valid branch and date');
+  const db=state.stockDB||{},days=db[branch]||{},target=days[day];
+  if(!target||!Array.isArray(target.r))throw new Error('Save this date’s stock sheet first, then recalculate its opening');
+  const prior=Object.keys(days).filter(d=>d<day&&Array.isArray(days[d]?.r)).sort().at(-1);
+  if(!prior)throw new Error('No earlier saved stock sheet exists for this branch');
+  const previous=days[prior].r||[],current=target.r||[],sales=state.posSales?.[branch]?.[prior];
+  const changes=[];
+  const len=Math.max(previous.length,current.length);
+  for(let i=0;i<len;i++){
+    const source=previous[i]||['','','',''];
+    const sold=Array.isArray(sales)?scStockNumeric(sales[i]):scStockNumeric(source[2]);
+    const proposed=scStockRound(scStockNumeric(source[0])+scStockNumeric(source[1])-sold-scStockNumeric(source[3]));
+    const existing=current[i]?.[0];
+    if(Math.abs(proposed-scStockNumeric(existing))>0.000001 || (existing===''||existing==null)&&proposed===0){
+      changes.push({index:i,old:existing??'',next:proposed,previousReceived:scStockNumeric(source[1]),previousSold:sold});
+    }
+  }
+  const basis=crypto.createHash('sha256').update(JSON.stringify({branch,day,prior,previous,current,sales:sales||null})).digest('hex');
+  return {branch,date:day,previousDate:prior,changes,basis};
+}
+/* This targeted endpoint updates ONLY opening cells of the selected saved day.
+   It does not touch receipts, transfers, invoice-derived sales, or other dates. */
+app.get('/api/stock/recalculate-opening',auth,adminOnly,async(req,res)=>{
+  try{
+    const r=await pool.query('select state from public.stock_app_state where id=1');
+    if(!r.rowCount)return res.status(404).json({error:'No saved Inventory state found'});
+    res.set('Cache-Control','no-store');res.json(scStockOpeningProposal(r.rows[0].state||{},String(req.query.branch||''),String(req.query.date||'')));
+  }catch(e){res.status(400).json({error:e.message||'Could not preview opening'});}
+});
+app.post('/api/stock/recalculate-opening',auth,adminOnly,async(req,res)=>{
+  const db=await pool.connect();
+  try{
+    await db.query('begin');
+    const r=await db.query('select state from public.stock_app_state where id=1 for update');
+    if(!r.rowCount)throw new Error('No saved Inventory state found');
+    const state=r.rows[0].state||{};
+    const preview=scStockOpeningProposal(state,String(req.body?.branch||''),String(req.body?.date||''));
+    if(!req.body?.basis||req.body.basis!==preview.basis){await db.query('rollback');return res.status(409).json({error:'Stock changed since preview. Please preview again before confirming.'});}
+    if(!preview.changes.length){await db.query('rollback');return res.json({ok:true,changed:0});}
+    const rows=state.stockDB[preview.branch][preview.date].r;
+    for(const item of preview.changes){
+      while(rows.length<=item.index)rows.push(['','','','']);
+      if(!Array.isArray(rows[item.index]))rows[item.index]=['','','',''];
+      rows[item.index][0]=item.next;
+    }
+    await db.query('update public.stock_app_state set state=$1::jsonb,updated_at=now() where id=1',[JSON.stringify(state)]);
+    await writeAudit(db,req,'stock.opening.recalculated',null,null,{branch:preview.branch,date:preview.date,previousDate:preview.previousDate,changes:preview.changes});
+    await db.query('commit');scStockStateCache.invalidate();res.json({ok:true,changed:preview.changes.length});
+  }catch(e){await db.query('rollback').catch(()=>{});console.error('Stock opening recalculation error',e);res.status(500).json({error:e.message||'Opening not changed'});}finally{db.release();}
+});
+
 app.put('/api/stock/state', auth, async (req, res) => {
   const state=req.body?.state;
   if(!state||typeof state!=='object'||Array.isArray(state)) return res.status(400).json({error:'A valid stock state object is required'});
   if(JSON.stringify(state).length>1_800_000) return res.status(413).json({error:'Stock data is too large to save'});
-  try { const r=await pool.query(`insert into public.stock_app_state(id,state,updated_at) values(1,$1::jsonb,now()) on conflict(id) do update set state=excluded.state,updated_at=now() returning updated_at`,[JSON.stringify(state)]);scStockStateCache.invalidate();res.json({ok:true,updatedAt:r.rows[0].updated_at}); }
-  catch(e){console.error('Could not save stock state:',e);res.status(500).json({error:'Could not save stock data. Run schema_additions.sql in Supabase SQL Editor.'});}
+  const identity=readRoleIdentity(req);
+  if(!identity)return res.status(403).json({error:'POS Staff or Admin login required for stock changes'});
+  const client=await pool.connect();
+  try{
+    await client.query('begin');
+    const old=await client.query('select state from public.stock_app_state where id=1 for update');
+    if(identity.role!=='admin'){
+      const invalid=scStockProtectedChanges(old.rows[0]?.state?.stockDB||{},state.stockDB||{});
+      if(invalid){await client.query('rollback');return res.status(403).json({error:invalid});}
+    }
+    const r=await client.query(`insert into public.stock_app_state(id,state,updated_at) values(1,$1::jsonb,now()) on conflict(id) do update set state=excluded.state,updated_at=now() returning updated_at`,[JSON.stringify(state)]);
+    await client.query('commit');scStockStateCache.invalidate();res.json({ok:true,updatedAt:r.rows[0].updated_at});
+  }catch(e){await client.query('rollback').catch(()=>{});console.error('Could not save stock state:',e);res.status(500).json({error:'Could not save stock data. Verify the cloud state connection.'});}
+  finally{client.release();}
 });
 
 /* ---------- Customer details ---------- */

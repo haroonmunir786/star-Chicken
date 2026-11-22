@@ -48,6 +48,11 @@ table.t th:nth-child(1),table.t td:nth-child(1){display:none}table.t td:nth-chil
 table.t tbody tr.row-active td:nth-child(2),table.t tbody tr:focus-within td:nth-child(2){background:#fde8e8 !important}
 tfoot td{font-size:12px}}
 @media print{header,nav,.bar{display:none}}
+
+.sc-recalc-overlay[hidden]{display:none!important}.sc-recalc-overlay{position:fixed;inset:0;z-index:100;background:#0008;display:flex;align-items:center;justify-content:center;padding:14px}
+.sc-recalc-card{background:#fff;border-radius:14px;padding:18px;width:min(740px,100%);max-height:90vh;display:flex;flex-direction:column;gap:12px}
+.sc-recalc-card h2{margin:0;font-size:19px}.sc-recalc-scroll{overflow:auto;min-height:70px}.sc-recalc-scroll table{width:100%}.sc-recalc-scroll td{text-align:right}.sc-recalc-scroll td:first-child{text-align:left;white-space:normal}
+#scStockReadOnlyNote{background:#ffefd1;border:1px solid #e6c58e;border-radius:7px;padding:8px 12px;color:#76490d;font-size:12px;font-weight:700;margin:7px 0}
 </style></head><body>
 <header><img src="data:image/jpeg;base64,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" alt=""><h1>STAR CHICKEN<small>Stock Management System</small></h1>
 <div class="dt"><button class="g" onclick="shift(-1)" title="Previous day">◀</button><label for="rangeFrom" style="font-size:12px;font-weight:700">From</label><input type="date" id="rangeFrom"><label for="date" style="font-size:12px;font-weight:700">To</label><input type="date" id="date"><button class="g" onclick="shift(1)" title="Next day">▶</button><button class="g" onclick="setStockRangeToday()">Today</button></div></header>
@@ -55,7 +60,7 @@ tfoot td{font-size:12px}}
 <main>
 <section id="dash"><div class="bar"><b id="dl"></b><span class="sp"></span><button class="g" onclick="backup()">⬇ Backup</button><button class="g" onclick="document.getElementById('imp').click()">⬆ Restore</button><input id="imp" type="file" accept=".json" hidden></div><div class="cards" id="cards"></div></section>
 <section id="sheet" class="hide"><div class="bar"><div class="chips" id="chips"></div></div>
-<div class="bar"><b id="sl"></b><span id="st" class="tag"></span><span class="sp"></span><input id="q" placeholder="Search item…" style="padding:6px 8px;border:1px solid var(--l);border-radius:6px"><span id="scAutoOpeningNote" class="tag" title="Opening carries forward from the latest saved earlier sheet. Existing opening values are preserved.">Opening automatic</span><button class="g" onclick="exportDay()">Excel</button><button class="g" onclick="shotSheet('pdf')">PDF</button><button class="g" onclick="shotSheet('img')">Photo</button><button class="ok" onclick="save()">💾 Save</button></div>
+<div class="bar"><b id="sl"></b><span id="st" class="tag"></span><span class="sp"></span><input id="q" placeholder="Search item…" style="padding:6px 8px;border:1px solid var(--l);border-radius:6px"><span id="scAutoOpeningNote" class="tag" title="Opening carries forward from the latest saved earlier sheet. Existing opening values are preserved.">Opening automatic</span><button class="g" onclick="exportDay()">Excel</button><button class="g" onclick="shotSheet('pdf')">PDF</button><button class="g" onclick="shotSheet('img')">Photo</button><button id="scRecalcBtn" class="g" type="button" onclick="scPreviewOpening()" hidden>↻ Recalculate Opening (Admin)</button><button id="scStockSaveBtn" class="ok" onclick="save()">💾 Save</button></div>
 <div class="wrap"><table class="t"><thead><tr><th>No</th><th>Detail</th><th>Packing Size</th><th>Bal</th><th>Receive</th><th>Sale</th><th>Return/Transfer</th><th>Balance</th></tr><tr class="u"><th></th><th></th><th>Kg</th><th>Pkts</th><th>Pkts</th><th>Pkts</th><th>Pkts</th><th>Pkts</th></tr></thead><tbody id="tb"></tbody><tfoot id="tf"></tfoot></table></div>
 <p class="note">Stock Sheet edits only the <strong>To Date</strong> shown above; the From/To range applies to Dashboard summaries and Reports. Balance = Bal + Receive − Sale − Return/Transfer. <strong>Sale</strong> is filled automatically from POS Product Sale (same date + branch). Enter / ↑ ↓ move between rows. Next day’s Bal fills automatically from the last saved balance.</p></section>
 <section id="rep" class="hide"><div class="bar"><select id="rb"></select>
@@ -63,7 +68,14 @@ tfoot td{font-size:12px}}
 From <input type="date" id="rf"> To <input type="date" id="rt"><span class="sp"></span><button class="ok" onclick="exportRep()">📊 Excel</button><button class="g" onclick="shotRep('pdf')">PDF</button><button class="g" onclick="shotRep('img')">Photo</button></div>
 <div class="wrap"><table class="t"><thead><tr><th>No</th><th>Detail</th><th>Packing</th><th>Opening Bal</th><th>Total Receive</th><th>Total Sale</th><th>Total Return/Transfer</th><th>Balance</th></tr></thead><tbody id="rtb"></tbody><tfoot id="rtf"></tfoot></table></div>
 <p class="note" id="rn"></p></section>
-</main><div id="toast"></div>
+</main>
+<div id="scRecalcOverlay" class="sc-recalc-overlay" hidden role="dialog" aria-modal="true" aria-label="Opening balance changes">
+ <div class="sc-recalc-card"><h2>Recalculate Opening — Admin</h2>
+ <p id="scRecalcInfo" class="note"></p><div class="sc-recalc-scroll"><table><thead><tr><th>Product</th><th>Current Opening</th><th>Correct Opening</th><th>Difference</th></tr></thead><tbody id="scRecalcRows"></tbody></table></div>
+ <p class="note">Only the Opening (Bal) values shown above will change. Received, Sale, Return/Transfer, other dates and invoices are not modified.</p>
+ <div class="bar" style="justify-content:flex-end"><button class="g" onclick="scCloseRecalc()">Cancel</button><button id="scRecalcConfirm" class="ok" onclick="scCommitOpening()">Confirm &amp; Save Corrected Opening</button></div>
+ </div>
+</div><div id="toast"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -149,7 +161,49 @@ return`<div class="card" onclick="open_('${b}')"><div class="s">Period Closing Q
 <h3>${b} <span class="tag ${a.partial?'n':''}">${a.partial?'Opening unavailable':a.available===null?'No stock history':'Stock recorded'}</span></h3></div>`}).join("")}
 
 function open_(b){cur=b;go("sheet")}
-function sheet(){reloadDB();if(!draft||draft.b!==cur||draft.d!==date){draft={b:cur,d:date,r:mk(cur,date)};dirty=scAutoOpeningPending}else{draft.r=applyPosSales(cur,date,draft.r)}
+let scInventoryRole=null,scOpeningPreview=null;
+const scInventoryToday=()=>ymd(new Date());
+const scInventoryCanEdit=()=>scInventoryRole==='admin'||(scInventoryRole==='staff'&&date===scInventoryToday());
+async function scLoadInventoryRole(){
+ try{const r=await fetch('/api/role/me',{credentials:'same-origin',cache:'no-store'});if(!r.ok)throw Error('Cannot verify stock role');
+  const d=await r.json();scInventoryRole=['admin','staff'].includes(d.role)?d.role:null;
+ }catch(e){scInventoryRole=null;console.warn('Stock role check failed:',e.message);}
+ render();
+}
+function scUpdateStockPermissions(){
+ const allowed=scInventoryCanEdit(),admin=scInventoryRole==='admin';
+ const saveBtn=$('scStockSaveBtn'),recalcBtn=$('scRecalcBtn');
+ if(saveBtn){saveBtn.disabled=!allowed;saveBtn.title=allowed?'Save this stock sheet':'Staff can edit stock only for today (Pakistan time)';}
+ if(recalcBtn){recalcBtn.hidden=!admin;recalcBtn.disabled=!cloudReady||!DB?.[cur]?.[date];}
+ let note=$('scStockReadOnlyNote');
+ if(!note){note=document.createElement('div');note.id='scStockReadOnlyNote';$('sheet').insertBefore(note,$('sheet').querySelector('.wrap'));}
+ note.hidden=allowed;
+ if(!allowed)note.textContent=scInventoryRole==='staff'?'View only: Salespersons can add or change stock only on today’s date. Older and future dates are read-only.':'Stock editing requires a verified Staff or Admin login.';
+ $('tb').querySelectorAll('input').forEach(el=>el.disabled=!allowed||el.dataset.c==='2');
+}
+async function scPreviewOpening(){
+ if(scInventoryRole!=='admin')return toast('Admin access required');
+ if(dirty&&!confirm('Your current sheet has unsaved changes. Preview uses the last saved stock. Continue?'))return;
+ try{const r=await fetch('/api/stock/recalculate-opening?branch='+encodeURIComponent(cur)+'&date='+encodeURIComponent(date),{credentials:'same-origin',cache:'no-store'});
+  const data=await r.json();if(!r.ok)throw Error(data.error||'Could not preview opening');
+  scOpeningPreview=data;
+  $('scRecalcInfo').textContent='Branch: '+data.branch+' · Date: '+data.date+' · Previous saved sheet: '+data.previousDate+' · '+data.changes.length+' differences';
+  $('scRecalcRows').innerHTML=data.changes.length?data.changes.map(x=>'<tr><td>'+String(ITEMS[x.index]?.[0]||('Product #'+(x.index+1))).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))+'</td><td>'+x.old+'</td><td>'+x.next+'</td><td>'+f2(x.next-n(x.old))+'</td></tr>').join(''):'<tr><td colspan="4">All opening balances match the previous closing. No correction needed.</td></tr>';
+  $('scRecalcConfirm').disabled=!data.changes.length;$('scRecalcOverlay').hidden=false;
+ }catch(e){toast(e.message||'Could not preview opening');}
+}
+function scCloseRecalc(){ $('scRecalcOverlay').hidden=true;scOpeningPreview=null; }
+async function scCommitOpening(){
+ if(scInventoryRole!=='admin'||!scOpeningPreview)return;
+ const btn=$('scRecalcConfirm');btn.disabled=true;
+ try{const r=await fetch('/api/stock/recalculate-opening',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({branch:scOpeningPreview.branch,date:scOpeningPreview.date,basis:scOpeningPreview.basis})});
+  const x=await r.json();if(!r.ok)throw Error(x.error||'Opening not saved');
+  scCloseRecalc();const fresh=await fetch('/api/stock/state',{credentials:'same-origin',cache:'no-store'});if(!fresh.ok)throw Error('Opening saved. Refresh the page to see the latest values');
+  const updated=await fresh.json();DB=updated.state?.stockDB||{};POS_SALES=updated.state?.posSales||POS_SALES;
+  draft=null;dirty=false;sheet();toast('Corrected '+x.changed+' opening balances. Saved to Supabase.');
+ }catch(e){toast(e.message||'Opening not saved');}finally{btn.disabled=false;}
+}
+function sheet(){reloadDB();if(!draft||draft.b!==cur||draft.d!==date){draft={b:cur,d:date,r:mk(cur,date)};dirty=scAutoOpeningPending&&scInventoryCanEdit()}else{draft.r=applyPosSales(cur,date,draft.r)}
 $("chips").innerHTML=BR.map(b=>`<button class="${b===cur?"on":""}" onclick="pick('${b}')">${b}</button>`).join("");
 $("sl").textContent=cur+" – "+fd(date);const sv=DB[cur]&&DB[cur][date];
 const autoNote=document.getElementById('scAutoOpeningNote');
@@ -159,19 +213,19 @@ if(autoNote){
 }$("st").textContent=sv?"Saved":"Not saved";$("st").className="tag "+(sv?"":"n");
 $("tb").innerHTML=ITEMS.map((it,i)=>{const a=draft.r[i];return`<tr data-i="${i}"><td class="n">${i+1}</td><td>${it[0]}</td><td class="p">${it[1]||""}</td>`+
 [0,1,2,3].map(c=>`<td><input type="number" step="any" min="0" data-c="${c}" value="${a[c]}"></td>`).join("")+`<td class="b"></td></tr>`}).join("");
-draft.r.forEach((_,i)=>rowCalc(i));totals();filter()}
+draft.r.forEach((_,i)=>rowCalc(i));totals();filter();scUpdateStockPermissions()}
 function pick(b){if(!chk())return;cur=b;draft=null;sheet()}
 function rowCalc(i){const td=$("tb").children[i].lastChild,v=bal(draft.r[i]);td.textContent=f2(v);td.classList.toggle("neg",v<0)}
 function totals(){let h="";const K=[0,1,2,3,4],P=K.map(c=>draft.r.reduce((t,a)=>t+(c<4?n(a[c]):bal(a)),0)),W=K.map(c=>draft.r.reduce((t,a,i)=>t+(c<4?n(a[c]):bal(a))*ITEMS[i][1],0));
 $("tf").innerHTML=`<tr><td colspan="3">Total (Pkts)</td>${P.map(v=>`<td>${f2(v)}</td>`).join("")}</tr><tr><td colspan="3">Total (Kg)</td>${W.map(v=>`<td>${f2(v)}</td>`).join("")}</tr>`}
 function filter(){const q=$("q").value.toLowerCase();[...$("tb").children].forEach((tr,i)=>tr.style.display=scStockShowRow(i)&&ITEMS[i][0].toLowerCase().includes(q)?"":"none")}
 $("q").oninput=filter;
-$("tb").addEventListener("input",e=>{const tr=e.target.closest("tr");if(!tr)return;const i=+tr.dataset.i;draft.r[i][e.target.dataset.c]=e.target.value;dirty=true;rowCalc(i);totals()});
+$("tb").addEventListener("input",e=>{if(!scInventoryCanEdit()){e.preventDefault();return;}const tr=e.target.closest("tr");if(!tr)return;const i=+tr.dataset.i;draft.r[i][e.target.dataset.c]=e.target.value;dirty=true;rowCalc(i);totals()});
 $("tb").addEventListener("focusin",e=>{const tr=e.target.closest("tr");if(tr)$("tb").querySelectorAll("tr.row-active").forEach(r=>r.classList.remove("row-active")),tr.classList.add("row-active")});
 $("tb").addEventListener("focusout",e=>{const tr=e.target.closest("tr");if(tr)setTimeout(()=>{if(!tr.contains(document.activeElement))tr.classList.remove("row-active")},0)});
 $("tb").addEventListener("keydown",e=>{if(!["Enter","ArrowDown","ArrowUp"].includes(e.key))return;e.preventDefault();let tr=e.target.closest("tr"),d=e.key==="ArrowUp"?-1:1;
 do{tr=d>0?tr.nextElementSibling:tr.previousElementSibling}while(tr&&tr.style.display==="none");if(tr){const x=tr.querySelector(`input[data-c="${e.target.dataset.c}"]`);x.focus();x.select()}});
-async function save(){draft.r=applyPosSales(cur,date,draft.r);(DB[cur]=DB[cur]||{})[date]={r:JSON.parse(JSON.stringify(draft.r))};try{await persist();dirty=false;toast("Saved to Supabase: "+cur+" – "+fd(date));sheet();if(scStockCatchup)scStockEventRefresh()}catch(e){toast(e.message||"Cloud save failed");}}
+async function save(){if(!scInventoryCanEdit()){toast('Staff can only save today’s stock sheet');return;}draft.r=applyPosSales(cur,date,draft.r);(DB[cur]=DB[cur]||{})[date]={r:JSON.parse(JSON.stringify(draft.r))};try{await persist();dirty=false;toast("Saved to Supabase: "+cur+" – "+fd(date));sheet();if(scStockCatchup)scStockEventRefresh()}catch(e){toast(e.message||"Cloud save failed");}}
 /* Previous-day opening is filled automatically by mk(); no manual reset needed. */
 /* ---------- reports ---------- */
 function preset(t){const d=new Date(date+"T00:00");let f=new Date(d);if(t==="w")f.setDate(d.getDate()-((d.getDay()+6)%7));if(t==="m")f.setDate(1);$("rf").value=ymd(f);$("rt").value=date;report()}
@@ -235,7 +289,7 @@ const rows=ITEMS.map((it,i)=>{const v=a[i];return[i+1,it[0],it[1]||"",z(v[0]),z(
 const T=w=>{const x=[0,1,2,3].map(c=>a.reduce((s,v,i)=>s+v[c]*(w?ITEMS[i][1]:1),0));return[...x,x[0]+x[1]-x[2]-x[3]].map(f2)};
 snap(kind,"Stock Report – "+(b==="*"?"All Branches":b+" Branch"),(f===t?"Date: "+fd(f):"Period: "+fd(f)+" to "+fd(t)),["No","Detail","Pack (Kg)","Opening Bal","Total Receive","Total Sale","Total Return/Transfer","Balance"],rows,[["Total (Pkts)",...T(0)],["Total (Kg)",...T(1)]],"StarChicken_Report_"+(b==="*"?"AllBranches":b)+"_"+f+(f===t?"":"_to_"+t))}
 function backup(){const A=document.createElement("a");A.href=URL.createObjectURL(new Blob([JSON.stringify(DB)],{type:"application/json"}));A.download="StarChicken_Stock_Backup_"+ymd(new Date())+".json";A.click()}
-$("imp").onchange=e=>{const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(confirm("Replace all current data with this backup?")){DB=d;persist().then(()=>{draft=null;render();toast("Backup restored to Supabase")}).catch(e=>toast(e.message))}}catch(x){toast("Invalid backup file")}};if(e.target.files[0])r.readAsText(e.target.files[0]);e.target.value=""};
+$("imp").onchange=e=>{if(scInventoryRole!=='admin'){toast('Only Admin can restore backups');e.target.value='';return;}const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(confirm("Replace all current data with this backup?")){DB=d;persist().then(()=>{draft=null;render();toast("Backup restored to Supabase")}).catch(e=>toast(e.message))}}catch(x){toast("Invalid backup file")}};if(e.target.files[0])r.readAsText(e.target.files[0]);e.target.value=""};
 $("rangeFrom").onchange=e=>setStockRangeFrom(e.target.value);$("rangeFrom").value=rangeFrom;$("date").onchange=e=>setDate(e.target.value);$("date").value=date;
 window.onbeforeunload=()=>dirty?"You have unsaved changes.":undefined;
 async function initializeCloudStock(){
@@ -370,7 +424,7 @@ function scStockRowHasHistory(i){
 }
 function scStockShowRow(i){const p=scInventoryCatalog.find(x=>x.stockIndex===i);if(!p||p.active)return true;const row=DB?.[cur]?.[date]?.r?.[i];return Array.isArray(row)&&row.some(x=>Number(x)!==0);}
 
-scLoadInventoryCatalog().then(()=>initializeCloudStock()).then(() => {
+scLoadInventoryCatalog().then(()=>initializeCloudStock()).then(()=>scLoadInventoryRole()).then(() => {
   try {
     const p = new URLSearchParams(location.search || '');
     const b = (p.get('branch') || p.get('b') || '').trim();
