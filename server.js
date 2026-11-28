@@ -396,6 +396,70 @@ async function scGetPrices(db){
   return {enforced:!!settings.enforcement_enabled,baseRate:base,rateDate:settings.rate_date instanceof Date?settings.rate_date.toISOString().slice(0,10):String(settings.rate_date).slice(0,10),sourceName:settings.source_name,sourceUrl:SC_PRICE_SOURCE_URL,updatedAt:settings.updated_at,updatedBy:settings.updated_by,
     products:p.rows.map(x=>({name:x.product_name,type:x.pricing_type,packKg:Number(x.kg_per_packet),fixed:x.fixed_price===null?null:Number(x.fixed_price),factor:x.factor===null?null:Number(x.factor),rate:scPriceValue(x,base)}))};
 }
+/* Historical daily approved PRODUCT prices, reconstructed from immutable Admin audit entries.
+ * No guesses are made for dates before a product/base approval can be established.
+ * Fixed products use their dated rate; factor products use dated factor × dated base.
+ * A range averages each calendar day equally, including days without any sales. */
+app.get('/api/prices/history',auth,async(req,res)=>{
+  if(!readRoleIdentity(req))return res.status(403).json({error:'POS login required'});
+  const from=String(req.query.from||''),to=String(req.query.to||'');
+  const valid=d=>/^\d{4}-\d{2}-\d{2}$/.test(d)&&!Number.isNaN(Date.parse(d+'T00:00:00Z'))&&new Date(d+'T00:00:00Z').toISOString().slice(0,10)===d;
+  if(!valid(from)||!valid(to)||from>to)return res.status(400).json({error:'Choose a valid From/To date range'});
+  const days=Math.round((Date.parse(to+'T00:00:00Z')-Date.parse(from+'T00:00:00Z'))/86400000)+1;
+  if(days>366)return res.status(400).json({error:'Select at most 366 days at once'});
+  try{
+    // PostgreSQL Activity Log records the effective product changes on the day Admin saved them.
+    // Base-rate approvals use their explicitly selected government publication date.
+    const q=await pool.query(`select id,action,details,
+      to_char(created_at AT TIME ZONE 'Asia/Karachi','YYYY-MM-DD') as action_day
+      from public.pos_activity_log
+      where action in ('prices.product.updated','prices.base.approved')
+      order by id asc`);
+    const updates=new Map();
+    for(const e of q.rows){
+      const d=e.details||{};
+      const day=e.action==='prices.base.approved' && valid(String(d.rateDate||'')) ? String(d.rateDate) : String(e.action_day||'');
+      if(!valid(day))continue;
+      if(!updates.has(day))updates.set(day,[]);
+      updates.get(day).push({action:e.action,details:d});
+    }
+    const known=new Map(),sum=new Map(),count=new Map();
+    let base=null;
+    // Need events prior to the range to reconstruct the opening daily state.
+    for(const day of [...updates.keys()].filter(d=>d<from).sort()){
+      for(const e of updates.get(day)){
+        const d=e.details;
+        if(e.action==='prices.base.approved'&&Number(d.baseRate)>0)base=Number(d.baseRate);
+        if(e.action==='prices.product.updated'&&typeof d.product==='string'&&['fixed','factor'].includes(d.type)&&Number(d.value)>0)known.set(d.product,{type:d.type,value:Number(d.value)});
+      }
+    }
+    const dates=[];
+    for(let i=0;i<days;i++){
+      const day=new Date(Date.parse(from+'T00:00:00Z')+i*86400000).toISOString().slice(0,10);
+      dates.push(day);
+      for(const e of (updates.get(day)||[])){
+        const d=e.details;
+        if(e.action==='prices.base.approved'&&Number(d.baseRate)>0)base=Number(d.baseRate);
+        if(e.action==='prices.product.updated'&&typeof d.product==='string'&&['fixed','factor'].includes(d.type)&&Number(d.value)>0)known.set(d.product,{type:d.type,value:Number(d.value)});
+      }
+      for(const [name,p] of known){
+        const rate=p.type==='fixed'?p.value:(base==null?null:Math.round(base*p.value*100)/100);
+        if(rate==null||!Number.isFinite(rate)||rate<=0)continue;
+        sum.set(name,(sum.get(name)||0)+rate);
+        count.set(name,(count.get(name)||0)+1);
+      }
+    }
+    // Do not use today's rate as a substitute for missing older historical days.
+    const products={};
+    for(const [name,total] of sum){
+      const covered=count.get(name);
+      products[name]={rate:covered===days?Math.round(total/days*100)/100:null,daysCovered:covered,daysRequested:days};
+    }
+    res.set('Cache-Control','no-store');
+    res.json({from,to,days,products,source:'Admin Price List approval Activity Log',complete:Object.values(products).every(x=>x.daysCovered===days)});
+  }catch(e){console.error('Historic Price List report failed',e);res.status(503).json({error:'Unable to read historical price approvals from Activity Log'});}
+});
+
 app.get('/api/prices',auth,async(req,res)=>{
   if(!readRoleIdentity(req))return res.status(403).json({error:'POS login required'});
   try{res.set('Cache-Control','no-store');res.json(await scGetPrices(pool));}

@@ -1828,6 +1828,12 @@ select[multiple] {
 @media(max-width:600px){.sc-top-tiles{height:390px;min-height:390px}.sc-treemap-cell{border-width:2px;border-radius:7px}}
 
 
+#scDashSalesmanPanel[hidden]{display:none!important;}
+#dashPartySeg{flex-wrap:wrap;}
+/* Category Contribution: category-specific weighted Rs/kg and per-invoice packet quantity. */
+.sc-category-fill-card .dash-cat-leg-row{flex-wrap:wrap;}
+.sc-category-fill-card .sc-cat-averages{flex:0 0 100%;padding-left:20px;color:#67676c;font-size:.72rem;line-height:1.45;margin-top:2px;}
+.sc-category-fill-card .sc-cat-averages b{color:#2b2b2b;}
 /* Category Contribution fills the adjacent treemap card on wide displays. */
 @media (min-width: 901px) {
   .sc-category-fill-card {display:flex;flex-direction:column;}
@@ -2692,6 +2698,12 @@ body.sc-price-staff #discount{pointer-events:none;background:#f0f0f5}
         <button type="button" data-mode="star" class="on" onclick="setPartyFilter('dash','star')">⭐ Star Chicken</button>
         <button type="button" data-mode="party" class="party" onclick="setPartyFilter('dash','party')">👥 Party Customer</button>
         <button type="button" data-mode="all" class="all" onclick="setPartyFilter('dash','all')">🔗 All</button>
+        <button type="button" data-mode="salesman" onclick="setPartyFilter('dash','salesman')">👤 Salesman</button>
+      </div>
+      <div id="scDashSalesmanPanel" hidden style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;padding:12px;border:1px solid #f1dab1;border-radius:10px;background:#fff9eb">
+        <label for="scDashSalesman" style="font-weight:700;font-size:.82rem">Salesperson</label>
+        <select id="scDashSalesman" onchange="renderDashboard()" style="min-height:38px;min-width:200px;max-width:100%;border:1px solid #e3d1ae;border-radius:8px;padding:6px 12px"><option value="">Select salesperson…</option></select>
+        <span id="scDashSalesmanStatus" style="font-size:.74rem;color:#777">Choose a salesperson to see their sales.</span>
       </div>
       <div class="dash-kpis dash-kpis-modern">
         <div class="dash-kpi-m k-today-m">
@@ -2950,9 +2962,11 @@ body.sc-price-staff #discount{pointer-events:none;background:#f0f0f5}
         <button type="button" data-mode="all" class="all" onclick="setPartyFilter('ps','all')">🔗 All</button>
       </div>
       <div class="ps-date-row">
-        <label for="psDate">Date</label>
-        <input type="date" id="psDate" onchange="calcProductSale()">
-        <button class="btn btn-primary btn-sm" onclick="setPsToday(); calcProductSale()" style="height:38px;">Today</button>
+        <label for="psFrom">From</label>
+        <input type="date" id="psFrom" onchange="refreshProductSaleAnnouncedRate()">
+        <label for="psTo">To</label>
+        <input type="date" id="psTo" onchange="refreshProductSaleAnnouncedRate()">
+        <button class="btn btn-primary btn-sm" onclick="setPsToday(); refreshProductSaleAnnouncedRate()" style="height:38px;">Today</button>
       </div>
       <div class="ps-date-row" style="margin-top:4px;">
         <label for="psShop">Party</label>
@@ -2974,6 +2988,7 @@ body.sc-price-staff #discount{pointer-events:none;background:#f0f0f5}
           <div class="ps-val" id="psWgt">0 kg</div>
         </div>
       </div>
+       <p id="psAnnouncedNote" style="margin:0 0 8px;color:#777;font-size:.74rem">Historical approved product rates are averaged equally over each selected calendar day. Missing approval history is shown as —.</p>
       <div class="ps-table-wrap">
         <table class="ps-table">
           <thead>
@@ -2983,11 +2998,13 @@ body.sc-price-staff #discount{pointer-events:none;background:#f0f0f5}
               <th style="text-align:right">Qty</th>
               <th style="text-align:right">Weight (kg)</th>
               <th style="text-align:right">Sale/KG</th>
+              <th style="text-align:right" title="Average Admin-approved product rate for each calendar day in the selected date range">Announced Rs/KG</th>
+              <th style="text-align:right" title="(Sale/KG minus announced rate) divided by announced rate × 100">Diff %</th>
               <th style="text-align:right">Amount (Rs)</th>
             </tr>
           </thead>
           <tbody id="psBody">
-            <tr><td colspan="6"><div class="ps-empty">No sales on this date.</div></td></tr>
+            <tr><td colspan="8"><div class="ps-empty">No sales on this date.</div></td></tr>
           </tbody>
         </table>
       </div>
@@ -3659,7 +3676,46 @@ async function saveNewPartyCustomer() {
   }
 }
 
-/** Per-screen party filter: 'star' | 'party' | 'all' */
+/* Dashboard salesperson attribution is sourced from the server's immutable invoice.created audit,
+   via the existing Admin-only print-tracking report. No editable billMaker matching. */
+let scDashStaffCreators = new Map(), scDashStaffLoaded = false, scDashStaffBusy = false;
+async function scLoadDashboardSalespeople(force=false) {
+  if(scDashStaffBusy || (scDashStaffLoaded && !force))return;
+  if(currentRole!=='admin')return;
+  scDashStaffBusy=true;
+  const status=document.getElementById('scDashSalesmanStatus');
+  if(status)status.textContent='Loading salespeople and verified invoice attribution…';
+  try {
+    const histories=(typeof allHistory!=='undefined'&&allHistory)||[];
+    const today=getPakistanDateISO();
+    const dates=histories.map(inv=>invDateISO(inv)).filter(s=>/^\d{4}-\d{2}-\d{2}$/.test(s));
+    const from=dates.length?dates.sort()[0]:today;
+    const [staffR,creatorsR]=await Promise.all([
+      fetch('/api/staff',{credentials:'same-origin',cache:'no-store'}),
+      fetch('/api/reports/print-tracking?from='+encodeURIComponent(from)+'&to='+encodeURIComponent(today),{credentials:'same-origin',cache:'no-store'})
+    ]);
+    if(!staffR.ok||!creatorsR.ok)throw Error('Cannot load verified salesperson report. Check Staff and Print Tracking setup.');
+    const staff=await staffR.json(), report=await creatorsR.json();
+    const next=new Map(),people=new Map();
+    for(const u of staff)people.set(u.staffId,u.name+' ('+u.staffId+')'+(u.active?'':' · Disabled'));
+    for(const row of report.rows||[]) {
+      if(row.invoiceId && row.creatorId)next.set(String(row.invoiceId),String(row.creatorId));
+      if(row.creatorId && row.creatorId.startsWith('S') && !people.has(row.creatorId))people.set(row.creatorId,(row.creatorName||row.creatorId)+' ('+row.creatorId+')');
+    }
+    scDashStaffCreators=next;
+    const select=document.getElementById('scDashSalesman'),chosen=select?.value||'';
+    if(select){select.replaceChildren(new Option('Select salesperson…',''));
+      for(const [id,label] of [...people].sort((a,b)=>a[1].localeCompare(b[1])))select.add(new Option(label,id));
+      select.value=people.has(chosen)?chosen:'';
+    }
+    scDashStaffLoaded=true;
+    if(status)status.textContent='Sales are attributed to the original logged-in salesperson. Older untracked invoices are excluded.';
+  } catch(e) {
+    scDashStaffLoaded=false;
+    if(status)status.textContent=e.message||'Could not load salesperson report';
+  } finally {scDashStaffBusy=false;if(partyFilters.dash==='salesman')renderDashboard();}
+}
+/** Per-screen party filter: 'star' | 'party' | 'all' | 'salesman' (dashboard only) */
 const partyFilters = { dash: 'star', ps: 'star', sale: 'star', ai: 'star', hist: 'all' };
 
 function getInvoicePartyType(inv) {
@@ -3671,6 +3727,10 @@ function getInvoicePartyType(inv) {
 }
 function filterByPartyMode(list, mode) {
   if (!mode || mode === 'all') return list || [];
+  if(mode==='salesman') {
+    const staffId=document.getElementById('scDashSalesman')?.value||'';
+    return !staffId || !scDashStaffLoaded ? [] : (list||[]).filter(inv=>scDashStaffCreators.get(String(inv.id))===staffId);
+  }
   return (list || []).filter(inv => getInvoicePartyType(inv) === mode);
 }
 function namesForMode(mode) {
@@ -3748,6 +3808,9 @@ function setPartyFilter(screen, mode) {
   if (screen === 'sale') fillSelectOptions(document.getElementById('saleShop'), namesForMode(mode), 'All Parties', false);
   if (screen === 'ai') fillSelectOptions(document.getElementById('aiShop'), namesForMode(mode), null, true);
   if (screen === 'dash') {
+    const panel=document.getElementById('scDashSalesmanPanel');
+    if(panel)panel.hidden=mode!=='salesman';
+    if(mode==='salesman')scLoadDashboardSalespeople();
     const br = document.getElementById('dashPCBranch');
     if (br) fillSelectOptions(br, namesForMode(mode), 'All Parties', false);
     renderDashboard();
@@ -4179,7 +4242,10 @@ async function refreshDashboardFromCloud() {
     if (oldSignature !== newSignature) {
       allHistory = latest;
       renderHistory();
-      if (document.getElementById('dashboardOverlay')?.classList.contains('show')) renderDashboard();
+      if (document.getElementById('dashboardOverlay')?.classList.contains('show')) {
+        if(partyFilters.dash==='salesman')scLoadDashboardSalespeople(true); // Reload trusted creator attribution for new invoices.
+        renderDashboard();
+      }
     } else if (document.getElementById('dashboardOverlay')?.classList.contains('show')) {
       renderDashboard(); // Refresh Today/date figures even when no new invoice arrived.
     }
@@ -5683,6 +5749,7 @@ function setDashboardCountValue(id, rawValue, currency) {
 
 /* ══════════ DASHBOARD ══════════ */
 function openDashboard() {
+  if(partyFilters.dash==='salesman')scLoadDashboardSalespeople(true);
   dashboardCountUpPending = true;
   document.getElementById('dashboardOverlay').classList.add('show');
   // Branch-wise (and linked product/customer filters) default to today
@@ -5940,7 +6007,7 @@ function renderDashboard() {
   renderDashboardBranch();
   renderDashboardTopLists();
   renderDashboardCategory();
-  renderDashboardStockByBranch();
+  renderDashboardStockByBranch(); // Inventory stock is shared across branches; never attributed to an individual salesman.
   renderDashTopTiles();
 }
 
@@ -5980,6 +6047,14 @@ function renderDashboardStockByBranch() {
   const note=document.getElementById('dashStockNote');
   const pill=document.getElementById('dashStockTotalPill');
   if(!body)return;
+  if(partyFilters.dash==='salesman') {
+    // An employee does not own the branch inventory; never show a misleading
+    // balance calculated from only their invoices.
+    body.innerHTML='<tr><td colspan="7" style="padding:18px;text-align:center;color:#777">Stock balance is shared by branch, not by salesperson. Select Star Chicken or All to see stock balances.</td></tr>';
+    if(note)note.textContent='Stock is not filtered by salesperson.';
+    if(pill)pill.textContent='Shared stock';
+    return;
+  }
   const startInput=document.getElementById('dashBranchFrom')?.value || '';
   const endInput=document.getElementById('dashBranchTo')?.value || '';
   const today=(typeof getPakistanDateISO==='function')?getPakistanDateISO():new Date().toISOString().slice(0,10);
@@ -6150,21 +6225,26 @@ function renderDashboardCategory() {
   const { list, fromStr, toStr } = filterListByDateInputs('dashBranchFrom', 'dashBranchTo');
 
   const catMap = {};
-  CAT_ORDER.forEach(c => { catMap[c] = 0; });
+  CAT_ORDER.forEach(c => { catMap[c] = {amount:0,qty:0,weight:0,invoices:0}; });
 
   list.forEach(inv => {
+    const encountered = new Set();
     (inv.items || []).forEach(it => {
       let cat = getProductCategory(it.name);
       if (!CAT_COLORS[cat]) cat = 'Other';
       const amt = Number(it.amount) || 0;
-      catMap[cat] = (catMap[cat] || 0) + amt;
+      catMap[cat].amount += amt;
+      catMap[cat].qty += Number(it.qty) || 0;
+      catMap[cat].weight += Number(it.weight) || 0;
+      encountered.add(cat);
     });
+    encountered.forEach(cat => {catMap[cat].invoices++;});
   });
 
   // Show only real categories (exclude Other)
   const rows = CAT_ORDER
     .filter(name => name !== 'Other')
-    .map(name => ({ name, amount: catMap[name] || 0 }))
+    .map(name => ({ name, ...catMap[name] }))
     .filter(r => r.amount > 0)
     .sort((a, b) => b.amount - a.amount);
 
@@ -6211,7 +6291,9 @@ function renderDashboardCategory() {
       '<span class="dash-cat-swatch" style="background:' + color + '"></span>' +
       '<span class="dash-cat-leg-name" style="color:' + color + '">' + esc(r.name) + '</span>' +
       '<span class="dash-cat-leg-pct" style="color:' + color + '">' + pct + '%</span>' +
-      '<span class="dash-cat-leg-amt" style="color:' + color + '">' + fmtD(r.amount) + '</span></div>';
+      '<span class="dash-cat-leg-amt" style="color:' + color + '">' + fmtD(r.amount) + '</span>' +
+      '<div class="sc-cat-averages">Avg Rs/kg: <b>' + (r.weight > 0 ? (r.amount/r.weight).toLocaleString('en-PK',{maximumFractionDigits:2}) : '—') +
+      '</b> · Avg Qty/invoice: <b>' + (r.invoices > 0 ? (r.qty/r.invoices).toLocaleString('en-PK',{maximumFractionDigits:2}) : '—') + '</b></div></div>';
   }).join('');
 
   const centerLabel = (!fromStr && !toStr) ? 'All Dates' : 'Selected';
@@ -6432,7 +6514,7 @@ function renderDashTopTiles(){
   const fmt=n=>'Rs '+Math.round(n).toLocaleString('en-PK');
   const total=ranked.reduce((s,x)=>s+x.amount,0);
   const note=document.getElementById('dashTopTilesNote');
-  if(note)note.textContent=dashFmtDateNote(filtered.fromStr,filtered.toStr,'All dates')+' · '+(partyFilters.dash==='all'?'All parties':partyFilters.dash==='star'?'Star Chicken':'Party customers');
+  if(note)note.textContent=dashFmtDateNote(filtered.fromStr,filtered.toStr,'All dates')+' · '+(partyFilters.dash==='all'?'All parties':partyFilters.dash==='star'?'Star Chicken':partyFilters.dash==='salesman'?'Selected salesperson':'Party customers');
   const pill=document.getElementById('dashTopTilesTotal');
   if(pill)pill.textContent=fmt(total);
   if(!ranked.length){el.innerHTML='<div class="sc-treemap-empty">No product sales for this date range</div>';return;}
@@ -7941,79 +8023,80 @@ function importInvoice(ev) {
 
 /* ══════════ PRODUCT SALE (item-wise daily) ══════════ */
 function setPsToday() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  document.getElementById('psDate').value = y + '-' + m + '-' + day;
+  const d=new Date();
+  const today=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  document.getElementById('psFrom').value=today;
+  document.getElementById('psTo').value=today;
 }
-function openProductSaleModal() {
-  setPsToday();
-  calcProductSale();
+let psHistoricalPrices=null,psHistoryRequest=0;
+async function refreshProductSaleAnnouncedRate(){
+  const from=document.getElementById('psFrom')?.value,to=document.getElementById('psTo')?.value;
+  if(!from||!to||from>to){psHistoricalPrices=null;calcProductSale();return;}
+  const request=++psHistoryRequest;
+  psHistoricalPrices=null;
+  const note=document.getElementById('psAnnouncedNote');
+  if(note)note.textContent='Loading historical product rates…';
+  try{
+    const r=await fetch('/api/prices/history?from='+encodeURIComponent(from)+'&to='+encodeURIComponent(to),{credentials:'same-origin',cache:'no-store'});
+    const data=await r.json();if(!r.ok)throw Error(data.error||'Historical rate lookup failed');
+    if(request===psHistoryRequest)psHistoricalPrices=data;
+  }catch(e){
+    if(request===psHistoryRequest)psHistoricalPrices={error:e.message,products:{}};
+  }
+  if(request===psHistoryRequest)calcProductSale();
+}
+function openProductSaleModal(){
+  setPsToday();calcProductSale();
   document.getElementById('productSaleOverlay').classList.add('show');
+  refreshProductSaleAnnouncedRate();
 }
-function closeProductSaleModal() {
-  document.getElementById('productSaleOverlay')?.classList.remove('show');
-}
-function calcProductSale() {
-  const dateStr = document.getElementById('psDate').value;
-  if (!dateStr) { setPsToday(); return calcProductSale(); }
-  const shopFilter = (document.getElementById('psShop') && document.getElementById('psShop').value) || '';
-
-  // Aggregate items from invoices on this date (optionally filtered by shop / party type)
-  const map = {}; // name -> { qty, weight, amount, count }
-  const list = filterByPartyMode(
-    (typeof allHistory !== 'undefined' && allHistory) ? allHistory : [],
-    partyFilters.ps || 'all'
-  );
-  list.forEach(inv => {
-    if (shopFilter && (inv.shopName || '').trim() !== shopFilter) return;
-    const d = parseInvDate(inv);
-    if (!d) return;
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    if ((y + '-' + m + '-' + day) !== dateStr) return;
-    const itemsArr = inv.items || [];
-    itemsArr.forEach(it => {
-      const name = (it.name || 'Unknown').trim() || 'Unknown';
-      if (!map[name]) map[name] = { qty: 0, weight: 0, amount: 0 };
-      map[name].qty += Number(it.qty) || 0;
-      map[name].weight += Number(it.weight) || 0;
-      map[name].amount += Number(it.amount) || 0;
+function closeProductSaleModal(){document.getElementById('productSaleOverlay')?.classList.remove('show');}
+function calcProductSale(){
+  const from=document.getElementById('psFrom').value,to=document.getElementById('psTo').value;
+  if(!from||!to){setPsToday();return calcProductSale();}
+  const shopFilter=document.getElementById('psShop')?.value||'';
+  const map={};
+  const list=filterByPartyMode((typeof allHistory!=='undefined'&&allHistory)?allHistory:[],partyFilters.ps||'all');
+  list.forEach(inv=>{
+    if(shopFilter&&(inv.shopName||'').trim()!==shopFilter)return;
+    const d=parseInvDate(inv);if(!d)return;
+    const day=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    if(day<from||day>to)return;
+    (inv.items||[]).forEach(it=>{
+      const name=(it.name||'Unknown').trim()||'Unknown';
+      if(!map[name])map[name]={qty:0,weight:0,amount:0};
+      map[name].qty+=Number(it.qty)||0;
+      map[name].weight+=Number(it.weight)||0;
+      map[name].amount+=Number(it.amount)||0;
     });
   });
-
-  const rows = Object.keys(map).map(name => {
-    const qty = map[name].qty;
-    const weight = map[name].weight;
-    const amount = map[name].amount;
-    // Effective Sale/KG = total amount ÷ total weight (weighted avg rate for the day)
-    const ratePerKg = weight > 0 ? amount / weight : 0;
-    return { name, qty, weight, amount, ratePerKg };
-  }).sort((a, b) => b.weight - a.weight || b.amount - a.amount || a.name.localeCompare(b.name));
-
-  let totalQty = 0, totalWgt = 0;
-  rows.forEach(r => { totalQty += r.qty; totalWgt += r.weight; });
-
-  document.getElementById('psCount').textContent = rows.length;
-  document.getElementById('psQty').textContent = Math.round(totalQty * 100) / 100;
-  document.getElementById('psWgt').textContent = (Math.round(totalWgt * 100) / 100) + ' kg';
-
-  const tbody = document.getElementById('psBody');
-  if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="6"><div class="ps-empty">No product sales on this date.</div></td></tr>';
-    return;
-  }
-  tbody.innerHTML = rows.map((r, i) => `
-    <tr>
-      <td class="col-num">${i + 1}</td>
-      <td class="ps-name">${esc(r.name)}</td>
-      <td class="ps-qty">${r.qty ? (Math.round(r.qty * 100) / 100) : '—'}</td>
-      <td class="ps-num">${r.weight ? r.weight.toFixed(2) : '—'}</td>
-      <td class="ps-num">${r.ratePerKg > 0 ? Math.round(r.ratePerKg) : '—'}</td>
-      <td class="ps-num">${fmt(r.amount)}</td>
-    </tr>`).join('');
+  const rows=Object.keys(map).map(name=>{
+    const {qty,weight,amount}=map[name];
+    return {name,qty,weight,amount,ratePerKg:weight>0?amount/weight:0};
+  }).sort((a,b)=>b.weight-a.weight||b.amount-a.amount||a.name.localeCompare(b.name));
+  document.getElementById('psCount').textContent=rows.length;
+  document.getElementById('psQty').textContent=Math.round(rows.reduce((a,r)=>a+r.qty,0)*100)/100;
+  document.getElementById('psWgt').textContent=(Math.round(rows.reduce((a,r)=>a+r.weight,0)*100)/100)+' kg';
+  const tbody=document.getElementById('psBody');
+  const note=document.getElementById('psAnnouncedNote');
+  const historyMatches=psHistoricalPrices?.from===from&&psHistoricalPrices?.to===to;
+  const missing=rows.filter(r=>historyMatches&&psHistoricalPrices.products?.[r.name]?.rate==null).length;
+  if(note)note.textContent=psHistoricalPrices?.error?'Historical rate error: '+psHistoricalPrices.error:
+    !historyMatches?'Loading dated approved rates…':
+    'Announced Rs/KG = simple average of each calendar day\'s approved PRODUCT rate ('+from+' to '+to+').'+(missing?' '+missing+' sold product(s) lack complete approved history; shown as —.':'');
+  if(!rows.length){tbody.innerHTML='<tr><td colspan="8"><div class="ps-empty">No product sales in this range.</div></td></tr>';return;}
+  tbody.innerHTML=rows.map((r,i)=>{
+    const approved=historyMatches?psHistoricalPrices.products?.[r.name]?.rate:null;
+    const canCompare=Number.isFinite(approved)&&approved>0&&r.weight>0;
+    const diff=canCompare?(r.ratePerKg-approved)/approved*100:null;
+    return `<tr><td class="col-num">${i+1}</td><td class="ps-name">${esc(r.name)}</td>
+      <td class="ps-qty">${r.qty?Math.round(r.qty*100)/100:'—'}</td>
+      <td class="ps-num">${r.weight?r.weight.toFixed(2):'—'}</td>
+      <td class="ps-num">${r.ratePerKg>0?Math.round(r.ratePerKg*100)/100:'—'}</td>
+      <td class="ps-num">${canCompare?approved.toLocaleString('en-PK',{maximumFractionDigits:2}):'—'}</td>
+      <td class="ps-num" style="color:${diff!=null&&diff<0?'#B71C1C':'#137A37'}">${diff!=null?(diff>0?'+':'')+diff.toFixed(1)+'%':'—'}</td>
+      <td class="ps-num">${fmt(r.amount)}</td></tr>`;
+  }).join('');
 }
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') closeProductSaleModal();
