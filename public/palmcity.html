@@ -1466,6 +1466,8 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
   background: var(--primary); color: #fff; border-color: var(--primary);
 }
 .party-seg button.on.party { background: #6A1B9A; border-color: #6A1B9A; }
+#dashPartySeg button.on.shkasur { background:#147d64; border-color:#147d64; }
+#dashPartySeg button { min-width:105px; }
 .party-seg button.on.all { background: #1565C0; border-color: #1565C0; }
 select[multiple] {
   min-height: 110px; padding: 6px 8px;
@@ -1830,9 +1832,9 @@ select[multiple] {
 
 #scDashSalesmanPanel[hidden]{display:none!important;}
 #dashPartySeg{flex-wrap:wrap;}
-/* Category Contribution: category-specific weighted Rs/kg and per-invoice packet quantity. */
+/* Category Contribution: weighted average selling price per KG. */
 .sc-category-fill-card .dash-cat-leg-row{flex-wrap:wrap;}
-.sc-category-fill-card .sc-cat-averages{flex:0 0 100%;padding-left:20px;color:#67676c;font-size:.72rem;line-height:1.45;margin-top:2px;}
+.sc-category-fill-card .dash-cat-averages{flex:0 0 100%;padding-left:24px;color:#68686e;font-size:.76rem;line-height:1.5;margin-top:4px;}
 .sc-category-fill-card .sc-cat-averages b{color:#2b2b2b;}
 /* Category Contribution fills the adjacent treemap card on wide displays. */
 @media (min-width: 901px) {
@@ -2454,6 +2456,7 @@ body.sc-price-staff #discount{pointer-events:none;background:#f0f0f5}
               <select id="partyType" onchange="onPartyTypeChange(); markDirty(); updatePrintMeta()">
                 <option value="star">Star Chicken</option>
                 <option value="party">Party Customer</option>
+                <option value="shkasur">SH Kasur</option>
               </select>
             </div>
             <div class="form-group">
@@ -2467,7 +2470,7 @@ body.sc-price-staff #discount{pointer-events:none;background:#f0f0f5}
               <label for="invoicePaymentType">Payment Type</label>
               <select id="invoicePaymentType" onchange="onInvoicePaymentTypeChange(); markDirty(); updatePrintMeta()">
                 <option value="cash">Cash</option>
-                <option value="credit">Credit (Party Customers only)</option>
+                <option value="credit">Credit (Party Customer / SH Kasur)</option>
               </select>
               <small id="invoicePaymentHint" style="color:#777;font-size:0.72rem">Star Chicken branches are cash-only.</small>
             </div>
@@ -2697,6 +2700,7 @@ body.sc-price-staff #discount{pointer-events:none;background:#f0f0f5}
       <div class="party-seg" id="dashPartySeg">
         <button type="button" data-mode="star" class="on" onclick="setPartyFilter('dash','star')">⭐ Star Chicken</button>
         <button type="button" data-mode="party" class="party" onclick="setPartyFilter('dash','party')">👥 Party Customer</button>
+        <button type="button" data-mode="shkasur" class="shkasur" onclick="setPartyFilter('dash','shkasur')">🏬 SH Kasur</button>
         <button type="button" data-mode="all" class="all" onclick="setPartyFilter('dash','all')">🔗 All</button>
         <button type="button" data-mode="salesman" onclick="setPartyFilter('dash','salesman')">👤 Salesman</button>
       </div>
@@ -3600,11 +3604,11 @@ const PARTY_CUSTOMERS = [
    Only records bearing this exact marker are included as added party customers. */
 const SC_PARTY_CUSTOMER_MARKER = 'Star Chicken POS Party Customer';
 function allPartyCustomerNames() {
-  const names = PARTY_CUSTOMERS.slice();
+  const names = PARTY_CUSTOMERS.filter(n => n.trim().toLowerCase()!=='sh kasur');
   const known = new Set(names.map(n => n.trim().toLocaleLowerCase('en')));
   const extra = (typeof loadCustomers === 'function' ? loadCustomers() : [])
     .filter(c => String(c.remarks || '').trim() === SC_PARTY_CUSTOMER_MARKER)
-    .map(c => String(c.name || '').trim()).filter(Boolean)
+    .map(c => String(c.name || '').trim()).filter(n=>n && n.toLowerCase()!=='sh kasur')
     .sort((a,b) => a.localeCompare(b));
   for (const name of extra) {
     const key = name.toLocaleLowerCase('en');
@@ -3638,8 +3642,8 @@ async function saveNewPartyCustomer() {
   const phone = String(document.getElementById('newPartyCustomerPhone')?.value || '').trim();
   if (!name || name.length > 100) { toast('Enter a party name (up to 100 characters)', 'error'); return; }
   const normalized = name.toLocaleLowerCase('en');
-  if (STAR_BRANCHES.some(n => n.toLocaleLowerCase('en')===normalized)) {
-    toast('This name belongs to a Star Chicken branch', 'error'); return;
+  if (normalized==='sh kasur' || STAR_BRANCHES.some(n => n.toLocaleLowerCase('en')===normalized)) {
+    toast('This name is reserved for a Star Chicken branch or SH Kasur', 'error'); return;
   }
   const btn = document.getElementById('saveNewPartyCustomerBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
@@ -3715,13 +3719,16 @@ async function scLoadDashboardSalespeople(force=false) {
     if(status)status.textContent=e.message||'Could not load salesperson report';
   } finally {scDashStaffBusy=false;if(partyFilters.dash==='salesman')renderDashboard();}
 }
-/** Per-screen party filter: 'star' | 'party' | 'all' | 'salesman' (dashboard only) */
+/** Per-screen party filter: 'star' | 'party' | 'shkasur' | 'all' | 'salesman' (dashboard only) */
 const partyFilters = { dash: 'star', ps: 'star', sale: 'star', ai: 'star', hist: 'all' };
 
 function getInvoicePartyType(inv) {
   if (!inv) return 'star';
-  if (inv.partyType === 'party' || inv.partyType === 'star') return inv.partyType;
   const name = (inv.shopName || '').trim();
+  // The invoices table stores shop_name but not partyType. The unique SH Kasur
+  // account name therefore identifies saved/reloaded SH Kasur invoices reliably.
+  if (name.toLowerCase() === 'sh kasur') return 'shkasur';
+  if (inv.partyType === 'party' || inv.partyType === 'star') return inv.partyType;
   if (allPartyCustomerNames().some(p => p.toLowerCase() === name.toLowerCase())) return 'party';
   return 'star';
 }
@@ -3735,8 +3742,9 @@ function filterByPartyMode(list, mode) {
 }
 function namesForMode(mode) {
   if (mode === 'party') return allPartyCustomerNames();
+  if (mode === 'shkasur') return ['SH Kasur'];
   if (mode === 'star') return STAR_BRANCHES.slice();
-  return STAR_BRANCHES.concat(allPartyCustomerNames());
+  return STAR_BRANCHES.concat(allPartyCustomerNames(), ['SH Kasur']);
 }
 function fillSelectOptions(sel, names, blankLabel, multi) {
   if (!sel) return;
@@ -3769,7 +3777,7 @@ function fillSelectOptions(sel, names, blankLabel, multi) {
 }
 function onPartyTypeChange() {
   const type = (document.getElementById('partyType') && document.getElementById('partyType').value) || 'star';
-  const names = type === 'party' ? allPartyCustomerNames() : STAR_BRANCHES;
+  const names = type === 'party' ? allPartyCustomerNames() : type === 'shkasur' ? ['SH Kasur'] : STAR_BRANCHES;
   fillSelectOptions(document.getElementById('shopName'), names, '— Select Party —', false);
   const addBtn = document.getElementById('addPartyCustomerBtn');
   if (addBtn) addBtn.style.display = type === 'party' ? 'inline-flex' : 'none';
@@ -3782,10 +3790,11 @@ function onInvoicePaymentTypeChange() {
   const sel=document.getElementById('invoicePaymentType');
   if(!sel)return;
   const credit=sel.querySelector('option[value="credit"]');
-  if(credit) credit.disabled=type!=='party';
-  if(type!=='party')sel.value='cash';
+  const flexible = type==='party' || type==='shkasur';
+  if(credit) credit.disabled=!flexible;
+  if(!flexible)sel.value='cash';
   const hint=document.getElementById('invoicePaymentHint');
-  if(hint)hint.textContent=type==='party' ? 'Choose Cash or Credit for this invoice. Unpaid credit enters the shared ledger.' : 'Star Chicken branches are cash-only.';
+  if(hint)hint.textContent=flexible ? 'Cash or Credit available. Unpaid credit enters the shared ledger.' : 'Star Chicken branches are cash-only.';
   const amt=document.getElementById('amountPaid');
   if(amt && !currentId) {
     const sub=items.reduce((sum,it)=>sum+(Number(it.amount)||0),0);
@@ -4548,7 +4557,7 @@ async function saveInvoice() {
   if(!currentId) {
     const payType=document.getElementById('invoicePaymentType')?.value || 'cash';
     const type=document.getElementById('partyType')?.value || 'star';
-    if(payType==='credit' && type!=='party') {toast('Credit is only for Party Customers','error');return;}
+    if(payType==='credit' && !['party','shkasur'].includes(type)) {toast('Credit is only for Party Customers and SH Kasur','error');return;}
     if(payType==='credit' && !cloudOnline) {toast('Internet connection required for credit invoices. Nothing saved.','error');return;}
     const grand=Math.max(0,items.reduce((s,it)=>s+(Number(it.amount)||0),0)-(Number(document.getElementById('discount').value)||0));
     const paid=Number(document.getElementById('amountPaid').value)||0;
@@ -4572,7 +4581,7 @@ async function saveInvoice() {
     for(const it of items){
       const p=scPriceFor(it.name);
       if(!p){toast('Product missing or archived: '+it.name,'error');return;}
-      if(scPriceData?.enforced && document.getElementById('partyType')?.value!=='party'){
+      if(scPriceData?.enforced && !scIsPartyPricing()){
         if(p.rate==null){toast('Price missing for '+it.name,'error');return;}
         if(Math.abs(Number(it.rate)-p.rate)>0.005){toast('Price changed for '+it.name+'. Remove and re-add the item using the current rate.','error');return;}
       }
@@ -5177,7 +5186,7 @@ async function scFetchPrices(){
  const day=document.getElementById('scBaseDay');if(day)day.value=d.rateDate;
  scRenderPriceRows();scApplyPriceFormMode();scApplySelectedRate();return d;
 }
-function scIsPartyPricing(){return document.getElementById('partyType')?.value==='party';}
+function scIsPartyPricing(){return ['party','shkasur'].includes(document.getElementById('partyType')?.value);}
 function scApplyPriceFormMode(){
  const priceLocked=!!scPriceData?.enforced && !scIsPartyPricing();
  const weight=document.getElementById('weight'),rate=document.getElementById('rate');
@@ -5448,7 +5457,7 @@ function render() {
       <td class="no-print">${(!currentId || currentRole==='admin') ? `<input type="number" min="0.001" step="any" inputmode="decimal" value="${Number(it.qty)||1}" onchange="scChangeInvoiceRowQty(${i},this)" aria-label="Quantity for ${esc(it.name)}" title="Change packet quantity" class="sc-inline-qty-input">` : esc(String(it.qty ?? '—'))}</td>
       <td class="print-show">${it.qty || '—'}</td>
       <td class="col-weight">${(!currentId || currentRole==='admin') ? `<input type="number" min="0.001" step="any" inputmode="decimal" value="${Number(it.weight)||''}" onchange="scChangeInvoiceRowWeight(${i},this)" aria-label="Actual weight in KG for ${esc(it.name)}" title="Enter actual weight in KG" class="sc-inline-qty-input no-print">` : `<span class="no-print">${it.weight ? Number(it.weight).toFixed(3) : '—'}</span>`}<span class="print-show">${it.weight ? Number(it.weight).toFixed(3) : '—'}</span></td>
-      <td>${scIsPartyPricing() && (!currentId || currentRole==='admin') ? `<input type="number" min="0.01" step="0.01" inputmode="decimal" value="${Number(it.rate)||''}" onchange="scChangeInvoiceRowRate(${i},this)" aria-label="Rate for ${esc(it.name)}" title="Party Customer selling rate" class="sc-inline-qty-input no-print"><span class="print-show">${fmt(it.rate)}</span>` : fmt(it.rate)}</td>
+      <td>${scIsPartyPricing() && (!currentId || currentRole==='admin') ? `<input type="number" min="0.01" step="0.01" inputmode="decimal" value="${Number(it.rate)||''}" onchange="scChangeInvoiceRowRate(${i},this)" aria-label="Rate for ${esc(it.name)}" title="Party Customer / SH Kasur selling rate" class="sc-inline-qty-input no-print"><span class="print-show">${fmt(it.rate)}</span>` : fmt(it.rate)}</td>
       <td class="col-amt">${fmt(it.amount)}</td>
       <td class="no-print"><div class="row-actions">
         <button class="btn btn-edit" onclick="editItem(${i})" title="Edit product">✎</button>
@@ -6292,8 +6301,7 @@ function renderDashboardCategory() {
       '<span class="dash-cat-leg-name" style="color:' + color + '">' + esc(r.name) + '</span>' +
       '<span class="dash-cat-leg-pct" style="color:' + color + '">' + pct + '%</span>' +
       '<span class="dash-cat-leg-amt" style="color:' + color + '">' + fmtD(r.amount) + '</span>' +
-      '<div class="sc-cat-averages">Avg Rs/kg: <b>' + (r.weight > 0 ? (r.amount/r.weight).toLocaleString('en-PK',{maximumFractionDigits:2}) : '—') +
-      '</b> · Avg Qty/invoice: <b>' + (r.invoices > 0 ? (r.qty/r.invoices).toLocaleString('en-PK',{maximumFractionDigits:2}) : '—') + '</b></div></div>';
+      '<div class="sc-cat-averages">Avg selling price: <b>' + (r.weight > 0 ? 'Rs ' + (r.amount/r.weight).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2}) + '/kg' : '—') + '</b></div></div>';
   }).join('');
 
   const centerLabel = (!fromStr && !toStr) ? 'All Dates' : 'Selected';
@@ -6514,7 +6522,7 @@ function renderDashTopTiles(){
   const fmt=n=>'Rs '+Math.round(n).toLocaleString('en-PK');
   const total=ranked.reduce((s,x)=>s+x.amount,0);
   const note=document.getElementById('dashTopTilesNote');
-  if(note)note.textContent=dashFmtDateNote(filtered.fromStr,filtered.toStr,'All dates')+' · '+(partyFilters.dash==='all'?'All parties':partyFilters.dash==='star'?'Star Chicken':partyFilters.dash==='salesman'?'Selected salesperson':'Party customers');
+  if(note)note.textContent=dashFmtDateNote(filtered.fromStr,filtered.toStr,'All dates')+' · '+(partyFilters.dash==='all'?'All parties':partyFilters.dash==='star'?'Star Chicken':partyFilters.dash==='salesman'?'Selected salesperson':partyFilters.dash==='shkasur'?'SH Kasur':'Party customers');
   const pill=document.getElementById('dashTopTilesTotal');
   if(pill)pill.textContent=fmt(total);
   if(!ranked.length){el.innerHTML='<div class="sc-treemap-empty">No product sales for this date range</div>';return;}

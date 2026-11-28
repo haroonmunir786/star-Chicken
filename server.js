@@ -517,8 +517,12 @@ async function scEnforceNewInvoicePrices(client,inv,identity){
   // A Star Chicken branch cannot bypass the approved prices by changing partyType in the browser.
   const starBranches=['Hatchery','Kasur','Gajjumatta','Gajjumata','Mustafabad','Gulshan Ravi','Murghzar','Link Road'];
   const isStarBranch=starBranches.some(x=>x.toLowerCase()===String(inv.shopName||'').trim().toLowerCase());
-  if(inv.partyType==='party' && isStarBranch)throw new Error('Star Chicken branches must use the approved Price List');
-  if(inv.partyType==='party'){
+  const isSHKasur=String(inv.shopName||'').trim().toLowerCase()==='sh kasur';
+  const flexible=['party','shkasur'].includes(inv.partyType);
+  if(flexible && isStarBranch)throw new Error('Star Chicken branches must use the approved Price List');
+  if(inv.partyType==='shkasur' && !isSHKasur)throw new Error('SH Kasur invoices must select the SH Kasur account');
+  if(isSHKasur && inv.partyType!=='shkasur')throw new Error('Select SH Kasur as the invoice Party Type');
+  if(flexible){
     if(inv.items.length>150)throw new Error('Too many invoice products');
     const repriced=[];let subtotal=0;
     for(const x of inv.items){
@@ -1319,7 +1323,7 @@ app.post('/api/invoices', auth, async (req, res) => {
       try { await scEnforceNewInvoicePrices(client,inv,readRoleIdentity(req)||{}); }
       catch(priceError){await client.query('rollback');return res.status(400).json({error:priceError.message});}
       if(!['cash','credit'].includes(inv.paymentType)) {await client.query('rollback');return res.status(400).json({error:'Choose Cash or Credit'});}
-      if(inv.paymentType==='credit' && inv.partyType!=='party') {await client.query('rollback');return res.status(400).json({error:'Credit only allowed for Party Customers'});}
+      if(inv.paymentType==='credit' && !['party','shkasur'].includes(inv.partyType)) {await client.query('rollback');return res.status(400).json({error:'Credit only allowed for Party Customers and SH Kasur'});}
       if(!Number.isFinite(inv.grandTotal)||inv.grandTotal<0||inv.amountPaid<0||inv.amountPaid>inv.grandTotal+0.005){await client.query('rollback');return res.status(400).json({error:'Invalid amount paid'});}
       // Explicit new invoices with a category must follow full cash settlement.
       if(inv.partyType && inv.paymentType==='cash' && Math.abs(inv.grandTotal-inv.amountPaid)>0.005){await client.query('rollback');return res.status(400).json({error:'Cash invoices must be fully paid'});}
