@@ -520,7 +520,21 @@ async function scEnforceNewInvoicePrices(client,inv,identity){
   const isSHKasur=String(inv.shopName||'').trim().toLowerCase()==='sh kasur';
   const flexible=['party','shkasur'].includes(inv.partyType);
   if(flexible && isStarBranch)throw new Error('Star Chicken branches must use the approved Price List');
-  if(inv.partyType==='shkasur' && !isSHKasur)throw new Error('SH Kasur invoices must select the SH Kasur account');
+  // SH Kasur customers are saved in the existing customers table with a distinct marker.
+  // Verify it server-side: a browser cannot relabel a Star Chicken branch or
+  // a normal Party Customer as an SH Kasur customer to bypass the price policy.
+  let isSHCustomer=isSHKasur;
+  if (['party','shkasur'].includes(inv.partyType) && !isSHKasur) {
+    const result=await client.query(`select remarks from public.customers
+      where lower(trim(name))=lower(trim($1)) and remarks in ($2,$3) limit 2`,
+      [inv.shopName,'Star Chicken POS SH Kasur Customer','Star Chicken POS Party Customer']);
+    const kinds=result.rows.map(r=>String(r.remarks||'').trim());
+    if(kinds.includes('Star Chicken POS SH Kasur Customer'))isSHCustomer=true;
+    if(inv.partyType==='shkasur' && !isSHCustomer)throw new Error('Select an approved SH Kasur customer');
+    if(inv.partyType==='party' && isSHCustomer)throw new Error('Select SH Kasur Party Type for this customer');
+    if(inv.partyType==='shkasur' && kinds.includes('Star Chicken POS Party Customer'))throw new Error('This account belongs to Party Customers');
+  }
+  if(inv.partyType==='shkasur' && !isSHCustomer)throw new Error('SH Kasur invoices must select an SH Kasur customer');
   if(isSHKasur && inv.partyType!=='shkasur')throw new Error('Select SH Kasur as the invoice Party Type');
   if(flexible){
     if(inv.items.length>150)throw new Error('Too many invoice products');

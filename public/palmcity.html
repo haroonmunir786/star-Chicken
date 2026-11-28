@@ -3603,12 +3603,26 @@ const PARTY_CUSTOMERS = [
 /* New parties use the existing Supabase customer records; no new database table.
    Only records bearing this exact marker are included as added party customers. */
 const SC_PARTY_CUSTOMER_MARKER = 'Star Chicken POS Party Customer';
+const SC_SH_CUSTOMER_MARKER = 'Star Chicken POS SH Kasur Customer';
 function allPartyCustomerNames() {
   const names = PARTY_CUSTOMERS.filter(n => n.trim().toLowerCase()!=='sh kasur');
   const known = new Set(names.map(n => n.trim().toLocaleLowerCase('en')));
   const extra = (typeof loadCustomers === 'function' ? loadCustomers() : [])
     .filter(c => String(c.remarks || '').trim() === SC_PARTY_CUSTOMER_MARKER)
     .map(c => String(c.name || '').trim()).filter(n=>n && n.toLowerCase()!=='sh kasur')
+    .sort((a,b) => a.localeCompare(b));
+  for (const name of extra) {
+    const key = name.toLocaleLowerCase('en');
+    if (!known.has(key)) { names.push(name); known.add(key); }
+  }
+  return names;
+}
+function allSHCustomerNames() {
+  const names = ['SH Kasur'];
+  const known = new Set(names.map(n => n.toLocaleLowerCase('en')));
+  const extra = (typeof loadCustomers === 'function' ? loadCustomers() : [])
+    .filter(c => String(c.remarks || '').trim() === SC_SH_CUSTOMER_MARKER)
+    .map(c => String(c.name || '').trim()).filter(Boolean)
     .sort((a,b) => a.localeCompare(b));
   for (const name of extra) {
     const key = name.toLocaleLowerCase('en');
@@ -3626,7 +3640,15 @@ function refreshPartyCustomerOptions() {
   }
 }
 function openAddPartyCustomerDialog() {
-  if (document.getElementById('partyType')?.value !== 'party') return;
+  const mode=document.getElementById('partyType')?.value;
+  if (!['party','shkasur'].includes(mode)) return;
+  const isSH=mode==='shkasur';
+  const title=document.getElementById('addPartyCustomerTitle');
+  if(title) title.textContent=isSH?'＋ Add SH Customer':'＋ Add Party Customer';
+  const hint=document.querySelector('#addPartyCustomerDialog .party-dialog-hint');
+  if(hint) hint.textContent=isSH?'Add a customer to the SH Kasur list for all salespersons.':'Add a party to the shared dropdown for all Star Chicken users.';
+  const nameLabel=document.querySelector('label[for="newPartyCustomerName"]');
+  if(nameLabel)nameLabel.textContent=isSH?'SH Customer Name *':'Party Customer Name *';
   const dlg = document.getElementById('addPartyCustomerDialog');
   if (!dlg) return;
   document.getElementById('addPartyCustomerForm')?.reset();
@@ -3638,9 +3660,12 @@ function closeAddPartyCustomerDialog() {
   if (dlg?.open) dlg.close();
 }
 async function saveNewPartyCustomer() {
+  const mode=document.getElementById('partyType')?.value;
+  if(!['party','shkasur'].includes(mode))return;
+  const isSH=mode==='shkasur';
   const name = String(document.getElementById('newPartyCustomerName')?.value || '').replace(/\s+/g,' ').trim();
   const phone = String(document.getElementById('newPartyCustomerPhone')?.value || '').trim();
-  if (!name || name.length > 100) { toast('Enter a party name (up to 100 characters)', 'error'); return; }
+  if (!name || name.length > 100) { toast('Enter a customer name (up to 100 characters)', 'error'); return; }
   const normalized = name.toLocaleLowerCase('en');
   if (normalized==='sh kasur' || STAR_BRANCHES.some(n => n.toLocaleLowerCase('en')===normalized)) {
     toast('This name is reserved for a Star Chicken branch or SH Kasur', 'error'); return;
@@ -3648,35 +3673,39 @@ async function saveNewPartyCustomer() {
   const btn = document.getElementById('saveNewPartyCustomerBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
   try {
-    // Refresh before checking to avoid duplicates created from another phone.
+    // Keep SH and Party Customer lists separate, including on other devices.
     await refreshCustomersFromServer();
-    const found = allPartyCustomerNames().find(n => n.toLocaleLowerCase('en') === normalized);
+    const otherNames=isSH?allPartyCustomerNames():allSHCustomerNames();
+    if(otherNames.some(n=>n.toLocaleLowerCase('en')===normalized)) {
+      throw new Error('This customer name already belongs to the other customer type. Choose a different name.');
+    }
+    const ownNames=isSH?allSHCustomerNames():allPartyCustomerNames();
+    const found=ownNames.find(n=>n.toLocaleLowerCase('en')===normalized);
     if (found) {
       refreshPartyCustomerOptions();
-      document.getElementById('shopName').value = found;
-      markDirty(); updatePrintMeta(); closeAddPartyCustomerDialog();
-      toast('Party already exists — selected from the list', 'success');
+      document.getElementById('shopName').value=found;
+      markDirty();updatePrintMeta();closeAddPartyCustomerDialog();
+      toast('Customer already exists — selected from the list','success');
       return;
     }
-    const body = {id:uidCust(),name,phone,address:'',remarks:SC_PARTY_CUSTOMER_MARKER};
-    const r = await fetch('/api/customers', {
+    const body={id:uidCust(),name,phone,address:'',remarks:isSH?SC_SH_CUSTOMER_MARKER:SC_PARTY_CUSTOMER_MARKER};
+    const r=await fetch('/api/customers', {
       method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
     });
-    const result = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(result.error || 'Unable to save party customer');
+    const result=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(result.error||'Unable to save customer');
     await refreshCustomersFromServer();
-    refreshPartyCustomerOptions();
-    const partyType = document.getElementById('partyType');
-    if (partyType) partyType.value = 'party';
+    const partyType=document.getElementById('partyType');
+    if(partyType)partyType.value=mode;
     onPartyTypeChange();
-    document.getElementById('shopName').value = name;
-    markDirty(); updatePrintMeta(); closeAddPartyCustomerDialog();
-    toast('Party customer added and selected', 'success');
-  } catch(e) {
-    console.error('Add party customer failed:',e);
-    toast(e.message || 'Could not save party customer', 'error');
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Save & Select Party'; }
+    document.getElementById('shopName').value=name;
+    markDirty();updatePrintMeta();closeAddPartyCustomerDialog();
+    toast((isSH?'SH':'Party')+' customer added and selected','success');
+  }catch(e){
+    console.error('Add customer failed:',e);
+    toast(e.message||'Could not save customer','error');
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='Save & Select Customer';}
   }
 }
 
@@ -3728,6 +3757,8 @@ function getInvoicePartyType(inv) {
   // The invoices table stores shop_name but not partyType. The unique SH Kasur
   // account name therefore identifies saved/reloaded SH Kasur invoices reliably.
   if (name.toLowerCase() === 'sh kasur') return 'shkasur';
+  if (inv.partyType === 'shkasur') return 'shkasur';
+  if (allSHCustomerNames().some(p => p.toLowerCase() === name.toLowerCase())) return 'shkasur';
   if (inv.partyType === 'party' || inv.partyType === 'star') return inv.partyType;
   if (allPartyCustomerNames().some(p => p.toLowerCase() === name.toLowerCase())) return 'party';
   return 'star';
@@ -3742,9 +3773,9 @@ function filterByPartyMode(list, mode) {
 }
 function namesForMode(mode) {
   if (mode === 'party') return allPartyCustomerNames();
-  if (mode === 'shkasur') return ['SH Kasur'];
+  if (mode === 'shkasur') return allSHCustomerNames();
   if (mode === 'star') return STAR_BRANCHES.slice();
-  return STAR_BRANCHES.concat(allPartyCustomerNames(), ['SH Kasur']);
+  return STAR_BRANCHES.concat(allPartyCustomerNames(), allSHCustomerNames());
 }
 function fillSelectOptions(sel, names, blankLabel, multi) {
   if (!sel) return;
@@ -3777,10 +3808,10 @@ function fillSelectOptions(sel, names, blankLabel, multi) {
 }
 function onPartyTypeChange() {
   const type = (document.getElementById('partyType') && document.getElementById('partyType').value) || 'star';
-  const names = type === 'party' ? allPartyCustomerNames() : type === 'shkasur' ? ['SH Kasur'] : STAR_BRANCHES;
+  const names = type === 'party' ? allPartyCustomerNames() : type === 'shkasur' ? allSHCustomerNames() : STAR_BRANCHES;
   fillSelectOptions(document.getElementById('shopName'), names, '— Select Party —', false);
   const addBtn = document.getElementById('addPartyCustomerBtn');
-  if (addBtn) addBtn.style.display = type === 'party' ? 'inline-flex' : 'none';
+  if (addBtn) {addBtn.style.display = ['party','shkasur'].includes(type) ? 'inline-flex' : 'none'; addBtn.textContent=type==='shkasur'?'＋ Add New SH Customer':'＋ Add New Party Customer';}
   onInvoicePaymentTypeChange();
   // Switching customer types on a NEW invoice immediately applies the correct rate policy.
   if(typeof scApplyCustomerPriceMode==='function')scApplyCustomerPriceMode(true);
