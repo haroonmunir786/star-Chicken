@@ -1104,6 +1104,32 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
   #productSaleOverlay .ps-report-table-wrap .ps-table tbody tr:nth-child(even) td:nth-child(2) { background: #fafafa; }
 }
 
+
+/* Product Sale: align modal with Admin workspace, never underneath the fixed sidebar. */
+@media screen and (min-width:801px) {
+  body.admin-workspace #productSaleOverlay {
+    left:300px; right:0; top:0; bottom:0;
+    width:auto; height:100dvh; padding:14px 18px;
+    z-index:2600; /* higher than backdrop but entirely to right of menu */
+    align-items:center; justify-content:center;
+  }
+  body.admin-workspace #productSaleOverlay .ps-report-modal {
+    width:min(1080px, 100%); max-width:100%;
+    max-height:calc(100dvh - 28px);
+    margin:0 auto;
+  }
+}
+/* Five dashboard-style filters also fit on small phones. */
+#productSaleOverlay #psPartySeg {display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+#productSaleOverlay #psPartySeg button {min-width:0;padding:10px 4px;white-space:normal;line-height:1.2}
+#psSalesmanPanel[hidden]{display:none!important}
+@media(max-width:760px){
+  #productSaleOverlay #psPartySeg {grid-template-columns:repeat(3,minmax(0,1fr))}
+  #productSaleOverlay #psPartySeg button {font-size:.72rem;padding:9px 3px}
+  #productSaleOverlay #psSalesmanPanel {gap:6px}
+  #productSaleOverlay #psSalesmanPanel select {min-width:0;width:100%}
+}
+
 /* ─── Action Sheet (Share / Import / Print) ─── */
 .action-sheet-overlay {
   display: none; position: fixed; inset: 0; z-index: 300;
@@ -3014,7 +3040,14 @@ body.sc-price-staff #discount{pointer-events:none;background:#f0f0f5}
       <div class="party-seg" id="psPartySeg">
         <button type="button" data-mode="star" class="on" onclick="setPartyFilter('ps','star')">⭐ Star Chicken</button>
         <button type="button" data-mode="party" class="party" onclick="setPartyFilter('ps','party')">👥 Party Customer</button>
+        <button type="button" data-mode="shkasur" class="shkasur" onclick="setPartyFilter('ps','shkasur')">🏬 SH Kasur</button>
         <button type="button" data-mode="all" class="all" onclick="setPartyFilter('ps','all')">🔗 All</button>
+        <button type="button" data-mode="salesman" onclick="setPartyFilter('ps','salesman')">👤 Salesman</button>
+      </div>
+      <div id="psSalesmanPanel" hidden style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 12px;padding:10px;border:1px solid #f1dab1;border-radius:10px;background:#fff9eb">
+        <label for="psSalesman" style="font-weight:700;font-size:.82rem">Salesperson</label>
+        <select id="psSalesman" onchange="calcProductSale()" style="min-height:38px;min-width:195px;max-width:100%;border:1px solid #e3d1ae;border-radius:8px;padding:6px 12px"><option value="">Select salesperson…</option></select>
+        <span id="psSalesmanStatus" style="font-size:.74rem;color:#777">Choose a salesperson to view their product sales.</span>
       </div>
       <div class="ps-date-row">
         <label for="psFrom">From</label>
@@ -3774,17 +3807,24 @@ async function scLoadDashboardSalespeople(force=false) {
       if(row.creatorId && row.creatorId.startsWith('S') && !people.has(row.creatorId))people.set(row.creatorId,(row.creatorName||row.creatorId)+' ('+row.creatorId+')');
     }
     scDashStaffCreators=next;
-    const select=document.getElementById('scDashSalesman'),chosen=select?.value||'';
-    if(select){select.replaceChildren(new Option('Select salesperson…',''));
-      for(const [id,label] of [...people].sort((a,b)=>a[1].localeCompare(b[1])))select.add(new Option(label,id));
-      select.value=people.has(chosen)?chosen:'';
+    for (const id of ['scDashSalesman','psSalesman']) {
+      const select=document.getElementById(id), chosen=select?.value||'';
+      if(select){select.replaceChildren(new Option('Select salesperson…',''));
+        for(const [staffId,label] of [...people].sort((a,b)=>a[1].localeCompare(b[1]))) select.add(new Option(label,staffId));
+        select.value=people.has(chosen)?chosen:'';
+      }
     }
     scDashStaffLoaded=true;
-    if(status)status.textContent='Sales are attributed to the original logged-in salesperson. Older untracked invoices are excluded.';
+    for (const id of ['scDashSalesmanStatus','psSalesmanStatus']) {
+      const el=document.getElementById(id);
+      if(el)el.textContent='Sales are attributed to the original logged-in salesperson. Older untracked invoices are excluded.';
+    }
   } catch(e) {
     scDashStaffLoaded=false;
     if(status)status.textContent=e.message||'Could not load salesperson report';
-  } finally {scDashStaffBusy=false;if(partyFilters.dash==='salesman')renderDashboard();}
+    const psStatus=document.getElementById('psSalesmanStatus');
+    if(psStatus)psStatus.textContent=e.message||'Could not load salesperson report';
+  } finally {scDashStaffBusy=false;if(partyFilters.dash==='salesman')renderDashboard();if(partyFilters.ps==='salesman')calcProductSale();}
 }
 /** Per-screen party filter: 'star' | 'party' | 'shkasur' | 'all' | 'salesman' (dashboard only) */
 const partyFilters = { dash: 'star', ps: 'star', sale: 'star', ai: 'star', hist: 'all' };
@@ -3884,7 +3924,12 @@ function setPartyFilter(screen, mode) {
     });
   }
   // Refill party dropdowns for that screen
-  if (screen === 'ps') fillSelectOptions(document.getElementById('psShop'), namesForMode(mode), 'All Parties', false);
+  if (screen === 'ps') {
+    const panel=document.getElementById('psSalesmanPanel');
+    if(panel)panel.hidden=mode!=='salesman';
+    if(mode==='salesman')scLoadDashboardSalespeople();
+    fillSelectOptions(document.getElementById('psShop'), namesForMode(mode), 'All Parties', false);
+  }
   if (screen === 'sale') fillSelectOptions(document.getElementById('saleShop'), namesForMode(mode), 'All Parties', false);
   if (screen === 'ai') fillSelectOptions(document.getElementById('aiShop'), namesForMode(mode), null, true);
   if (screen === 'dash') {
@@ -8135,7 +8180,12 @@ function calcProductSale(){
   if(!from||!to){setPsToday();return calcProductSale();}
   const shopFilter=document.getElementById('psShop')?.value||'';
   const map={};
-  const list=filterByPartyMode((typeof allHistory!=='undefined'&&allHistory)?allHistory:[],partyFilters.ps||'all');
+  const psMode=partyFilters.ps||'all';
+  const raw=(typeof allHistory!=='undefined'&&allHistory)?allHistory:[];
+  const list=psMode==='salesman'
+    ? (()=>{ const id=document.getElementById('psSalesman')?.value||'';
+        return id&&scDashStaffLoaded ? raw.filter(inv=>scDashStaffCreators.get(String(inv.id))===id) : []; })()
+    : filterByPartyMode(raw,psMode);
   list.forEach(inv=>{
     if(shopFilter&&(inv.shopName||'').trim()!==shopFilter)return;
     const d=parseInvDate(inv);if(!d)return;
