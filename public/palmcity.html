@@ -2191,6 +2191,27 @@ body.sc-price-staff #discount{pointer-events:none;background:#f0f0f5}
   .dash-kpis-modern .dash-kpi-m,.dash-kpis-modern .dash-kpi-m .dkm-val {transition:none!important;transform:none!important}
 }
 </style>
+<style>
+/* Five consistent business filters in Product Sale, Total Sale, Report and All Invoices. */
+#salesOverlay .party-seg,#allInvOverlay .party-seg,#historyOverlay .party-seg {display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;min-width:0;margin-bottom:12px}
+#salesOverlay .party-seg button,#allInvOverlay .party-seg button,#historyOverlay .party-seg button {min-width:0!important;padding:7px 4px!important;white-space:normal!important;line-height:1.18;font-size:.76rem!important;min-height:38px;height:auto!important}
+.sc-report-salesman-panel[hidden]{display:none!important}
+.sc-report-salesman-panel {display:flex;align-items:center;flex-wrap:wrap;gap:9px;padding:9px 11px;margin:0 0 12px;background:#fff9ed;border:1px solid #efd8b1;border-radius:9px}
+.sc-report-salesman-panel label {font-size:.8rem;font-weight:700;white-space:nowrap}
+.sc-report-salesman-panel select {min-height:37px;min-width:165px;max-width:100%;border:1px solid #dfcba9;border-radius:8px;padding:5px 9px;background:white}
+.sc-report-staff-status {color:#796c5e;font-size:.73rem;flex:1 1 175px}
+/* Compact saved-invoice header: five category buttons above date and search controls. */
+#historyOverlay .sc-invoice-filter-top {flex-wrap:wrap!important}
+#historyOverlay .sc-invoice-filter-top .party-seg {flex:1 1 100%;width:100%;margin:0}
+#historyOverlay .sc-invoice-date-buttons {margin-left:auto}
+#historyOverlay .sc-invoice-filter-top .sc-report-salesman-panel {flex:1 1 100%;width:100%;margin:0}
+@media(max-width:700px){
+ #salesOverlay .party-seg,#allInvOverlay .party-seg,#historyOverlay .party-seg {grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}
+ #salesOverlay .party-seg button,#allInvOverlay .party-seg button,#historyOverlay .party-seg button {font-size:.70rem!important;padding:7px 3px!important}
+ .sc-report-salesman-panel select {flex:1 1 100%;width:100%}
+ #historyOverlay .sc-invoice-date-buttons{flex:0 0 auto}
+}
+</style>
 </head>
 <body>
 
@@ -2468,10 +2489,18 @@ body.sc-price-staff #discount{pointer-events:none;background:#f0f0f5}
       <!-- First line: category and date controls -->
       <div class="sc-invoice-filter-line sc-invoice-filter-top">
         <div class="party-seg" id="histPartySeg">
-          <button type="button" data-mode="star" onclick="setPartyFilter('hist','star')">⭐ Star</button>
-          <button type="button" data-mode="party" class="party" onclick="setPartyFilter('hist','party')">👥 Party</button>
-          <button type="button" data-mode="all" class="all on" onclick="setPartyFilter('hist','all')">🔗 All</button>
+        <button type="button" data-mode="star" class="on" onclick="setPartyFilter('hist','star')">⭐ Star Chicken</button>
+        <button type="button" data-mode="party" class="party" onclick="setPartyFilter('hist','party')">👥 Party Customer</button>
+        <button type="button" data-mode="shkasur" class="shkasur" onclick="setPartyFilter('hist','shkasur')">🏬 SH Kasur</button>
+        <button type="button" data-mode="all" class="all" onclick="setPartyFilter('hist','all')">🔗 All</button>
+        <button type="button" data-mode="salesman" onclick="setPartyFilter('hist','salesman')">👤 Salesman</button>
+      
         </div>
+      <div class="sc-report-salesman-panel" id="histSalesmanPanel" hidden>
+        <label for="histSalesman">Salesperson</label>
+        <select id="histSalesman" onchange="renderHistory()"><option value="">Select salesperson…</option></select>
+        <span class="sc-report-staff-status" id="histSalesmanStatus">Select a salesperson to filter invoices.</span>
+      </div>
         <div class="sc-invoice-date-buttons">
           <button type="button" class="btn btn-ghost btn-xs" id="histBtnToday" onclick="setHistoryDateToday()" title="Today only">Today</button>
           <button type="button" class="btn btn-ghost btn-xs" id="histBtnAll" onclick="clearHistoryDate()" title="Show all dates">All Dates</button>
@@ -3111,7 +3140,15 @@ body.sc-price-staff #discount{pointer-events:none;background:#f0f0f5}
       <div class="party-seg" id="salePartySeg">
         <button type="button" data-mode="star" class="on" onclick="setPartyFilter('sale','star')">⭐ Star Chicken</button>
         <button type="button" data-mode="party" class="party" onclick="setPartyFilter('sale','party')">👥 Party Customer</button>
+        <button type="button" data-mode="shkasur" class="shkasur" onclick="setPartyFilter('sale','shkasur')">🏬 SH Kasur</button>
         <button type="button" data-mode="all" class="all" onclick="setPartyFilter('sale','all')">🔗 All</button>
+        <button type="button" data-mode="salesman" onclick="setPartyFilter('sale','salesman')">👤 Salesman</button>
+      
+      </div>
+      <div class="sc-report-salesman-panel" id="saleSalesmanPanel" hidden>
+        <label for="saleSalesman">Salesperson</label>
+        <select id="saleSalesman" onchange="calcPeriodSales();calcCustomSale()"><option value="">Select salesperson…</option></select>
+        <span class="sc-report-staff-status" id="saleSalesmanStatus">Select a salesperson to filter invoices.</span>
       </div>
       <div class="ps-date-row" style="margin-bottom:14px;">
         <label for="saleShop">Party</label>
@@ -3169,7 +3206,15 @@ body.sc-price-staff #discount{pointer-events:none;background:#f0f0f5}
       <div class="party-seg" id="aiPartySeg">
         <button type="button" data-mode="star" class="on" onclick="setPartyFilter('ai','star')">⭐ Star Chicken</button>
         <button type="button" data-mode="party" class="party" onclick="setPartyFilter('ai','party')">👥 Party Customer</button>
+        <button type="button" data-mode="shkasur" class="shkasur" onclick="setPartyFilter('ai','shkasur')">🏬 SH Kasur</button>
         <button type="button" data-mode="all" class="all" onclick="setPartyFilter('ai','all')">🔗 All</button>
+        <button type="button" data-mode="salesman" onclick="setPartyFilter('ai','salesman')">👤 Salesman</button>
+      
+      </div>
+      <div class="sc-report-salesman-panel" id="aiSalesmanPanel" hidden>
+        <label for="aiSalesman">Salesperson</label>
+        <select id="aiSalesman" onchange="renderAllInvoicesReport()"><option value="">Select salesperson…</option></select>
+        <span class="sc-report-staff-status" id="aiSalesmanStatus">Select a salesperson to filter invoices.</span>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:14px;">
         <div class="form-group" style="flex:1.2;min-width:160px;">
@@ -3807,7 +3852,7 @@ async function scLoadDashboardSalespeople(force=false) {
       if(row.creatorId && row.creatorId.startsWith('S') && !people.has(row.creatorId))people.set(row.creatorId,(row.creatorName||row.creatorId)+' ('+row.creatorId+')');
     }
     scDashStaffCreators=next;
-    for (const id of ['scDashSalesman','psSalesman']) {
+    for (const id of ['scDashSalesman','psSalesman','saleSalesman','aiSalesman','histSalesman']) {
       const select=document.getElementById(id), chosen=select?.value||'';
       if(select){select.replaceChildren(new Option('Select salesperson…',''));
         for(const [staffId,label] of [...people].sort((a,b)=>a[1].localeCompare(b[1]))) select.add(new Option(label,staffId));
@@ -3815,7 +3860,7 @@ async function scLoadDashboardSalespeople(force=false) {
       }
     }
     scDashStaffLoaded=true;
-    for (const id of ['scDashSalesmanStatus','psSalesmanStatus']) {
+    for (const id of ['scDashSalesmanStatus','psSalesmanStatus','saleSalesmanStatus','aiSalesmanStatus','histSalesmanStatus']) {
       const el=document.getElementById(id);
       if(el)el.textContent='Sales are attributed to the original logged-in salesperson. Older untracked invoices are excluded.';
     }
@@ -3824,7 +3869,7 @@ async function scLoadDashboardSalespeople(force=false) {
     if(status)status.textContent=e.message||'Could not load salesperson report';
     const psStatus=document.getElementById('psSalesmanStatus');
     if(psStatus)psStatus.textContent=e.message||'Could not load salesperson report';
-  } finally {scDashStaffBusy=false;if(partyFilters.dash==='salesman')renderDashboard();if(partyFilters.ps==='salesman')calcProductSale();}
+  } finally {scDashStaffBusy=false;if(partyFilters.dash==='salesman')renderDashboard();if(partyFilters.ps==='salesman')calcProductSale();if(partyFilters.sale==='salesman'){calcPeriodSales();calcCustomSale();}if(partyFilters.ai==='salesman')renderAllInvoicesReport();if(partyFilters.hist==='salesman')renderHistory();}
 }
 /** Per-screen party filter: 'star' | 'party' | 'shkasur' | 'all' | 'salesman' (dashboard only) */
 const partyFilters = { dash: 'star', ps: 'star', sale: 'star', ai: 'star', hist: 'all' };
@@ -3843,10 +3888,11 @@ function getInvoicePartyType(inv) {
   if (allPartyCustomerNames().some(p => p.toLowerCase() === name.toLowerCase())) return 'party';
   return 'star';
 }
-function filterByPartyMode(list, mode) {
+function filterByPartyMode(list, mode, screen='dash') {
   if (!mode || mode === 'all') return list || [];
   if(mode==='salesman') {
-    const staffId=document.getElementById('scDashSalesman')?.value||'';
+    const selectId={dash:'scDashSalesman',ps:'psSalesman',sale:'saleSalesman',ai:'aiSalesman',hist:'histSalesman'}[screen]||'scDashSalesman';
+    const staffId=document.getElementById(selectId)?.value||'';
     return !staffId || !scDashStaffLoaded ? [] : (list||[]).filter(inv=>scDashStaffCreators.get(String(inv.id))===staffId);
   }
   return (list || []).filter(inv => getInvoicePartyType(inv) === mode);
@@ -3929,6 +3975,11 @@ function setPartyFilter(screen, mode) {
     if(panel)panel.hidden=mode!=='salesman';
     if(mode==='salesman')scLoadDashboardSalespeople();
     fillSelectOptions(document.getElementById('psShop'), namesForMode(mode), 'All Parties', false);
+  }
+  if(['sale','ai','hist'].includes(screen)) {
+    const panel=document.getElementById(screen+'SalesmanPanel');
+    if(panel)panel.hidden=mode!=='salesman';
+    if(mode==='salesman')scLoadDashboardSalespeople();
   }
   if (screen === 'sale') fillSelectOptions(document.getElementById('saleShop'), namesForMode(mode), 'All Parties', false);
   if (screen === 'ai') fillSelectOptions(document.getElementById('aiShop'), namesForMode(mode), null, true);
@@ -4528,7 +4579,7 @@ function renderHistory(keepFilterFocus) {
   const q=(document.getElementById('historySearch')?.value||'').toLowerCase().trim();
   const shopFilter=document.getElementById('historyShopFilter')?.value||'';
   const dateFilter=document.getElementById('historyDateFilter')?.value||'';
-  let list=filterByPartyMode(allHistory||[],partyFilters.hist||'all');
+  let list=filterByPartyMode(allHistory||[],partyFilters.hist||'all','hist');
   if(dateFilter)list=list.filter(inv=>invDateISO(inv)===dateFilter);
   if(shopFilter)list=list.filter(inv=>{
     const a=String(inv.shopName||'').trim().toLocaleLowerCase('en');
@@ -8286,7 +8337,7 @@ function filterByRange(fromDate, toDate) {
   const from = startOfDay(fromDate).getTime();
   const to = startOfDay(toDate).getTime() + 86400000 - 1; // end of toDate
   const shopFilter = (document.getElementById('saleShop') && document.getElementById('saleShop').value) || '';
-  const base = filterByPartyMode(allHistory || [], partyFilters.sale || 'all');
+  const base = filterByPartyMode(allHistory || [], partyFilters.sale || 'all','sale');
   return base.filter(inv => {
     if (shopFilter && (inv.shopName || '').trim() !== shopFilter) return false;
     const d = parseInvDate(inv);
@@ -8305,7 +8356,7 @@ function calcPeriodSales() {
   const todayStart = startOfDay(todayNoon);
 
   // Today — exact calendar match on bill date
-  const saleBase = filterByPartyMode(allHistory || [], partyFilters.sale || 'all');
+  const saleBase = filterByPartyMode(allHistory || [], partyFilters.sale || 'all','sale');
   const todayList = saleBase.filter(inv => {
     const shopFilter = (document.getElementById('saleShop') && document.getElementById('saleShop').value) || '';
     if (shopFilter && (inv.shopName || '').trim() !== shopFilter) return false;
@@ -8402,7 +8453,7 @@ function getAllInvoicesFiltered() {
   const toStr = (document.getElementById('aiTo') && document.getElementById('aiTo').value) || '';
   let list = filterByPartyMode(
     (typeof allHistory !== 'undefined' && allHistory) ? allHistory.slice() : [],
-    partyFilters.ai || 'all'
+    partyFilters.ai || 'all', 'ai'
   );
   if (selectedShops.length) {
     const set = new Set(selectedShops);
