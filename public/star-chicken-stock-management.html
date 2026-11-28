@@ -178,8 +178,15 @@ function scUpdateStockPermissions(){
  let note=$('scStockReadOnlyNote');
  if(!note){note=document.createElement('div');note.id='scStockReadOnlyNote';$('sheet').insertBefore(note,$('sheet').querySelector('.wrap'));}
  note.hidden=allowed;
- if(!allowed)note.textContent=scInventoryRole==='staff'?'View only: Salespersons can add or change stock only on today’s date. Older and future dates are read-only.':'Stock editing requires a verified Staff or Admin login.';
- $('tb').querySelectorAll('input').forEach(el=>el.disabled=!allowed||el.dataset.c==='2');
+ if(!allowed)note.textContent=scInventoryRole==='staff'?'View only: Older and future stock sheets are locked for Salespersons.':'Stock editing requires a verified Staff or Admin login.';
+  else if(scInventoryRole==='staff'){note.hidden=false;note.textContent='Today: only Receive and Return/Transfer are editable. Opening, POS Sale and Balance are locked.';}
+  $('tb').querySelectorAll('input').forEach(el=>{
+   const col=Number(el.dataset.c);
+   // Staff: only Receive (1) and Return/Transfer (3), and only today.
+   // Admin may correct Opening (0); Sale (2) always comes from POS invoices.
+   el.disabled=!allowed || col===2 || (scInventoryRole==='staff' && col!==1 && col!==3);
+   el.title=el.disabled ? (col===2?'Calculated from saved POS invoices':col===0?'Opening is Admin-only':'Historical stock is view-only for Staff') : '';
+  });
 }
 async function scPreviewOpening(){
  if(scInventoryRole!=='admin')return toast('Admin access required');
@@ -220,11 +227,11 @@ function totals(){let h="";const K=[0,1,2,3,4],P=K.map(c=>draft.r.reduce((t,a)=>
 $("tf").innerHTML=`<tr><td colspan="3">Total (Pkts)</td>${P.map(v=>`<td>${f2(v)}</td>`).join("")}</tr><tr><td colspan="3">Total (Kg)</td>${W.map(v=>`<td>${f2(v)}</td>`).join("")}</tr>`}
 function filter(){const q=$("q").value.toLowerCase();[...$("tb").children].forEach((tr,i)=>tr.style.display=scStockShowRow(i)&&ITEMS[i][0].toLowerCase().includes(q)?"":"none")}
 $("q").oninput=filter;
-$("tb").addEventListener("input",e=>{if(!scInventoryCanEdit()){e.preventDefault();return;}const tr=e.target.closest("tr");if(!tr)return;const i=+tr.dataset.i;draft.r[i][e.target.dataset.c]=e.target.value;dirty=true;rowCalc(i);totals()});
+$("tb").addEventListener("input",e=>{const c=Number(e.target.dataset.c);if(!scInventoryCanEdit()||c===2||(scInventoryRole==="staff"&&c!==1&&c!==3)){e.preventDefault();sheet();toast("Only Receive and Return/Transfer can be entered by Staff today");return;}const tr=e.target.closest("tr");if(!tr)return;const i=+tr.dataset.i;draft.r[i][c]=e.target.value;dirty=true;rowCalc(i);totals()});
 $("tb").addEventListener("focusin",e=>{const tr=e.target.closest("tr");if(tr)$("tb").querySelectorAll("tr.row-active").forEach(r=>r.classList.remove("row-active")),tr.classList.add("row-active")});
 $("tb").addEventListener("focusout",e=>{const tr=e.target.closest("tr");if(tr)setTimeout(()=>{if(!tr.contains(document.activeElement))tr.classList.remove("row-active")},0)});
 $("tb").addEventListener("keydown",e=>{if(!["Enter","ArrowDown","ArrowUp"].includes(e.key))return;e.preventDefault();let tr=e.target.closest("tr"),d=e.key==="ArrowUp"?-1:1;
-do{tr=d>0?tr.nextElementSibling:tr.previousElementSibling}while(tr&&tr.style.display==="none");if(tr){const x=tr.querySelector(`input[data-c="${e.target.dataset.c}"]`);x.focus();x.select()}});
+do{tr=d>0?tr.nextElementSibling:tr.previousElementSibling}while(tr&&tr.style.display==="none");if(tr){const x=tr.querySelector(`input[data-c="${e.target.dataset.c}"]`);if(x&&!x.disabled){x.focus();x.select()}}});
 async function save(){if(!scInventoryCanEdit()){toast('Staff can only save today’s stock sheet');return;}draft.r=applyPosSales(cur,date,draft.r);(DB[cur]=DB[cur]||{})[date]={r:JSON.parse(JSON.stringify(draft.r))};try{await persist();dirty=false;toast("Saved to Supabase: "+cur+" – "+fd(date));sheet();if(scStockCatchup)scStockEventRefresh()}catch(e){toast(e.message||"Cloud save failed");}}
 /* Previous-day opening is filled automatically by mk(); no manual reset needed. */
 /* ---------- reports ---------- */

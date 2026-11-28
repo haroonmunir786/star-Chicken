@@ -829,13 +829,41 @@ const scStockNumeric = x => { const v=Number(x); return Number.isFinite(v)?v:0; 
 const scStockBal = a => scStockNumeric(a?.[0])+scStockNumeric(a?.[1])-scStockNumeric(a?.[2])-scStockNumeric(a?.[3]);
 const scStockRound = x => Math.round(x*1000)/1000;
 const scStockCanonical = x => JSON.stringify(x??null);
-function scStockProtectedChanges(oldDb={},newDb={},today=scStockToday()) {
+function scStockProtectedChanges(oldDb={},newDb={},today=scStockToday(),oldSales={}) {
   const branches=new Set([...Object.keys(oldDb||{}),...Object.keys(newDb||{})]);
   for (const branch of branches) {
     const oldDays=oldDb?.[branch]||{},newDays=newDb?.[branch]||{};
     const days=new Set([...Object.keys(oldDays),...Object.keys(newDays)]);
     for (const day of days) {
-      if(day===today)continue;
+      if(day===today){
+        const before=oldDays[day],after=newDays[day];
+        if(!after) { if(before)return `${branch}, ${day}: deleting today's sheet requires Admin`; continue; }
+        const olderDays=Object.keys(oldDays).filter(d=>d<today&&Array.isArray(oldDays[d]?.r)).sort();
+        const prevDate=olderDays.at(-1);
+        const previous=prevDate?oldDays[prevDate].r||[]:[];
+        const prevSales=prevDate?oldSales?.[branch]?.[prevDate]:null;
+        const beforeRows=before?.r||[],afterRows=after.r||[];
+        for(let i=0;i<Math.max(beforeRows.length,afterRows.length,previous.length);i++){
+          const oldOpening=beforeRows[i]?.[0];
+          const submittedOpening=afterRows[i]?.[0];
+          // For an existing row, Staff cannot change the opening. A previously
+          // empty opening may only be filled from the prior saved closing.
+          const previousRow=previous[i]||[];
+          const previousSale=Array.isArray(prevSales)?scStockNumeric(prevSales[i]):scStockNumeric(previousRow[2]);
+          const expected=prevDate?scStockRound(scStockNumeric(previousRow[0])+scStockNumeric(previousRow[1])-previousSale-scStockNumeric(previousRow[3])):0;
+          const hadOpening=oldOpening!==undefined&&oldOpening!==null&&oldOpening!=='';
+          const approvedOpening=hadOpening?scStockNumeric(oldOpening):expected;
+          if(Math.abs(scStockNumeric(submittedOpening)-approvedOpening)>0.000001){
+            return `${branch}, ${day}: Opening (Bal) can only be edited by Admin`;
+          }
+          // Empty existing opening and empty submission are allowed; computed
+          // balance isn't an editable field or stored in these stock rows.
+          if(hadOpening && (submittedOpening===''||submittedOpening==null)){
+            return `${branch}, ${day}: Opening (Bal) cannot be cleared by Staff`;
+          }
+        }
+        continue;
+      }
       const before=oldDays[day],after=newDays[day];
       if(!before&&!after)continue;
       if(!before||!after)return `${branch}, ${day}: only today's stock sheet can be changed by Staff`;
@@ -921,7 +949,7 @@ app.put('/api/stock/state', auth, async (req, res) => {
     await client.query('begin');
     const old=await client.query('select state from public.stock_app_state where id=1 for update');
     if(identity.role!=='admin'){
-      const invalid=scStockProtectedChanges(old.rows[0]?.state?.stockDB||{},state.stockDB||{});
+      const invalid=scStockProtectedChanges(old.rows[0]?.state?.stockDB||{},state.stockDB||{},scStockToday(),old.rows[0]?.state?.posSales||{});
       if(invalid){await client.query('rollback');return res.status(403).json({error:invalid});}
     }
     const r=await client.query(`insert into public.stock_app_state(id,state,updated_at) values(1,$1::jsonb,now()) on conflict(id) do update set state=excluded.state,updated_at=now() returning updated_at`,[JSON.stringify(state)]);
