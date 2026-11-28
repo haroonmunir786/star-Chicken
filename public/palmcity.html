@@ -1053,6 +1053,57 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
   .ps-summary { grid-template-columns: 1fr; }
 }
 
+/* Product Sale only: full-width desktop report and mobile-friendly columns. */
+#productSaleOverlay { padding: 12px; }
+#productSaleOverlay .ps-report-modal {
+  width: min(1320px, calc(100vw - 24px));
+  max-width: none;
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+#productSaleOverlay .ps-report-table-wrap {
+  max-height: none;
+  overflow: visible;
+}
+#productSaleOverlay .ps-report-table-wrap .ps-table {
+  width: 100%; min-width: 0; table-layout: auto;
+}
+#productSaleOverlay .ps-report-table-wrap .ps-table th,
+#productSaleOverlay .ps-report-table-wrap .ps-table td { padding: 11px 10px; }
+#productSaleOverlay .ps-report-table-wrap .ps-table th:nth-child(2) { min-width: 155px; }
+#productSaleOverlay .ps-report-table-wrap .ps-table .ps-name { white-space: normal; overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  #productSaleOverlay { padding: 5px; }
+  #productSaleOverlay .ps-report-modal {
+    width: calc(100vw - 10px); max-height: calc(100dvh - 10px);
+    border-radius: 12px;
+  }
+  #productSaleOverlay .sales-modal-body { padding: 10px 10px 14px; }
+  #productSaleOverlay .ps-summary { gap: 6px; }
+  #productSaleOverlay .ps-sum-card { padding: 9px 5px; }
+  #productSaleOverlay .ps-sum-card .ps-val { font-size: .95rem; }
+  #productSaleOverlay .ps-date-row { gap: 6px; }
+  #productSaleOverlay .ps-date-row input[type=date] { width: 136px; max-width: 43vw; padding: 0 5px; }
+  #productSaleOverlay .ps-report-table-wrap {
+    overflow-x: auto; overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+  #productSaleOverlay .ps-report-table-wrap .ps-table { min-width: 810px; font-size: .78rem; }
+  #productSaleOverlay .ps-report-table-wrap .ps-table th,
+  #productSaleOverlay .ps-report-table-wrap .ps-table td { padding: 9px 8px; }
+  #productSaleOverlay .ps-report-table-wrap .ps-table th:nth-child(2),
+  #productSaleOverlay .ps-report-table-wrap .ps-table td:nth-child(2) {
+    position: sticky; left: 0; z-index: 1;
+    min-width: 150px; max-width: 150px;
+    background: #fff;
+    box-shadow: 3px 0 6px #0001;
+  }
+  #productSaleOverlay .ps-report-table-wrap .ps-table th:nth-child(2) { z-index: 3; background: var(--ink); }
+  #productSaleOverlay .ps-report-table-wrap .ps-table tbody tr:nth-child(even) td:nth-child(2) { background: #fafafa; }
+}
+
 /* ─── Action Sheet (Share / Import / Print) ─── */
 .action-sheet-overlay {
   display: none; position: fixed; inset: 0; z-index: 300;
@@ -2954,7 +3005,7 @@ body.sc-price-staff #discount{pointer-events:none;background:#f0f0f5}
 </div>
 
 <div class="sales-overlay no-print" id="productSaleOverlay" onclick="if(event.target===this)closeProductSaleModal()">
-  <div class="sales-modal" role="dialog" aria-labelledby="psTitle" style="max-width:640px">
+  <div class="sales-modal ps-report-modal" role="dialog" aria-labelledby="psTitle">
     <div class="sales-modal-header">
       <h3 id="psTitle">📦 Product Sale</h3>
       <button class="btn btn-ghost btn-sm" onclick="closeProductSaleModal()" style="height:32px;padding:0 10px;">✕</button>
@@ -2993,7 +3044,7 @@ body.sc-price-staff #discount{pointer-events:none;background:#f0f0f5}
         </div>
       </div>
        <p id="psAnnouncedNote" style="margin:0 0 8px;color:#777;font-size:.74rem">Historical approved product rates are averaged equally over each selected calendar day. Missing approval history is shown as —.</p>
-      <div class="ps-table-wrap">
+      <div class="ps-table-wrap ps-report-table-wrap">
         <table class="ps-table">
           <thead>
             <tr>
@@ -3002,9 +3053,9 @@ body.sc-price-staff #discount{pointer-events:none;background:#f0f0f5}
               <th style="text-align:right">Qty</th>
               <th style="text-align:right">Weight (kg)</th>
               <th style="text-align:right">Sale/KG</th>
+              <th style="text-align:right">Amount (Rs)</th>
               <th style="text-align:right" title="Average Admin-approved product rate for each calendar day in the selected date range">Announced Rs/KG</th>
               <th style="text-align:right" title="(Sale/KG minus announced rate) divided by announced rate × 100">Diff %</th>
-              <th style="text-align:right">Amount (Rs)</th>
             </tr>
           </thead>
           <tbody id="psBody">
@@ -8121,9 +8172,9 @@ function calcProductSale(){
       <td class="ps-qty">${r.qty?Math.round(r.qty*100)/100:'—'}</td>
       <td class="ps-num">${r.weight?r.weight.toFixed(2):'—'}</td>
       <td class="ps-num">${r.ratePerKg>0?Math.round(r.ratePerKg*100)/100:'—'}</td>
+      <td class="ps-num">${fmt(r.amount)}</td>
       <td class="ps-num">${canCompare?approved.toLocaleString('en-PK',{maximumFractionDigits:2}):'—'}</td>
-      <td class="ps-num" style="color:${diff!=null&&diff<0?'#B71C1C':'#137A37'}">${diff!=null?(diff>0?'+':'')+diff.toFixed(1)+'%':'—'}</td>
-      <td class="ps-num">${fmt(r.amount)}</td></tr>`;
+      <td class="ps-num" style="color:${diff!=null&&diff<0?'#B71C1C':'#137A37'}">${diff!=null?(diff>0?'+':'')+diff.toFixed(1)+'%':'—'}</td></tr>`;
   }).join('');
 }
 document.addEventListener('keydown', function(e) {
