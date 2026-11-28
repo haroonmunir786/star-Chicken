@@ -3604,32 +3604,24 @@ const PARTY_CUSTOMERS = [
    Only records bearing this exact marker are included as added party customers. */
 const SC_PARTY_CUSTOMER_MARKER = 'Star Chicken POS Party Customer';
 const SC_SH_CUSTOMER_MARKER = 'Star Chicken POS SH Kasur Customer';
-function allPartyCustomerNames() {
-  const names = PARTY_CUSTOMERS.filter(n => n.trim().toLowerCase()!=='sh kasur');
+/* One shared pool of customer names for Party Customer and SH Kasur.
+   The invoice partyType (not the customer name) determines where a sale is reported. */
+function scSharedCustomerNames(includeSHAccount=false) {
+  const names = PARTY_CUSTOMERS.filter(n => n.trim().toLowerCase() !== 'sh kasur');
   const known = new Set(names.map(n => n.trim().toLocaleLowerCase('en')));
-  const extra = (typeof loadCustomers === 'function' ? loadCustomers() : [])
-    .filter(c => String(c.remarks || '').trim() === SC_PARTY_CUSTOMER_MARKER)
-    .map(c => String(c.name || '').trim()).filter(n=>n && n.toLowerCase()!=='sh kasur')
+  const extras = (typeof loadCustomers === 'function' ? loadCustomers() : [])
+    .filter(c => [SC_PARTY_CUSTOMER_MARKER, SC_SH_CUSTOMER_MARKER].includes(String(c.remarks || '').trim()))
+    .map(c => String(c.name || '').trim())
+    .filter(n => n && n.toLowerCase() !== 'sh kasur')
     .sort((a,b) => a.localeCompare(b));
-  for (const name of extra) {
+  for (const name of extras) {
     const key = name.toLocaleLowerCase('en');
-    if (!known.has(key)) { names.push(name); known.add(key); }
+    if (!known.has(key)) {names.push(name); known.add(key);}
   }
-  return names;
+  return includeSHAccount ? ['SH Kasur', ...names] : names;
 }
-function allSHCustomerNames() {
-  const names = ['SH Kasur'];
-  const known = new Set(names.map(n => n.toLocaleLowerCase('en')));
-  const extra = (typeof loadCustomers === 'function' ? loadCustomers() : [])
-    .filter(c => String(c.remarks || '').trim() === SC_SH_CUSTOMER_MARKER)
-    .map(c => String(c.name || '').trim()).filter(Boolean)
-    .sort((a,b) => a.localeCompare(b));
-  for (const name of extra) {
-    const key = name.toLocaleLowerCase('en');
-    if (!known.has(key)) { names.push(name); known.add(key); }
-  }
-  return names;
-}
+function allPartyCustomerNames() { return scSharedCustomerNames(false); }
+function allSHCustomerNames() { return scSharedCustomerNames(true); }
 function refreshPartyCustomerOptions() {
   // Preserve the current party and report-filter selections as lists expand.
   if (document.getElementById('partyType')) onPartyTypeChange();
@@ -3646,7 +3638,7 @@ function openAddPartyCustomerDialog() {
   const title=document.getElementById('addPartyCustomerTitle');
   if(title) title.textContent=isSH?'＋ Add SH Customer':'＋ Add Party Customer';
   const hint=document.querySelector('#addPartyCustomerDialog .party-dialog-hint');
-  if(hint) hint.textContent=isSH?'Add a customer to the SH Kasur list for all salespersons.':'Add a party to the shared dropdown for all Star Chicken users.';
+  if(hint) hint.textContent='Customers added here are available under both Party Customer and SH Kasur on all devices.';
   const nameLabel=document.querySelector('label[for="newPartyCustomerName"]');
   if(nameLabel)nameLabel.textContent=isSH?'SH Customer Name *':'Party Customer Name *';
   const dlg = document.getElementById('addPartyCustomerDialog');
@@ -3673,14 +3665,9 @@ async function saveNewPartyCustomer() {
   const btn = document.getElementById('saveNewPartyCustomerBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
   try {
-    // Keep SH and Party Customer lists separate, including on other devices.
+    // Shared customer directory: an existing customer can be selected from either party type.
     await refreshCustomersFromServer();
-    const otherNames=isSH?allPartyCustomerNames():allSHCustomerNames();
-    if(otherNames.some(n=>n.toLocaleLowerCase('en')===normalized)) {
-      throw new Error('This customer name already belongs to the other customer type. Choose a different name.');
-    }
-    const ownNames=isSH?allSHCustomerNames():allPartyCustomerNames();
-    const found=ownNames.find(n=>n.toLocaleLowerCase('en')===normalized);
+    const found=scSharedCustomerNames(false).find(n=>n.toLocaleLowerCase('en')===normalized);
     if (found) {
       refreshPartyCustomerOptions();
       document.getElementById('shopName').value=found;
@@ -3700,7 +3687,7 @@ async function saveNewPartyCustomer() {
     onPartyTypeChange();
     document.getElementById('shopName').value=name;
     markDirty();updatePrintMeta();closeAddPartyCustomerDialog();
-    toast((isSH?'SH':'Party')+' customer added and selected','success');
+    toast('Customer added to both Party Customer and SH Kasur lists','success');
   }catch(e){
     console.error('Add customer failed:',e);
     toast(e.message||'Could not save customer','error');
@@ -3754,12 +3741,14 @@ const partyFilters = { dash: 'star', ps: 'star', sale: 'star', ai: 'star', hist:
 function getInvoicePartyType(inv) {
   if (!inv) return 'star';
   const name = (inv.shopName || '').trim();
-  // The invoices table stores shop_name but not partyType. The unique SH Kasur
-  // account name therefore identifies saved/reloaded SH Kasur invoices reliably.
+  // New invoices carry their original type in the server Activity Log.
+  // This avoids mixing SH Kasur/Party sales when both use the same customer name.
+  if (['star','party','shkasur'].includes(inv.partyType)) return inv.partyType;
   if (name.toLowerCase() === 'sh kasur') return 'shkasur';
-  if (inv.partyType === 'shkasur') return 'shkasur';
-  if (allSHCustomerNames().some(p => p.toLowerCase() === name.toLowerCase())) return 'shkasur';
-  if (inv.partyType === 'party' || inv.partyType === 'star') return inv.partyType;
+  // Backward compatibility for invoices saved before the shared directory update.
+  const priorSH = loadCustomers().some(c => String(c.name||'').trim().toLowerCase()===name.toLowerCase()
+    && String(c.remarks||'').trim()===SC_SH_CUSTOMER_MARKER);
+  if (priorSH) return 'shkasur';
   if (allPartyCustomerNames().some(p => p.toLowerCase() === name.toLowerCase())) return 'party';
   return 'star';
 }
@@ -3775,7 +3764,7 @@ function namesForMode(mode) {
   if (mode === 'party') return allPartyCustomerNames();
   if (mode === 'shkasur') return allSHCustomerNames();
   if (mode === 'star') return STAR_BRANCHES.slice();
-  return STAR_BRANCHES.concat(allPartyCustomerNames(), allSHCustomerNames());
+  return [...new Set(STAR_BRANCHES.concat(allPartyCustomerNames(), allSHCustomerNames()))];
 }
 function fillSelectOptions(sel, names, blankLabel, multi) {
   if (!sel) return;

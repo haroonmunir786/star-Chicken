@@ -172,6 +172,7 @@ function dbRowToInvoice(row) {
     time: row.invoice_time || '',
     customerName: row.customer_name || '',
     shopName: row.shop_name || '',
+    partyType: ['star','party','shkasur'].includes(row.party_type) ? row.party_type : '',
     billMaker: row.bill_maker || '',
     customerPhone: row.customer_phone || '',
     items: row.items || [],
@@ -520,22 +521,15 @@ async function scEnforceNewInvoicePrices(client,inv,identity){
   const isSHKasur=String(inv.shopName||'').trim().toLowerCase()==='sh kasur';
   const flexible=['party','shkasur'].includes(inv.partyType);
   if(flexible && isStarBranch)throw new Error('Star Chicken branches must use the approved Price List');
-  // SH Kasur customers are saved in the existing customers table with a distinct marker.
-  // Verify it server-side: a browser cannot relabel a Star Chicken branch or
-  // a normal Party Customer as an SH Kasur customer to bypass the price policy.
-  let isSHCustomer=isSHKasur;
-  if (['party','shkasur'].includes(inv.partyType) && !isSHKasur) {
-    const result=await client.query(`select remarks from public.customers
-      where lower(trim(name))=lower(trim($1)) and remarks in ($2,$3) limit 2`,
-      [inv.shopName,'Star Chicken POS SH Kasur Customer','Star Chicken POS Party Customer']);
-    const kinds=result.rows.map(r=>String(r.remarks||'').trim());
-    if(kinds.includes('Star Chicken POS SH Kasur Customer'))isSHCustomer=true;
-    if(inv.partyType==='shkasur' && !isSHCustomer)throw new Error('Select an approved SH Kasur customer');
-    if(inv.partyType==='party' && isSHCustomer)throw new Error('Select SH Kasur Party Type for this customer');
-    if(inv.partyType==='shkasur' && kinds.includes('Star Chicken POS Party Customer'))throw new Error('This account belongs to Party Customers');
-  }
-  if(inv.partyType==='shkasur' && !isSHCustomer)throw new Error('SH Kasur invoices must select an SH Kasur customer');
-  if(isSHKasur && inv.partyType!=='shkasur')throw new Error('Select SH Kasur as the invoice Party Type');
+  // Party Customer and SH Kasur intentionally share one directory.
+  // Customer name alone must never determine the pricing/category: the selected
+  // invoice partyType is recorded on invoice.created and reused by reports.
+  if(!['star','party','shkasur'].includes(inv.partyType))
+    throw new Error('Choose an invoice Party Type');
+  if(isSHKasur && inv.partyType!=='shkasur')
+    throw new Error('The reserved SH Kasur account requires SH Kasur Party Type');
+  if(inv.partyType==='shkasur' && !String(inv.shopName||'').trim())
+    throw new Error('Select an SH Kasur customer');
   if(flexible){
     if(inv.items.length>150)throw new Error('Too many invoice products');
     const repriced=[];let subtotal=0;
@@ -1289,9 +1283,17 @@ app.get('/api/invoices', auth, async (req, res) => {
       select i.id, i.invoice_no, i.invoice_date, i.invoice_time,
              i.customer_name, i.shop_name, i.bill_maker, i.customer_phone,
              i.items, i.discount, i.subtotal, i.grand_total, i.amount_paid,
-             i.balance, i.saved_at, c.invoice_id as credit_invoice_id
+             i.balance, i.saved_at, c.invoice_id as credit_invoice_id,
+             original_type.party_type
       from public.invoices i
       left join public.sc_credit_invoices c on c.invoice_id=i.id
+      left join (
+        select distinct on (invoice_id) invoice_id, details->>'partyType' as party_type
+        from public.pos_activity_log
+        where action='invoice.created' and invoice_id is not null
+          and details->>'partyType' in ('star','party','shkasur')
+        order by invoice_id, id asc
+      ) original_type on original_type.invoice_id=i.id
       where not exists(select 1 from public.sc_credit_voids v where v.invoice_id=i.id)
       order by i.saved_at desc, i.updated_at desc
     `);
@@ -1311,9 +1313,17 @@ app.get('/api/invoices/:id', auth, async (req, res) => {
       select i.id, i.invoice_no, i.invoice_date, i.invoice_time,
              i.customer_name, i.shop_name, i.bill_maker, i.customer_phone,
              i.items, i.discount, i.subtotal, i.grand_total, i.amount_paid,
-             i.balance, i.saved_at, c.invoice_id as credit_invoice_id
+             i.balance, i.saved_at, c.invoice_id as credit_invoice_id,
+             original_type.party_type
       from public.invoices i
       left join public.sc_credit_invoices c on c.invoice_id=i.id
+      left join (
+        select distinct on (invoice_id) invoice_id, details->>'partyType' as party_type
+        from public.pos_activity_log
+        where action='invoice.created' and invoice_id is not null
+          and details->>'partyType' in ('star','party','shkasur')
+        order by invoice_id, id asc
+      ) original_type on original_type.invoice_id=i.id
       where i.id = $1
       and not exists(select 1 from public.sc_credit_voids v where v.invoice_id=i.id)
     `, [req.params.id]);
@@ -1428,10 +1438,10 @@ app.post('/api/invoices', auth, async (req, res) => {
           values($1,$2,$3,$4,$5,$6,$7)`,[inv.id,inv.invoiceNo,creditName,inv.grandTotal,inv.amountPaid,owed,inv.billMaker]);
       }
     }
-    await writeAudit(client,req,existing.rowCount?'invoice.updated':'invoice.created',inv.id,inv.invoiceNo,{grandTotal:inv.grandTotal});
+    await writeAudit(client,req,existing.rowCount?'invoice.updated':'invoice.created',inv.id,inv.invoiceNo,{grandTotal:inv.grandTotal,...(!existing.rowCount?{partyType:inv.partyType}:{})});
     await client.query('commit');
     scPublishInvoiceChange(existing.rowCount?'updated':'created',inv.invoiceNo);
-    res.status(201).json({...dbRowToInvoice(result.rows[0]),paymentType:existing.rowCount?'cash':inv.paymentType});
+    res.status(201).json({...dbRowToInvoice(result.rows[0]),partyType:inv.partyType,paymentType:existing.rowCount?'cash':inv.paymentType});
   } catch (e) {
     await client.query('rollback');
     console.error(e);
