@@ -1053,12 +1053,12 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
   .ps-summary { grid-template-columns: 1fr; }
 }
 
-/* Product Sale only: full-width desktop report and mobile-friendly columns. */
+/* Product Sale only: moderately wider desktop report and mobile-friendly columns. */
 #productSaleOverlay { padding: 12px; }
 #productSaleOverlay .ps-report-modal {
-  width: min(1320px, calc(100vw - 24px));
+  width: min(1080px, calc(100vw - 32px));
   max-width: none;
-  max-height: calc(100dvh - 24px);
+  max-height: calc(100dvh - 32px);
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -1067,11 +1067,11 @@ tbody tr:nth-child(even):hover { background: #FFFBF0; }
   overflow: visible;
 }
 #productSaleOverlay .ps-report-table-wrap .ps-table {
-  width: 100%; min-width: 0; table-layout: auto;
+  width: 100%; min-width: 0; table-layout: auto; font-size: .8rem;
 }
 #productSaleOverlay .ps-report-table-wrap .ps-table th,
-#productSaleOverlay .ps-report-table-wrap .ps-table td { padding: 11px 10px; }
-#productSaleOverlay .ps-report-table-wrap .ps-table th:nth-child(2) { min-width: 155px; }
+#productSaleOverlay .ps-report-table-wrap .ps-table td { padding: 9px 7px; }
+#productSaleOverlay .ps-report-table-wrap .ps-table th:nth-child(2) { min-width: 135px; }
 #productSaleOverlay .ps-report-table-wrap .ps-table .ps-name { white-space: normal; overflow-wrap: anywhere; }
 @media (max-width: 760px) {
   #productSaleOverlay { padding: 5px; }
